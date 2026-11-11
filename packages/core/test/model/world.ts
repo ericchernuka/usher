@@ -1,0 +1,273 @@
+// The simulated world for model-based tests: builds, a server with its own clock (skew,
+// 1 s Date headers), the user's clock (which can jump), tabs, and the actions over them.
+import fc from 'fast-check'
+import { vi } from 'vitest'
+import type { Escalation, VersionInfo } from '../../src/types'
+import type { Clock } from '../clock'
+import { createFakeHost, createStore } from '../fake-host'
+
+const H = 3_600_000
+export const IDLE_MS = 5_000
+export const SNOOZE_KEY = 'app-version:snooze'
+
+export const current: VersionInfo = {
+  version: 'aaa',
+  commitTime: '2026-11-11T15:00:00.000Z',
+  builtAt: '2026-11-11T15:00:00.000Z',
+}
+const builds = {
+  current,
+  newer: {
+    ...current,
+    version: 'bbb',
+    commitTime: '2026-11-11T15:30:00.000Z',
+    builtAt: '2026-11-11T15:30:00.000Z',
+  },
+  newest: {
+    ...current,
+    version: 'ccc',
+    commitTime: '2026-11-11T16:30:00.000Z',
+    builtAt: '2026-11-11T16:30:00.000Z',
+  },
+  older: { ...current, version: 'old', commitTime: '2026-11-10T15:00:00.000Z' },
+  forced: {
+    ...current,
+    version: 'fix',
+    commitTime: '2026-11-11T17:00:00.000Z',
+    forceUpdateBefore: '2026-11-11T17:00:00.000Z',
+  },
+} satisfies Record<string, VersionInfo>
+type Build = keyof typeof builds
+type Served = Build | 'offline' | 'malformed' | { flap: [Build, Build] }
+
+const configs = {
+  default: {},
+  noPrompt: { prompt: false },
+  noUrgent: { urgent: false },
+  promptSnooze: { prompt: { after: '12h', snooze: '1h' } },
+  off: { prompt: false, urgent: false },
+  fast: { prompt: { after: '2h' }, urgent: { after: '3h', snooze: '10m' } },
+} satisfies Record<string, Escalation>
+export type ConfigName = keyof typeof configs
+/** Urgent snooze per config (the default is 30 min). */
+export const urgentSnoozeMs = (name: ConfigName) =>
+  (name === 'fast' ? 10 : 30) * 60_000
+
+export type Action =
+  | { type: 'advance'; ms: number }
+  | { type: 'serve'; build: Served }
+  | { type: 'focus' }
+  | { type: 'visibility'; visible: boolean }
+  | { type: 'input' }
+  | { type: 'dismiss' }
+  | { type: 'otherTabClear' }
+  | { type: 'otherTabSet'; kind: 'promptAt' | 'urgentAt' | 'bad'; ms: number }
+  | { type: 'veto'; on: boolean }
+  | { type: 'refresh' }
+  | { type: 'resubscribe'; gap: number }
+  | { type: 'clockJump'; ms: number }
+
+const build = fc.constantFrom<Build>(
+  'current',
+  'newer',
+  'newest',
+  'older',
+  'forced',
+)
+const served: fc.Arbitrary<Served> = fc.oneof(
+  {
+    weight: 10,
+    arbitrary: fc.constantFrom<Served>(
+      'current',
+      'newer',
+      'newest',
+      'offline',
+      'malformed',
+    ),
+  },
+  { weight: 1, arbitrary: fc.constantFrom<Served>('older', 'forced') }, // bad builds are sticky: keep them rare
+  {
+    weight: 2,
+    arbitrary: fc
+      .tuple(build, build)
+      .map(([a, b]): Served => ({ flap: [a, b] })),
+  },
+)
+const duration = fc.oneof(
+  fc.integer({ min: 0, max: 10_000 }),
+  fc.integer({ min: 60_000, max: 2 * H }),
+  fc.integer({ min: 6 * H, max: 14 * H }),
+)
+const t = <T extends Action['type']>(type: T) => fc.constant(type)
+const action: fc.Arbitrary<Action> = fc.oneof(
+  { weight: 5, arbitrary: fc.record({ type: t('advance'), ms: duration }) },
+  { weight: 3, arbitrary: fc.record({ type: t('serve'), build: served }) },
+  { weight: 2, arbitrary: fc.record({ type: t('focus') }) },
+  {
+    weight: 1,
+    arbitrary: fc.record({ type: t('visibility'), visible: fc.boolean() }),
+  },
+  { weight: 2, arbitrary: fc.record({ type: t('input') }) },
+  { weight: 3, arbitrary: fc.record({ type: t('dismiss') }) },
+  { weight: 1, arbitrary: fc.record({ type: t('otherTabClear') }) },
+  {
+    weight: 1,
+    arbitrary: fc.record({
+      type: t('otherTabSet'),
+      kind: fc.constantFrom('promptAt', 'urgentAt', 'bad'),
+      ms: fc.integer({ min: 0, max: 2 * H }),
+    }),
+  },
+  { weight: 1, arbitrary: fc.record({ type: t('veto'), on: fc.boolean() }) },
+  { weight: 1, arbitrary: fc.record({ type: t('refresh') }) },
+  {
+    weight: 1,
+    arbitrary: fc.record({
+      type: t('resubscribe'),
+      gap: fc.integer({ min: 0, max: 2 * H }),
+    }),
+  },
+  {
+    weight: 1,
+    arbitrary: fc.record({
+      type: t('clockJump'),
+      ms: fc.integer({ min: -24 * H, max: 24 * H }),
+    }),
+  },
+)
+
+export interface Scenario {
+  config: ConfigName
+  /** Server clock − true time. */
+  skew: number
+  /** How long the server takes to answer; 0 answers on a microtask. Above 30 s, checks time out. */
+  latency: number
+  actions: Action[]
+}
+const scenario = (actions: fc.Arbitrary<Action[]>): fc.Arbitrary<Scenario> =>
+  fc.record({
+    config: fc.constantFrom(...(Object.keys(configs) as ConfigName[])),
+    skew: fc.oneof(fc.constant(0), fc.integer({ min: -3 * H, max: 3 * H })),
+    // Responses landing late found a real bug (held raises not released on resubscribe).
+    latency: fc.constantFrom(0, 0, 300, 5_000, 35_000),
+    actions,
+  })
+const noise = fc.array(action, { maxLength: 10 })
+
+export const random = scenario(fc.array(action, { maxLength: 60 }))
+
+/** A rollback reaches the tab, then a fix ships: the known-bad build must stay urgent. */
+export const rollbackThenFix = scenario(
+  fc
+    .tuple(noise, noise, fc.constantFrom<Build>('newer', 'newest', 'current'))
+    .map(([a, b, fix]): Action[] => [
+      { type: 'serve', build: 'older' },
+      { type: 'focus' },
+      { type: 'advance', ms: 61_000 },
+      ...a,
+      { type: 'serve', build: fix },
+      { type: 'advance', ms: 61_000 },
+      { type: 'focus' },
+      ...b,
+    ]),
+)
+
+/** Age-based escalation: wait into a level, dismiss, wait into the next, dismiss. */
+export const aged = scenario(
+  fc
+    .tuple(
+      fc.integer({ min: 0, max: 30 * H }),
+      noise,
+      fc.integer({ min: 6 * H, max: 14 * H }),
+      noise,
+    )
+    .map(([first, a, second, b]): Action[] => [
+      { type: 'serve', build: 'newer' },
+      { type: 'focus' },
+      { type: 'advance', ms: first },
+      { type: 'dismiss' },
+      ...a,
+      { type: 'advance', ms: second },
+      { type: 'dismiss' },
+      ...b,
+    ]),
+)
+
+/** The world the store runs in, plus what the invariants need to remember. */
+export function createWorld(s: Scenario, clock: Clock) {
+  const world = {
+    config: s.config,
+    visible: true,
+    veto: false,
+    lastInput: -Infinity, // performance clock, like the engine
+    jumped: 0, // user clock − true time
+    badSeen: false,
+    latency: s.latency,
+    inFlight: 0, // checks the server hasn't answered yet
+    promptAcked: false,
+    urgentQuietUntil: -Infinity, // server clock
+    served: 'current' as Served,
+    flips: 0,
+    offers: [] as Array<{
+      attention: string
+      reason: string
+      accepted: boolean
+    }>,
+    violations: [] as string[],
+  }
+  const serverNow = () => Date.now() - world.jumped + s.skew
+  // In-memory fetch: a property test needs the server's behaviour, not a network.
+  const respond = async (
+    _input: RequestInfo | URL,
+    init?: RequestInit,
+  ): Promise<Response> => {
+    world.inFlight++
+    try {
+      if (s.latency > 0) await answerAfter(s.latency, init?.signal)
+      return serve()
+    } finally {
+      world.inFlight--
+    }
+  }
+  const serve = (): Response => {
+    const choice = world.served
+    if (choice === 'offline') throw new TypeError('offline')
+    if (choice === 'malformed') return Response.json({})
+    const name =
+      typeof choice === 'string' ? choice : choice.flap[world.flips++ % 2]!
+    const headers = { date: new Date(serverNow()).toUTCString() } // 1 s resolution, like real servers
+    return Response.json(builds[name], { headers })
+  }
+  const host = createFakeHost({ fetch: respond })
+  vi.spyOn(console, 'warn').mockImplementation(() => {})
+  const store = createStore(host, {
+    idleFor: '5s',
+    escalation: configs[s.config],
+    reload: async () => false, // reloads are "blocked": the page never unloads mid-test
+    onAttentionChange: (attention, d) => {
+      if (world.veto && d.cancelable) d.cancel()
+      world.offers.push({
+        attention,
+        reason: d.reason,
+        accepted: !(d.cancelable && d.isCanceled),
+      })
+    },
+  })
+  return { world, store, serverNow, host, clock }
+}
+export type World = ReturnType<typeof createWorld>
+
+/** Wait like a slow server: resolves after `ms` of (fake) time, rejects when the client aborts. */
+function answerAfter(ms: number, signal: AbortSignal | null | undefined) {
+  return new Promise<void>((resolve, reject) => {
+    const answer = setTimeout(resolve, ms)
+    signal?.addEventListener(
+      'abort',
+      () => {
+        clearTimeout(answer)
+        reject(signal.reason)
+      },
+      { once: true },
+    )
+  })
+}
