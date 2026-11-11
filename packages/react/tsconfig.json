@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": [
+      "vite/client",
+      "@vitest/browser-playwright",
+      "@app-version/core/client"
+    ]
+  },
+  "include": ["src", "test", "*.config.ts"]
+}
