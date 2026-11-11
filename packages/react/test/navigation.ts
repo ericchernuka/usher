@@ -7,8 +7,11 @@ export interface NavigationRequest {
 }
 
 const active = new Set<AbortController>()
+
 afterEach(() => {
-  for (const controller of active) controller.abort()
+  for (const controller of active) {
+    controller.abort()
+  }
   active.clear()
 })
 
@@ -32,5 +35,6 @@ export function captureNavigations(): NavigationRequest[] {
     },
     { signal: controller.signal },
   )
+
   return requests
 }

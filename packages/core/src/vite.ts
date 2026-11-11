@@ -42,6 +42,7 @@ const git = (args: string) => {
 
 /** A set value: "" and whitespace (an unset CI variable) count as missing. */
 const Present = v.pipe(v.string(), v.trim(), v.nonEmpty())
+
 const Timestamp = v.pipe(
   Present,
   v.isoTimestamp(),
@@ -55,20 +56,28 @@ type Source = readonly [name: string, value: string | undefined]
 function firstSet(...sources: ReadonlyArray<Source>) {
   for (const [name, value] of sources) {
     const result = v.safeParse(Present, value)
-    if (result.success) return { name, value: result.output }
+
+    if (result.success) {
+      return { name, value: result.output }
+    }
   }
+
   return undefined
 }
 
 /** A set source as a normalized ISO timestamp; a malformed one fails the build by name. */
 function timestamp(source: { name: string; value: string } | undefined) {
-  if (!source) return undefined
+  if (!source) {
+    return undefined
+  }
   const result = v.safeParse(Timestamp, source.value)
+
   if (!result.success) {
     throw new Error(
       `[app-version] ${source.name} must be an ISO 8601 timestamp, got "${source.value}".`,
     )
   }
+
   return result.output
 }
 
@@ -84,6 +93,7 @@ export function resolveVersionInfo(
     ['GITHUB_SHA', env['GITHUB_SHA']],
     ['git rev-parse HEAD', git('rev-parse HEAD')],
   )
+
   // Commit time orders builds for rollback detection, so "now" is only a last resort.
   const commitTime = timestamp(
     firstSet(
@@ -92,18 +102,21 @@ export function resolveVersionInfo(
       ['git log', git('log -1 --format=%cI')],
     ),
   )
+
   if (!commitTime) {
     warn?.(
       '[app-version] no commit time (no .git and no APP_COMMIT_TIME); using build time. ' +
         "Redeploying an old commit won't be detected as a rollback.",
     )
   }
+
   const forceUpdateBefore = timestamp(
     firstSet(
       ['forceUpdateBefore', opts.forceUpdateBefore],
       ['APP_FORCE_UPDATE_BEFORE', env['APP_FORCE_UPDATE_BEFORE']],
     ),
   )
+
   return {
     version: version?.value ?? `dev-${now.getTime()}`,
     commitTime: commitTime ?? now.toISOString(),
@@ -125,6 +138,7 @@ export function appVersion(opts: AppVersionOptions = {}): Plugin {
   /** URL path of `base`, e.g. "/" or "/app/" (a CDN base keeps only its path). Vite always ends `base` in "/". */
   const pathBase = () =>
     /^https?:/.test(config.base) ? new URL(config.base).pathname : config.base
+
   const skewContext = (
     fail: (message: string) => never,
   ): SkewProtectionContext => ({
@@ -143,18 +157,22 @@ export function appVersion(opts: AppVersionOptions = {}): Plugin {
       info = resolveVersionInfo(opts, process.env, new Date(), m =>
         resolved.logger.warn(m),
       )
+
       if (!config.base.startsWith('/') && !/^https?:/.test(config.base)) {
         config.logger.warn(
           `[app-version] base "${config.base}" is relative; ${fileName} is resolved from the page URL.`,
         )
       }
+
       url = config.base + fileName // Vite always ends `base` in "/"
     },
     resolveId(id) {
       return id === VIRTUAL_ID ? RESOLVED_ID : undefined
     },
     load(id) {
-      if (id !== RESOLVED_ID) return undefined
+      if (id !== RESOLVED_ID) {
+        return undefined
+      }
       return `export const appVersion = ${JSON.stringify(info)};\nexport const versionUrl = ${JSON.stringify(url)};\n`
     },
     configureServer(server) {
@@ -163,21 +181,26 @@ export function appVersion(opts: AppVersionOptions = {}): Plugin {
         // Compare paths: with a CDN `base` the url is absolute, and with a relative base it
         // resolves against the page, but requests always arrive as paths.
         const path = req.url?.split('?')[0] ?? ''
+
         const relativeBase =
           !config.base.startsWith('/') && !/^https?:/.test(config.base)
+
         if (
           relativeBase
             ? !path.endsWith(`/${fileName}`)
             : path !== `${pathBase()}${fileName}`
-        )
+        ) {
           return next()
+        }
         res.setHeader('Content-Type', 'application/json')
         res.setHeader('Cache-Control', 'no-store')
         res.end(JSON.stringify(info))
       })
     },
     generateBundle() {
-      if (config.build.ssr || isServerBuild(this)) return
+      if (config.build.ssr || isServerBuild(this)) {
+        return
+      }
       this.emitFile({
         type: 'asset',
         fileName,
@@ -187,10 +210,15 @@ export function appVersion(opts: AppVersionOptions = {}): Plugin {
       const assets =
         opts.skewProtection?.bundleAssets?.(skewContext(m => this.error(m))) ??
         []
-      for (const asset of assets) this.emitFile({ type: 'asset', ...asset })
+
+      for (const asset of assets) {
+        this.emitFile({ type: 'asset', ...asset })
+      }
     },
     writeBundle() {
-      if (config.build.ssr || isServerBuild(this)) return
+      if (config.build.ssr || isServerBuild(this)) {
+        return
+      }
       opts.skewProtection?.writeBundle?.(skewContext(m => this.error(m)))
     },
   }

@@ -65,7 +65,9 @@ export interface ReasonsByAttention {
   /** rollback / forced: the running build is known bad (sticky until reload). expired: passed `escalation.urgent.after`. */
   urgent: 'rollback' | 'forced' | 'expired'
 }
+
 export type AttentionChangeReason = ReasonsByAttention[keyof ReasonsByAttention]
+
 type Behind = Exclude<Attention, 'none'>
 
 /** One update state, as a union: impossible combinations (e.g. none + "dismiss") can't be expressed. */
@@ -102,6 +104,7 @@ interface DetailsFor<A extends Attention> {
   cancel: () => void
   readonly isCanceled: boolean
 }
+
 /** A discriminated union: `if (details.attention === "urgent") details.reason // "rollback" | "forced" | "expired"`. */
 export type AttentionChangeDetails<A extends Attention = Attention> = {
   [K in A]: DetailsFor<K>

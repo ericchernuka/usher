@@ -6,5 +6,6 @@ export function recordRequests(): Request[] {
   server.events.on('request:start', ({ request }) => {
     requests.push(request)
   })
+
   return requests
 }

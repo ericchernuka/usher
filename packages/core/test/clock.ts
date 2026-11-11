@@ -95,7 +95,10 @@ export function installClock(start = '2026-11-11T16:00:00Z'): Clock {
       return id
     }) as typeof setTimeout)
     vi.spyOn(globalThis, 'clearTimeout').mockImplementation(id => {
-      if (real.delete(id)) {return realClear(id)}
+      if (real.delete(id)) {
+        return realClear(id)
+      }
+
       pending.delete(id)
       clear(id)
     })
@@ -108,7 +111,9 @@ export function installClock(start = '2026-11-11T16:00:00Z'): Clock {
     for (let turn = 0; turn < MAX_NETWORK_TURNS; turn++) {
       await nextTurn() // lets MSW start, answer and finish whatever is in flight
 
-      if (inFlight.size === 0 && turn >= 2) {break}
+      if (inFlight.size === 0 && turn >= 2) {
+        break
+      }
     }
 
     await vi.advanceTimersByTimeAsync(0)
@@ -127,7 +132,9 @@ export function installClock(start = '2026-11-11T16:00:00Z'): Clock {
       await vi.advanceTimersByTimeAsync(step)
       await settle()
 
-      if (performance.now() >= end) {return}
+      if (performance.now() >= end) {
+        return
+      }
     }
   }
 

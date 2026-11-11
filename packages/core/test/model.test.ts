@@ -19,6 +19,7 @@ import {
 import type { Action, Scenario, World } from './model/world'
 
 const rank = { none: 0, passive: 1, prompt: 2, urgent: 3 }
+
 const REASONS: Record<
   UpdateState['attention'],
   readonly AttentionChangeReason[]
@@ -28,8 +29,10 @@ const REASONS: Record<
   prompt: ['stale'],
   urgent: ['rollback', 'forced', 'expired'],
 }
+
 /** Header rounding (1 s) plus the offset jitter filter (2 s). */
 const CLOCK_TOLERANCE_MS = 3_000
+
 /** Configs where a prompt dismissal must hold until urgent: one prompt per level. */
 const ONE_PROMPT = new Set(['default', 'fast'])
 
@@ -39,13 +42,16 @@ interface Change {
   next: UpdateState
   raise: boolean
 }
+
 /** Invariants on each published change: [violated?, message]. */
 const changeRules: Array<[(c: Change) => boolean, (c: Change) => string]> = [
   [
     ({ w, previous, next }) => {
       const offer = w.world.offers.at(-1)
+
       const changed =
         next.attention !== previous.attention || next.reason !== previous.reason
+
       return (
         changed &&
         !(
@@ -82,7 +88,9 @@ function changeViolations(
 ): string[] {
   const raise =
     rank[next.attention] > rank[previous.attention] && rank[next.attention] >= 2
+
   const change = { w, previous, next, raise }
+
   return changeRules
     .filter(([violated]) => violated(change))
     .map(([, message]) => message(change))
@@ -91,6 +99,7 @@ function changeViolations(
 /** Listener-side invariants, recorded (the store isolates listener errors) and asserted after each step. */
 function watch(w: World) {
   let previous = w.store.getState()
+
   return w.store.subscribe(() => {
     const next = w.store.getState()
     w.world.violations.push(...changeViolations(w, previous, next))
@@ -116,10 +125,13 @@ function dismissStep({ world, store, serverNow, host }: World) {
     !(ok && world.veto),
     "dismiss took effect despite the app's veto",
   ).toBe(true)
-  if (ok && before.reason === 'stale' && ONE_PROMPT.has(world.config))
+
+  if (ok && before.reason === 'stale' && ONE_PROMPT.has(world.config)) {
     world.promptAcked = true
-  if (ok && before.reason === 'expired')
+  }
+  if (ok && before.reason === 'expired') {
     world.urgentQuietUntil = serverNow() + urgentSnoozeMs(world.config)
+  }
 }
 
 function otherTabSet(
@@ -129,7 +141,9 @@ function otherTabSet(
   const stored = JSON.parse(
     host.host.localStorage.getItem(SNOOZE_KEY) ?? '{}',
   ) as Record<string, unknown>
+
   const at = serverNow()
+
   const next =
     a.kind === 'bad'
       ? {
@@ -139,6 +153,7 @@ function otherTabSet(
           },
         }
       : { ...stored, [a.kind]: at }
+
   const value = JSON.stringify(next)
   host.otherTabSets(SNOOZE_KEY, value)
 }
@@ -148,9 +163,11 @@ type Handler<T extends Action['type']> = (
   w: World,
   r: Run,
 ) => unknown
+
 interface Run {
   stop: () => void
 }
+
 const handlers: { [T in Action['type']]: Handler<T> } = {
   advance: (a, { clock }) => clock.runFor(a.ms),
   serve: (a, { world }) => void (world.served = a.build),
@@ -212,6 +229,7 @@ function checkInvariants(
     'stuck waiting while idle and visible',
   ).toBe(true)
   world.badSeen ||= s.reason === 'rollback' || s.reason === 'forced'
+
   // Once known bad, never shown as merely new/stale while behind.
   const okReasons = [
     'rollback',
@@ -221,6 +239,7 @@ function checkInvariants(
     'declined',
     'caught-up',
   ]
+
   expect(
     !world.badSeen || okReasons.includes(s.reason),
     `known-bad shown as ${s.reason}`,
@@ -231,11 +250,12 @@ async function run(scenario: Scenario) {
   const clock = installPlainClock()
   const w = createWorld(scenario, clock)
   const r: Run = { stop: watch(w) }
+
   try {
     for (const a of scenario.actions) {
       const before = w.store.getState()
       const vetoBefore = w.world.veto
-      await (handlers[a.type] as Handler<Action['type']>)(a as never, w, r)
+      await (handlers[a.type] as Handler<Action['type']>)(a, w, r)
       await clock.settle()
       checkInvariants(w, before, vetoBefore && w.world.veto)
     }

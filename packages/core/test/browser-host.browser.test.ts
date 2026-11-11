@@ -11,16 +11,19 @@ const current: VersionInfo = {
   commitTime: '2026-11-11T15:00:00.000Z',
   builtAt: '2026-11-11T15:00:00.000Z',
 }
+
 const older: VersionInfo = {
   ...current,
   version: 'old',
   commitTime: '2026-11-10T15:00:00.000Z',
 }
+
 const SNOOZE_KEY = 'app-version:snooze'
 const settle = () => new Promise(resolve => setTimeout(resolve, 20))
 
 // No service worker is registered in these runs, so the version endpoint is a narrow fetch stub.
 let served: VersionInfo
+
 beforeEach(() => {
   served = current
   vi.useFakeTimers({ toFake: ['Date', 'performance'] })
@@ -32,6 +35,7 @@ beforeEach(() => {
     vi.fn(async () => Response.json(served)),
   )
 })
+
 afterEach(() => {
   vi.useRealTimers()
   vi.unstubAllGlobals()
@@ -56,6 +60,7 @@ describe('the store on the real browser', () => {
       url: '/version.json',
       idleFor: '0s',
     })
+
     const stop = updates.subscribe(() => {})
     await settle()
     served = older
@@ -71,14 +76,17 @@ describe('the store on the real browser', () => {
 
   it("given a rollback, when another tab dismisses it, then this tab's storage event lowers it too", async () => {
     served = older
+
     const updates = createAppUpdatesCore({
       current,
       url: '/version.json',
       idleFor: '0s',
     })
+
     const stop = updates.subscribe(() => {})
     await settle()
     expect(updates.getState().attention).toBe('urgent')
+
     const snooze = JSON.stringify({
       bad: {
         [current.version]: {
@@ -87,6 +95,7 @@ describe('the store on the real browser', () => {
         },
       },
     })
+
     localStorage.setItem(SNOOZE_KEY, snooze)
     window.dispatchEvent(
       new StorageEvent('storage', {
@@ -103,11 +112,14 @@ describe('the store on the real browser', () => {
     const navigations = captureNavigations()
     const updates = createAppUpdatesCore({ current, url: '/version.json' })
     const stop = updates.subscribe(() => {})
+
     const fail = () => {
       const event = new Event('vite:preloadError', { cancelable: true })
       window.dispatchEvent(event)
+
       return event.defaultPrevented
     }
+
     expect(fail()).toBe(true)
     expect(navigations).toEqual([{ type: 'reload', url: location.href }])
     expect(fail()).toBe(false)

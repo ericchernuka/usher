@@ -6,6 +6,7 @@ import {
 } from './core'
 
 export type { AppUpdates, AppUpdatesOptions, ReloadBlocker } from './core'
+
 export {
   connectPrompt,
   defaultCopy,
@@ -14,6 +15,7 @@ export {
   type PromptAdapter,
   type PromptCopy,
 } from './prompt'
+
 export type {
   Attention,
   AttentionChangeDetails,

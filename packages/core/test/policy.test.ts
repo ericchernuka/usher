@@ -32,6 +32,7 @@ const base = (o: Partial<PolicyInput> = {}): PolicyInput => ({
   gateOpen: true,
   ...o,
 })
+
 const target = (o: Partial<PolicyInput> = {}) => decide(base(o)).target
 
 describe('decide: levels by build age', () => {
@@ -67,6 +68,7 @@ describe('decide: levels by build age', () => {
       prompt: false,
       urgent: { after: '2h' },
     })
+
     expect(
       target({ escalation, now: at('2026-11-11T10:59:00Z') }).attention,
     ).toBe('passive')
@@ -82,9 +84,11 @@ describe('decide: known-bad builds', () => {
       attention: 'urgent',
       reason: 'rollback',
     })
+
     const forced = v('ccc', '2026-11-11T10:00:00Z', {
       forceUpdateBefore: '2026-11-11T10:00:00Z',
     })
+
     expect(target({ latest: forced })).toEqual({
       attention: 'urgent',
       reason: 'forced',
@@ -158,6 +162,7 @@ describe('decide: snoozes (server-clock dismissals)', () => {
         aaa: { evidence: ['rollback'], until: at('2026-11-11T10:00:00Z') },
       },
     }
+
     expect(target({ latest: older, snoozes })).toEqual({
       attention: 'passive',
       reason: 'dismiss',
@@ -165,9 +170,11 @@ describe('decide: snoozes (server-clock dismissals)', () => {
     expect(target({ latest: newer, knownBad: bad, snoozes }).reason).toBe(
       'dismiss',
     ) // a fix shipping
+
     const forced = v('ccc', '2026-11-11T09:30:00Z', {
       forceUpdateBefore: '2026-11-11T09:30:00Z',
     })
+
     expect(target({ latest: forced, knownBad: bad, snoozes }).reason).toBe(
       'forced',
     ) // new evidence
@@ -199,12 +206,14 @@ describe('decide: the raise gate', () => {
     const d = decide(
       base({ latest: older, gateOpen: false, published: 'prompt' }),
     )
+
     expect(d.publish).toEqual({ attention: 'prompt', reason: 'stale' })
   })
   it('never holds a lowering', () => {
     const d = decide(
       base({ latest: current, gateOpen: false, published: 'urgent' }),
     )
+
     expect(d.publish.attention).toBe('none')
   })
 })

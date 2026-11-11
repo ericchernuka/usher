@@ -28,6 +28,7 @@ export function useAppUpdates<T>(
   const snapshot = () => {
     const state = store.getState()
     const value = selector(state)
+
     // Dev-only footgun check: a selector that builds a new object loops useSyncExternalStore.
     if (
       import.meta.env?.DEV &&
@@ -40,9 +41,12 @@ export function useAppUpdates<T>(
           'Return a field (s => s.attention), not a new object or array.',
       )
     }
+
     return value
   }
+
   const value = useSyncExternalStore(store.subscribe, snapshot, snapshot)
+
   return useDeferredValue(value)
 }
 
@@ -57,7 +61,9 @@ export function useReloadBlocker(
   shouldBlock: boolean | ReloadBlocker,
 ): void {
   useEffect(() => {
-    if (shouldBlock === false) return
+    if (shouldBlock === false) {
+      return
+    }
     return store.addReloadBlocker(
       typeof shouldBlock === 'function' ? shouldBlock : () => true,
     )

@@ -54,6 +54,7 @@ function withCancel<T extends object>(
   base: T,
 ): T & { cancel: () => void; readonly isCanceled: boolean } {
   let canceled = false
+
   return Object.defineProperties(base, {
     cancel: { value: () => void (canceled = true) },
     isCanceled: { get: () => canceled, enumerable: true },
@@ -70,10 +71,12 @@ export function createMachine(deps: MachineDeps) {
   // Server clock − performance clock, from the last check's Date header. Anchoring to the
   // monotonic clock means the user's clock jumping can't move our idea of server time.
   let serverMinusTick: number | undefined
+
   const offset = () =>
     serverMinusTick === undefined
       ? 0
       : serverMinusTick + performance.now() - Date.now()
+
   let offering = false
 
   const decision = (
@@ -92,7 +95,10 @@ export function createMachine(deps: MachineDeps) {
       published: state.attention,
       gateOpen: ctx.gateOpen,
     })
-    if (d.bad) knownBad = d.bad
+
+    if (d.bad) {
+      knownBad = d.bad
+    }
     return d
   }
 
@@ -104,12 +110,12 @@ export function createMachine(deps: MachineDeps) {
     ) {
       return // snapshots stay identical until something real changes
     }
+
     state = next
     deps.notify()
   }
 
-  const keep = (latest: VersionInfo) =>
-    emit({ ...state, latest } as UpdateState)
+  const keep = (latest: VersionInfo) => emit({ ...state, latest })
 
   /** Ask the app. Only raises and this tab's own dismiss are cancelable; everything else is reported. */
   function offer(
@@ -124,8 +130,10 @@ export function createMachine(deps: MachineDeps) {
       latest,
       source,
       cancelable,
-    }) as AttentionChangeDetails
+    })
+
     offering = true
+
     try {
       isolate(
         'onAttentionChange',
@@ -136,13 +144,15 @@ export function createMachine(deps: MachineDeps) {
     } finally {
       offering = false
     }
+
     return !(cancelable && details.isCanceled)
   }
 
   /** The app vetoed a raise: a passive tab says so truthfully (never a stuck "waiting"); others keep their level. */
   function declined(latest: VersionInfo, source: ChangeSource) {
-    if (state.attention !== 'passive' || state.reason === 'declined')
+    if (state.attention !== 'passive' || state.reason === 'declined') {
       return keep(latest)
+    }
     const next = { attention: 'passive', reason: 'declined' } as const
     offer(next, latest, source, false)
     emit({ ...next, latest })
@@ -150,9 +160,14 @@ export function createMachine(deps: MachineDeps) {
 
   /** Facts changed (new latest, time passed, visibility, another tab): re-decide and publish. */
   function apply(latest: VersionInfo | undefined, ctx: Context) {
-    if (!latest) return
-    if (ctx.source === 'check') vetoed = undefined // a fresh check re-opens declined raises
+    if (!latest) {
+      return
+    }
+    if (ctx.source === 'check') {
+      vetoed = undefined
+    } // a fresh check re-opens declined raises
     const d = decision(latest, ctx)
+
     // A declined target stays declined: don't publish its hold either (no stuck "waiting").
     if (
       vetoed === keyOf(d.target, latest) &&
@@ -160,18 +175,27 @@ export function createMachine(deps: MachineDeps) {
     ) {
       return declined(latest, ctx.source)
     }
+
     const next = d.publish
+
     if (next.attention === state.attention) {
-      if (next.reason !== state.reason) offer(next, latest, ctx.source, false) // reported, not vetoable
-      return emit({ ...next, latest } as UpdateState)
+      if (next.reason !== state.reason) {
+        offer(next, latest, ctx.source, false)
+      } // reported, not vetoable
+
+      return emit({ ...next, latest })
     }
+
     const raising = rank[next.attention] > rank[state.attention]
+
     if (!offer(next, latest, ctx.source, raising)) {
       vetoed = keyOf(d.target, latest)
+
       return declined(latest, ctx.source)
     }
+
     vetoed = undefined
-    emit({ ...next, latest } as UpdateState)
+    emit({ ...next, latest })
   }
 
   /** The dismissal of the current state, recorded on the server clock. */
@@ -181,6 +205,7 @@ export function createMachine(deps: MachineDeps) {
   ): Snoozes {
     const s = deps.snoozes.get()
     const server = now + offset()
+
     if (
       (current.reason === 'rollback' || current.reason === 'forced') &&
       knownBad
@@ -189,8 +214,10 @@ export function createMachine(deps: MachineDeps) {
         evidence: knownBad.evidence,
         until: server + badBuildSnoozeMs(deps.escalation),
       }
+
       return { ...s, bad: { ...s.bad, [deps.current.version]: entry } }
     }
+
     return current.attention === 'urgent'
       ? { ...s, urgentAt: server }
       : { ...s, promptAt: server }
@@ -202,29 +229,43 @@ export function createMachine(deps: MachineDeps) {
       console.warn(
         '[app-version] dismiss() inside onAttentionChange is ignored; use details.cancel()',
       )
+
       return false
     }
+
     const current = state
-    if (current.attention !== 'prompt' && current.attention !== 'urgent')
+
+    if (current.attention !== 'prompt' && current.attention !== 'urgent') {
       return false
+    }
     const proposed = snoozeFor(current, ctx.now)
+
     const next = decision(
       current.latest,
       { ...ctx, gateOpen: true },
       proposed,
     ).publish
-    if (rank[next.attention] >= rank[current.attention]) return false
-    if (!offer(next, current.latest, 'user', true)) return false
+
+    if (rank[next.attention] >= rank[current.attention]) {
+      return false
+    }
+    if (!offer(next, current.latest, 'user', true)) {
+      return false
+    }
     deps.snoozes.write(proposed, ctx.now + offset())
     vetoed = undefined
-    emit({ ...next, latest: current.latest } as UpdateState)
+    emit({ ...next, latest: current.latest })
+
     return true
   }
 
   /** What the scheduler needs: policy deadlines, and whether a raise is waiting on the gate. */
   function pending(ctx: Context): { deadlines: number[]; held: boolean } {
-    if (!state.latest) return { deadlines: [], held: false }
+    if (!state.latest) {
+      return { deadlines: [], held: false }
+    }
     const d = decision(state.latest, ctx)
+
     return {
       deadlines: d.deadlines,
       held: d.target.attention !== d.publish.attention,
@@ -238,13 +279,17 @@ export function createMachine(deps: MachineDeps) {
     pending,
     /** Record server time (Date header) at a tick. Keeps the last estimate when missing; ignores 1 s rounding. */
     observeServerTime(serverTime: number | undefined, tick: number) {
-      if (serverTime === undefined) return
+      if (serverTime === undefined) {
+        return
+      }
       const next = serverTime - tick
+
       if (
         serverMinusTick === undefined ||
         Math.abs(next - serverMinusTick) >= OFFSET_JITTER_MS
-      )
+      ) {
         serverMinusTick = next
+      }
     },
     isBehind: () =>
       !!state.latest && state.latest.version !== deps.current.version,

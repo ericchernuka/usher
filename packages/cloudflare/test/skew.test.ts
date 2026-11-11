@@ -1,4 +1,10 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -13,7 +19,10 @@ async function buildFixture(
   customLogger?: Logger,
 ) {
   const root = mkdtempSync(join(tmpdir(), 'app-version-skew-'))
-  if (customLogger) mkdirSync(join(root, 'functions'))
+
+  if (customLogger) {
+    mkdirSync(join(root, 'functions'))
+  }
   writeFileSync(
     join(root, 'index.html'),
     `<script type="module" src="/main.js"></script>`,
@@ -26,6 +35,7 @@ async function buildFixture(
     ...(customLogger && { customLogger }),
     plugins: [appVersion({ version: 'sha', skewProtection })],
   })
+
   return root
 }
 
@@ -35,10 +45,12 @@ function fakeEnv(files: Record<string, string>, r2: Record<string, string>) {
     ASSETS: {
       async fetch(req: Request) {
         const path = new URL(req.url).pathname
-        if (files[path])
+
+        if (files[path]) {
           return new Response(files[path], {
             headers: { 'content-type': 'text/javascript' },
           })
+        }
         return new Response('<!doctype html>', {
           headers: { 'content-type': 'text/html' },
         }) // SPA fallback, 200
@@ -46,7 +58,9 @@ function fakeEnv(files: Record<string, string>, r2: Record<string, string>) {
     },
     BUILD_CACHE: {
       async get(key: string) {
-        if (!(key in r2)) return null
+        if (!(key in r2)) {
+          return null
+        }
         return {
           body: r2[key],
           httpEtag: '"etag"',
@@ -65,18 +79,22 @@ type Worker = {
 describe('skewProtection: pages', () => {
   it('emits _worker.js and _routes.json limited to the assets prefix', async () => {
     const root = await buildFixture(cloudflarePages())
+
     const routes = JSON.parse(
       readFileSync(join(root, 'dist/_routes.json'), 'utf8'),
     )
+
     expect(routes).toEqual({ version: 1, include: ['/assets/*'], exclude: [] })
 
     const worker: Worker = await import(
       pathToFileURL(join(root, 'dist/_worker.js')).href
     )
+
     const env = fakeEnv(
       { '/assets/new-abc.js': 'new' },
       { 'assets/old-123.js': 'old' },
     )
+
     const get = (p: string) =>
       worker.default.fetch(new Request(`https://app.test${p}`), env)
 
@@ -101,17 +119,22 @@ describe('skewProtection: pages', () => {
 
   it('respects base: routes and R2 keys', async () => {
     const root = await buildFixture(cloudflarePages(), '/app/')
+
     const routes = JSON.parse(
       readFileSync(join(root, 'dist/_routes.json'), 'utf8'),
     )
+
     expect(routes.include).toEqual(['/app/assets/*'])
+
     const worker: Worker = await import(
       pathToFileURL(join(root, 'dist/_worker.js')).href
     )
+
     const res = await worker.default.fetch(
       new Request('https://app.test/app/assets/old-123.js'),
       fakeEnv({}, { 'assets/old-123.js': 'old' }),
     )
+
     expect(await res.text()).toBe('old')
   })
 })
@@ -126,6 +149,7 @@ describe('skewProtection: workers', () => {
 
     const worker: Worker = await import(pathToFileURL(file).href)
     const env = fakeEnv({}, {})
+
     const res = await worker.default.fetch(
       new Request('https://app.test/assets/x.js'),
       {
@@ -139,6 +163,7 @@ describe('skewProtection: workers', () => {
         },
       },
     )
+
     expect(await res.text()).toBe('old')
   })
 
@@ -146,13 +171,16 @@ describe('skewProtection: workers', () => {
     const root = await buildFixture(
       cloudflareWorkers({ workerFile: 'edge/worker.mjs' }),
     )
+
     const worker: Worker = await import(
       pathToFileURL(join(root, 'edge/worker.mjs')).href
     )
+
     const res = await worker.default.fetch(
       new Request('https://app.test/assets/old-123.js'),
       fakeEnv({}, { 'assets/old-123.js': 'old' }),
     )
+
     expect(await res.text()).toBe('old')
   })
 
@@ -167,6 +195,7 @@ describe('edge handler', () => {
   it("edge handler without its R2 binding returns 404, not the SPA's HTML", async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {})
     const { serveAsset } = await import('../src/edge-handler.mjs')
+
     const env = {
       ASSETS: {
         fetch: async () =>
@@ -175,6 +204,7 @@ describe('edge handler', () => {
           }),
       },
     }
+
     const res = await serveAsset(
       new Request('https://app.test/assets/x.js'),
       env,
@@ -183,22 +213,27 @@ describe('edge handler', () => {
         binding: 'BUILD_CACHE',
       },
     )
+
     expect(res.status).toBe(404)
   })
+
   const assetsHtml = () =>
     new Response('<!doctype html>', {
       headers: { 'content-type': 'text/html' },
     })
+
   const options = { base: '/', binding: 'BUILD_CACHE' }
 
   it('passes non-GET requests straight through', async () => {
     const { serveAsset } = await import('../src/edge-handler.mjs')
     const env = { ASSETS: { fetch: async () => assetsHtml() } }
+
     const res = await serveAsset(
       new Request('https://app.test/assets/x.js', { method: 'POST' }),
       env,
       options,
     )
+
     expect(res.status).toBe(200)
     expect(res.headers.get('content-type')).toBe('text/html')
   })
@@ -206,14 +241,17 @@ describe('edge handler', () => {
   it('keeps the original 404 when the binding is missing', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {})
     const { serveAsset } = await import('../src/edge-handler.mjs')
+
     const env = {
       ASSETS: { fetch: async () => new Response('gone', { status: 404 }) },
     }
+
     const res = await serveAsset(
       new Request('https://app.test/assets/x.js'),
       env,
       options,
     )
+
     expect(res.status).toBe(404)
     expect(await res.text()).toBe('gone')
   })
@@ -221,6 +259,7 @@ describe('edge handler', () => {
   it('answers HEAD from R2 metadata without opening the body', async () => {
     const { serveAsset } = await import('../src/edge-handler.mjs')
     const get = vi.fn()
+
     const env = {
       ASSETS: { fetch: async () => assetsHtml() },
       BUILD_CACHE: {
@@ -231,11 +270,13 @@ describe('edge handler', () => {
             : null,
       },
     }
+
     const res = await serveAsset(
       new Request('https://app.test/assets/old-123.js', { method: 'HEAD' }),
       env,
       options,
     )
+
     expect(res.status).toBe(200)
     expect(res.headers.get('etag')).toBe('"e"')
     expect(await res.text()).toBe('')
@@ -243,21 +284,25 @@ describe('edge handler', () => {
   })
   it('serves an asset without a content type as the current build', async () => {
     const { serveAsset } = await import('../src/edge-handler.mjs')
+
     const env = {
       ASSETS: { fetch: async () => new Response('current', { status: 200 }) },
       BUILD_CACHE: { get: vi.fn() },
     }
+
     const res = await serveAsset(
       new Request('https://app.test/assets/x.js'),
       env,
       options,
     )
+
     expect(await res.text()).toBe('current')
     expect(env.BUILD_CACHE.get).not.toHaveBeenCalled()
   })
 
   it('falls back to R2 on a bodiless 404, and 404s when R2 has no copy either', async () => {
     const { serveAsset } = await import('../src/edge-handler.mjs')
+
     const env = {
       ASSETS: { fetch: async () => new Response(null, { status: 404 }) },
       BUILD_CACHE: {
@@ -267,17 +312,21 @@ describe('edge handler', () => {
             : null,
       },
     }
+
     const hit = await serveAsset(
       new Request('https://app.test/assets/old-123.js'),
       env,
       options,
     )
+
     expect(await hit.text()).toBe('old')
+
     const miss = await serveAsset(
       new Request('https://app.test/assets/never.js'),
       env,
       options,
     )
+
     expect(miss.status).toBe(404)
   })
 })

@@ -12,6 +12,7 @@ describe('resolveVersionInfo', () => {
       { GITHUB_SHA: 'abc123', APP_FORCE_UPDATE_BEFORE: '2026-11-11T10:00:00Z' },
       new Date('2026-11-11T16:00:00Z'),
     )
+
     expect(info).toEqual({
       version: 'abc123',
       commitTime: '2026-11-11T15:00:00.000Z',
@@ -45,11 +46,15 @@ describe('appVersion plugin', () => {
     const json = JSON.parse(
       readFileSync(join(root, 'dist/version.json'), 'utf8'),
     )
+
     expect(json.version).toBe('sha-test')
 
     const html = readFileSync(join(root, 'dist/index.html'), 'utf8')
     const js = html.match(/src="\/app\/(assets\/[^"]+\.js)"/)?.[1]
-    if (!js) throw new Error('index.html has no script tag')
+
+    if (!js) {
+      throw new Error('index.html has no script tag')
+    }
     const bundle = readFileSync(join(root, 'dist', js), 'utf8')
     expect(bundle).toContain('sha-test')
     expect(bundle).toContain('/app/version.json')
@@ -59,18 +64,22 @@ describe('appVersion plugin', () => {
 describe('plugin and edge (first review #12)', () => {
   it('treats empty CI variables as missing and warns when commit time is unknown', async () => {
     const warn = vi.fn()
+
     const info = resolveVersionInfo(
       {},
       { APP_VERSION: '', GITHUB_SHA: 'abc', APP_COMMIT_TIME: '' },
       new Date('2026-11-11T16:00:00Z'),
       warn,
     )
+
     expect(info.version).toBe('abc')
+
     // This repo has .git, so commit time comes from git; simulate its absence via APP_COMMIT_TIME.
     const explicit = resolveVersionInfo(
       {},
       { GITHUB_SHA: 'abc', APP_COMMIT_TIME: '2026-11-10T00:00:00Z' },
     )
+
     expect(explicit.commitTime).toBe('2026-11-10T00:00:00.000Z')
   })
 })
@@ -101,6 +110,7 @@ describe('given a malformed timestamp', () => {
       { version: '  ' },
       { GITHUB_SHA: ' abc ', APP_COMMIT_TIME: '2026-11-10T00:00:00Z' },
     )
+
     expect(info.version).toBe('abc')
   })
 })
@@ -117,17 +127,22 @@ describe('dev server middleware', () => {
       version: 'sha-dev',
       commitTime: '2026-11-11T09:00:00Z',
     })
+
     const config = {
       base,
       root: '/',
       build: { assetsDir: 'assets', outDir: 'dist' },
       logger: { warn: () => {} },
     }
+
     ;(plugin.configResolved as (c: unknown) => void)(config)
+
     let handler: Handler | undefined
+
     ;(plugin.configureServer as (s: unknown) => void)({
       middlewares: { use: (fn: Handler) => (handler = fn) },
     })
+
     return (url?: string) => {
       let body: string | undefined
       let passed = false
@@ -136,6 +151,7 @@ describe('dev server middleware', () => {
         { setHeader: () => {}, end: b => (body = b) },
         () => (passed = true),
       )
+
       return passed ? 'next' : JSON.parse(body!).version
     }
   }
@@ -218,9 +234,11 @@ describe('given a module the plugin does not own', () => {
     })
 
     const assets = join(root, 'dist/assets')
+
     const bundle = readdirSync(assets)
       .map(file => readFileSync(join(assets, file), 'utf8'))
       .join('')
+
     expect(bundle).toContain('hello-from-dep')
     expect(bundle).toContain('sha-test')
   })

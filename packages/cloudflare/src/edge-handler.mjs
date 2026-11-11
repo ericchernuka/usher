@@ -24,33 +24,49 @@ function assetResponse(old) {
   old.writeHttpMetadata(headers)
   headers.set('ETag', old.httpEtag)
   headers.set('Cache-Control', 'public, max-age=31536000, immutable')
+
   return new Response('body' in old ? old.body : null, { headers })
 }
 
 export async function serveAsset(request, env, { base, binding }) {
   const current = await env.ASSETS.fetch(request)
-  if (request.method !== 'GET' && request.method !== 'HEAD') return current
-  if (!isMissing(current)) return current
+
+  if (request.method !== 'GET' && request.method !== 'HEAD') {
+    return current
+  }
+  if (!isMissing(current)) {
+    return current
+  }
 
   // Falling back: release the unused response so the runtime doesn't leak its stream.
   const release = () => current.body?.cancel()
 
   const bucket = env[binding]
+
   if (!bucket) {
     console.warn(
       `[app-version] R2 binding "${binding}" is missing; skew protection is off`,
     )
-    if (current.status === 404) return current
+
+    if (current.status === 404) {
+      return current
+    }
     await release() // never answer a JS/CSS request with the SPA's HTML
+
     return new Response('Not found', { status: 404 })
   }
 
   // CI syncs dist/assets to <bucket>/assets, so keys are paths relative to `base`.
   const key = new URL(request.url).pathname.slice(base.length)
+
   // HEAD needs only metadata; get() would open a body nobody reads.
   const old =
     request.method === 'HEAD' ? await bucket.head(key) : await bucket.get(key)
+
   await release()
-  if (!old) return new Response('Not found', { status: 404 })
+
+  if (!old) {
+    return new Response('Not found', { status: 404 })
+  }
   return assetResponse(old)
 }

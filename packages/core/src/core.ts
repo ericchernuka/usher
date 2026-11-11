@@ -77,8 +77,10 @@ const MIN_POLL_MS = 10_000
 
 function pollMs(value: Duration = '5m'): number {
   const result = ms(value, 'pollEvery')
-  if (result < MIN_POLL_MS)
+
+  if (result < MIN_POLL_MS) {
     throw new Error(`[app-version] pollEvery must be at least "10s"`)
+  }
   return result
 }
 
@@ -87,11 +89,13 @@ export function createAppUpdatesCore(o: CoreOptions): AppUpdates {
   const listeners = new Set<{ listener: () => void }>()
   const host = o.host ?? browserHost()
   const snoozes = createSnoozes(storageKey, host)
+
   const reloads = createReloads({
     ...(o.reload && { reload: o.reload }),
     storageKey,
     host,
   })
+
   const machine = createMachine({
     current: o.current,
     escalation: resolveEscalation(o.escalation), // validates eagerly: bad config throws here
@@ -99,10 +103,12 @@ export function createAppUpdatesCore(o: CoreOptions): AppUpdates {
     ...(o.onAttentionChange && { onAttentionChange: o.onAttentionChange }),
     notify: () => {
       // Snapshot: a listener may (un)subscribe while we notify.
-      for (const entry of Array.from(listeners))
+      for (const entry of Array.from(listeners)) {
         isolate('listener', entry.listener)
+      }
     },
   })
+
   const engine = createEngine({
     url: o.url,
     pollMs: pollMs(o.pollEvery),
@@ -122,10 +128,17 @@ export function createAppUpdatesCore(o: CoreOptions): AppUpdates {
     subscribe(listener) {
       const entry = { listener } // a token per call, so the same function can subscribe twice
       listeners.add(entry)
-      if (listeners.size === 1) engine.start()
+
+      if (listeners.size === 1) {
+        engine.start()
+      }
       return () => {
-        if (!listeners.delete(entry)) return
-        if (listeners.size === 0) engine.stop()
+        if (!listeners.delete(entry)) {
+          return
+        }
+        if (listeners.size === 0) {
+          engine.stop()
+        }
       }
     },
     addReloadBlocker: reloads.addBlocker,
@@ -133,7 +146,10 @@ export function createAppUpdatesCore(o: CoreOptions): AppUpdates {
       reloads.request({ reason: 'refresh', href: host.location.href }),
     dismiss() {
       const dismissed = machine.dismiss(engine.context('user'))
-      if (dismissed) engine.reschedule()
+
+      if (dismissed) {
+        engine.reschedule()
+      }
       return dismissed
     },
   }

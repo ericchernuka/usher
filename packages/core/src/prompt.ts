@@ -63,9 +63,11 @@ const keyOf = (s: UpdateState) => `${s.attention}:${s.reason}`
 function safely(label: string, fn: () => void) {
   try {
     fn()
+
     return true
   } catch (error) {
     console.error(`[app-version] connectPrompt ${label}() threw`, error)
+
     return false
   }
 }
@@ -79,32 +81,48 @@ export function connectPrompt(
     | { kind: 'hidden' }
     | { kind: 'shown'; handle: Prompt; key: string }
     | { kind: 'closed'; key: string } // closed by the user; stays closed while the key matches
+
   let view: View = { kind: 'hidden' }
   let dismissing = false
 
   // A dismiss from inside show() must not hide() mid-show (that orphans the UI): defer it.
   let hideAfterStep = false
+
   function closeAfterDismiss(key: string) {
     view = { kind: 'closed', key } // set first: hide() may fire onClose → stale dismiss
-    if (syncing) hideAfterStep = true
-    else safely('hide', hide)
+
+    if (syncing) {
+      hideAfterStep = true
+    } else {
+      safely('hide', hide)
+    }
   }
 
   function step() {
-    if (dismissing) return // closing on the dismissed state happens right after
+    if (dismissing) {
+      return
+    } // closing on the dismissed state happens right after
     const state = updates.getState()
+
     if (
       state.attention === 'none' ||
       rank[state.attention] < rank[minAttention]
     ) {
       const wasShown = view.kind === 'shown'
       view = { kind: 'hidden' } // set first: our own hide must not read as a user dismiss
-      if (wasShown) safely('hide', hide)
+
+      if (wasShown) {
+        safely('hide', hide)
+      }
       return
     }
+
     // Re-show only when attention or reason changes; a newer `latest` alone isn't news.
     const key = keyOf(state)
-    if (view.kind !== 'hidden' && view.key === key) return
+
+    if (view.kind !== 'hidden' && view.key === key) {
+      return
+    }
 
     const prompt = Object.freeze({
       id: PROMPT_ID,
@@ -113,26 +131,38 @@ export function connectPrompt(
       latest: state.latest,
       refresh: () => updates.refresh(),
       dismiss: () => {
-        if (view.kind !== 'shown' || view.handle !== prompt) return // stale handle
-        if (prompt.attention === 'passive') return closeAfterDismiss(key) // nothing to snooze
+        if (view.kind !== 'shown' || view.handle !== prompt) {
+          return
+        } // stale handle
+
+        if (prompt.attention === 'passive') {
+          return closeAfterDismiss(key)
+        } // nothing to snooze
         // Pause steps while the store updates, then close on whatever it actually published.
         dismissing = true
         let dismissed = false
+
         try {
           dismissed = updates.dismiss()
         } finally {
           dismissing = false
         }
-        if (dismissed) return closeAfterDismiss(keyOf(updates.getState()))
+
+        if (dismissed) {
+          return closeAfterDismiss(keyOf(updates.getState()))
+        }
         view = { kind: 'hidden' } // refused or not applicable: show the current state again
         sync()
       },
     }) as Prompt
+
     // Record it as shown only once show() succeeded; a throwing show() retries on the next change.
     const previous = view
     view = { kind: 'shown', handle: prompt, key }
-    if (!safely('show', () => show(prompt)))
+
+    if (!safely('show', () => show(prompt))) {
       view = previous.kind === 'shown' ? { kind: 'hidden' } : previous
+    }
   }
 
   // Re-entrancy guard: a sync triggered from inside show()/hide() runs after the current
@@ -141,27 +171,35 @@ export function connectPrompt(
   const MAX_PASSES = 5
   let syncing = false
   let again = false
+
   function sync() {
     if (syncing) {
       again = true
+
       return
     }
+
     syncing = true
+
     try {
       let passes = 0
+
       do {
         again = false
         step()
+
         if (hideAfterStep) {
           hideAfterStep = false
           safely('hide', hide)
         }
       } while (again && ++passes < MAX_PASSES)
-      if (again)
+
+      if (again) {
         console.error(
           '[app-version] connectPrompt: adapter keeps re-triggering updates; stopped after',
           MAX_PASSES,
         )
+      }
       again = false
     } finally {
       syncing = false
@@ -170,11 +208,15 @@ export function connectPrompt(
 
   const unsubscribe = updates.subscribe(sync)
   sync()
+
   return () => {
     unsubscribe()
     const wasShown = view.kind === 'shown'
     view = { kind: 'hidden' }
-    if (wasShown) safely('hide', hide)
+
+    if (wasShown) {
+      safely('hide', hide)
+    }
   }
 }
 
@@ -196,6 +238,7 @@ export function defaultCopy({
       action: 'Refresh now',
     }
   }
+
   if (attention === 'urgent') {
     return {
       title: 'Please refresh',
@@ -203,6 +246,7 @@ export function defaultCopy({
       action: 'Refresh now',
     }
   }
+
   return {
     title: 'A new version is available',
     description: "Refresh when you're ready.",

@@ -54,9 +54,12 @@ export function createFakeHost(options: { fetch?: typeof fetch } = {}) {
   const sessionStorage = new MemoryStorage()
   const windowTarget = new EventTarget()
   const documentTarget = new EventTarget()
-  const doc = Object.assign(documentTarget, {
-    visibilityState: 'visible' as DocumentVisibilityState,
-  })
+
+  const visibility: { visibilityState: DocumentVisibilityState } = {
+    visibilityState: 'visible',
+  }
+  const doc = Object.assign(documentTarget, visibility)
+
   const location = {
     href: 'https://app.test/now',
     reload: () => void navigations.push({ type: 'reload', url: location.href }),
@@ -66,6 +69,7 @@ export function createFakeHost(options: { fetch?: typeof fetch } = {}) {
         url: new URL(url, location.href).href,
       }),
   }
+
   const host: Host = {
     window: windowTarget,
     document: doc,
@@ -74,6 +78,7 @@ export function createFakeHost(options: { fetch?: typeof fetch } = {}) {
     location,
     fetch: options.fetch ?? ((...args) => fetch(...args)), // MSW answers these
   }
+
   return {
     host,
     localStorage,
@@ -123,6 +128,7 @@ export function createFakeHost(options: { fetch?: typeof fetch } = {}) {
     preloadError() {
       const event = new Event('vite:preloadError', { cancelable: true })
       windowTarget.dispatchEvent(event)
+
       return event.defaultPrevented
     },
     /** `window.dispatchEvent` with an arbitrary event, e.g. a storage event for another area. */
@@ -134,6 +140,7 @@ export function createFakeHost(options: { fetch?: typeof fetch } = {}) {
     },
   }
 }
+
 export type FakeHost = ReturnType<typeof createFakeHost>
 
 export const stubBuild = appVersion

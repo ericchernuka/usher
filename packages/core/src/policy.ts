@@ -85,17 +85,23 @@ function evidence(i: PolicyInput): { reason: Bad; key: string } | undefined {
   const cutoff = i.latest.forceUpdateBefore
     ? Date.parse(i.latest.forceUpdateBefore)
     : NaN
-  if (cutoff > Date.parse(i.current.builtAt))
+
+  if (cutoff > Date.parse(i.current.builtAt)) {
     return { reason: 'forced', key: `forced:${cutoff}` }
-  if (Date.parse(i.latest.commitTime) < Date.parse(i.current.commitTime))
+  }
+  if (Date.parse(i.latest.commitTime) < Date.parse(i.current.commitTime)) {
     return { reason: 'rollback', key: 'rollback' }
+  }
   return undefined
 }
 
 /** Sticky merge: evidence accumulates; new evidence sets the reason. */
 function detectBad(i: PolicyInput): KnownBad | undefined {
   const fresh = evidence(i)
-  if (!fresh || i.knownBad?.evidence.includes(fresh.key)) return i.knownBad
+
+  if (!fresh || i.knownBad?.evidence.includes(fresh.key)) {
+    return i.knownBad
+  }
   return {
     reason: fresh.reason,
     evidence: [...(i.knownBad?.evidence ?? []), fresh.key],
@@ -106,6 +112,7 @@ function detectBad(i: PolicyInput): KnownBad | undefined {
 function starts(i: PolicyInput) {
   const builtAt = Date.parse(i.current.builtAt)
   const { prompt, urgent } = i.escalation
+
   return {
     prompt: prompt && builtAt + prompt.afterMs,
     urgent: urgent && builtAt + urgent.afterMs,
@@ -121,6 +128,7 @@ function promptSnoozeMs(e: ResolvedEscalation): number | undefined {
 function snoozeEnds(i: PolicyInput) {
   const { promptAt, urgentAt } = i.snoozes
   const p = promptSnoozeMs(i.escalation)
+
   return {
     prompt:
       promptAt !== undefined && p !== undefined ? promptAt + p : undefined,
@@ -137,6 +145,7 @@ function mutes(i: PolicyInput, bad: KnownBad | undefined) {
   const start = starts(i)
   const ends = snoozeEnds(i)
   const { promptAt, urgentAt } = i.snoozes
+
   const acked = (
     at: number | undefined,
     levelStart: number | undefined,
@@ -146,13 +155,17 @@ function mutes(i: PolicyInput, bad: KnownBad | undefined) {
     levelStart !== undefined &&
     at >= levelStart &&
     (end === undefined || server < end)
+
   const ack = i.snoozes.bad?.[i.current.version]
+
   const badMuted =
     !!bad &&
     !!ack &&
     ack.until > server &&
     bad.evidence.every(e => ack.evidence.includes(e))
+
   const urgent = acked(urgentAt, start.urgent, ends.urgent) || badMuted
+
   return {
     bad: badMuted,
     urgent,
@@ -167,23 +180,34 @@ function candidates(
   ageMs: number,
 ): Level[] {
   const list: Level[] = []
-  if (bad) list.push({ attention: 'urgent', reason: bad.reason })
+
+  if (bad) {
+    list.push({ attention: 'urgent', reason: bad.reason })
+  }
   const { prompt, urgent } = i.escalation
-  if (urgent && ageMs >= urgent.afterMs)
+
+  if (urgent && ageMs >= urgent.afterMs) {
     list.push({ attention: 'urgent', reason: 'expired' })
-  if (prompt && ageMs >= prompt.afterMs)
+  }
+  if (prompt && ageMs >= prompt.afterMs) {
     list.push({ attention: 'prompt', reason: 'stale' })
+  }
   return list
 }
 
 function isMuted(level: Level, m: ReturnType<typeof mutes>): boolean {
-  if (level.reason === 'rollback' || level.reason === 'forced') return m.bad
+  if (level.reason === 'rollback' || level.reason === 'forced') {
+    return m.bad
+  }
   return level.attention === 'urgent' ? m.urgent : m.prompt
 }
 
 /** While the gate is closed, a raise holds at a level that's still true. */
 function hold(published: Attention): Level {
-  if (published === 'prompt') return { attention: 'prompt', reason: 'stale' } // prompt only ever means stale
+  if (published === 'prompt') {
+    return { attention: 'prompt', reason: 'stale' }
+  } // prompt only ever means stale
+
   return { attention: 'passive', reason: 'waiting' }
 }
 
@@ -191,6 +215,7 @@ function deadlines(i: PolicyInput): number[] {
   const start = starts(i)
   const ends = snoozeEnds(i)
   const badUntil = i.snoozes.bad?.[i.current.version]?.until
+
   const server = [
     start.prompt,
     start.urgent,
@@ -198,6 +223,7 @@ function deadlines(i: PolicyInput): number[] {
     ends.urgent,
     badUntil,
   ]
+
   return server
     .filter((t): t is number => typeof t === 'number' && Number.isFinite(t))
     .map(t => t - i.clockOffset) // to the client clock
@@ -211,13 +237,16 @@ export function decide(i: PolicyInput): Decision {
     evidence(i)?.reason !== 'forced'
   ) {
     const caughtUp: Level = { attention: 'none', reason: 'caught-up' }
+
     return { target: caughtUp, publish: caughtUp, deadlines: [] }
   }
+
   const bad = detectBad(i)
   const ageMs = i.now + i.clockOffset - Date.parse(i.current.builtAt)
   const all = candidates(i, bad, ageMs)
   const m = mutes(i, bad)
   const unmuted = all.find(level => !isMuted(level, m))
+
   const target: Level = unmuted ?? {
     attention: 'passive',
     reason: all.length ? 'dismiss' : 'new-build',
@@ -226,7 +255,9 @@ export function decide(i: PolicyInput): Decision {
   const raise =
     rank[target.attention] > rank[i.published] &&
     rank[target.attention] >= rank.prompt
+
   const publish = raise && !i.gateOpen ? hold(i.published) : target
+
   return { target, publish, ...(bad && { bad }), deadlines: deadlines(i) }
 }
 

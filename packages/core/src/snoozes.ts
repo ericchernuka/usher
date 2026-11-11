@@ -51,6 +51,7 @@ const StoredSnoozesJson = v.pipe(v.string(), v.parseJson(), StoredSnoozes)
 
 function parse(raw: string): Snoozes | undefined {
   const result = v.safeParse(StoredSnoozesJson, raw)
+
   return result.success ? result.output : undefined
 }
 
@@ -62,9 +63,13 @@ function later(a: Snoozes, b: Snoozes): Snoozes {
   const promptAt = max(a.promptAt, b.promptAt)
   const urgentAt = max(a.urgentAt, b.urgentAt)
   const bad = { ...a.bad }
+
   for (const [version, entry] of Object.entries(b.bad ?? {})) {
-    if (!bad[version] || entry.until > bad[version].until) bad[version] = entry
+    if (!bad[version] || entry.until > bad[version].until) {
+      bad[version] = entry
+    }
   }
+
   return {
     ...(promptAt !== undefined && { promptAt }),
     ...(urgentAt !== undefined && { urgentAt }),
@@ -77,7 +82,9 @@ function prune(s: Snoozes, serverNow: number): Snoozes {
   const bad = Object.fromEntries(
     Object.entries(s.bad ?? {}).filter(([, e]) => e.until > serverNow),
   )
+
   const { bad: _expired, ...rest } = s
+
   return Object.keys(bad).length ? { ...rest, bad } : rest
 }
 
@@ -110,19 +117,29 @@ export function createSnoozes(storageKey: string, host: Host) {
 
     /** Apply another tab's change. Returns true if it concerned us. */
     onStorage(e: StorageChange): boolean {
-      if (!isOurArea(e, host)) return false
+      if (!isOurArea(e, host)) {
+        return false
+      }
       if (e.key === null || (e.key === key && e.newValue === null)) {
         memory = {} // storage cleared or our key removed: un-snooze
+
         return true
       }
-      if (e.key !== key || e.newValue === null) return false
+
+      if (e.key !== key || e.newValue === null) {
+        return false
+      }
       const incoming = parse(e.newValue)
-      if (incoming) memory = later(memory, incoming)
+
+      if (incoming) {
+        memory = later(memory, incoming)
+      }
       return true
     },
 
     write(next: Snoozes, serverNow: number) {
       memory = prune(next, serverNow)
+
       try {
         host.localStorage.setItem(key, JSON.stringify(memory))
         unsynced = false

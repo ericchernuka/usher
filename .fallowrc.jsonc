@@ -5,12 +5,15 @@
   "ignorePatterns": ["tools/**", "**/.edge-fixture/**", "**/dist-worker/**"],
   "ignoreDependencies": ["@oxlint/plugins"],
   "includeEntryExports": true,
-  "typeAware": { "enabled": true, "projects": [
+  "typeAware": {
+    "enabled": true,
+    "projects": [
       "tsconfig.json",
       "packages/core/tsconfig.json",
       "packages/react/tsconfig.json",
       "packages/cloudflare/tsconfig.json",
-    ], },
+    ],
+  },
   "duplicates": { "mode": "semantic", "minOccurrences": 2 },
   "health": {
     "maxCyclomatic": 10,

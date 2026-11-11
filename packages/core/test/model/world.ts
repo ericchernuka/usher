@@ -15,6 +15,7 @@ export const current: VersionInfo = {
   commitTime: '2026-11-11T15:00:00.000Z',
   builtAt: '2026-11-11T15:00:00.000Z',
 }
+
 const builds = {
   current,
   newer: {
@@ -37,7 +38,9 @@ const builds = {
     forceUpdateBefore: '2026-11-11T17:00:00.000Z',
   },
 } satisfies Record<string, VersionInfo>
+
 type Build = keyof typeof builds
+
 type Served = Build | 'offline' | 'malformed' | { flap: [Build, Build] }
 
 const configs = {
@@ -48,7 +51,9 @@ const configs = {
   off: { prompt: false, urgent: false },
   fast: { prompt: { after: '2h' }, urgent: { after: '3h', snooze: '10m' } },
 } satisfies Record<string, Escalation>
+
 export type ConfigName = keyof typeof configs
+
 /** Urgent snooze per config (the default is 30 min). */
 export const urgentSnoozeMs = (name: ConfigName) =>
   (name === 'fast' ? 10 : 30) * 60_000
@@ -74,6 +79,7 @@ const build = fc.constantFrom<Build>(
   'older',
   'forced',
 )
+
 const served: fc.Arbitrary<Served> = fc.oneof(
   {
     weight: 10,
@@ -93,12 +99,15 @@ const served: fc.Arbitrary<Served> = fc.oneof(
       .map(([a, b]): Served => ({ flap: [a, b] })),
   },
 )
+
 const duration = fc.oneof(
   fc.integer({ min: 0, max: 10_000 }),
   fc.integer({ min: 60_000, max: 2 * H }),
   fc.integer({ min: 6 * H, max: 14 * H }),
 )
+
 const t = <T extends Action['type']>(type: T) => fc.constant(type)
+
 const action: fc.Arbitrary<Action> = fc.oneof(
   { weight: 5, arbitrary: fc.record({ type: t('advance'), ms: duration }) },
   { weight: 3, arbitrary: fc.record({ type: t('serve'), build: served }) },
@@ -144,6 +153,7 @@ export interface Scenario {
   latency: number
   actions: Action[]
 }
+
 const scenario = (actions: fc.Arbitrary<Action[]>): fc.Arbitrary<Scenario> =>
   fc.record({
     config: fc.constantFrom(...(Object.keys(configs) as ConfigName[])),
@@ -152,6 +162,7 @@ const scenario = (actions: fc.Arbitrary<Action[]>): fc.Arbitrary<Scenario> =>
     latency: fc.constantFrom(0, 0, 300, 5_000, 35_000),
     actions,
   })
+
 const noise = fc.array(action, { maxLength: 10 })
 
 export const random = scenario(fc.array(action, { maxLength: 60 }))
@@ -215,37 +226,54 @@ export function createWorld(s: Scenario, clock: Clock) {
     }>,
     violations: [] as string[],
   }
+
   const serverNow = () => Date.now() - world.jumped + s.skew
+
   // In-memory fetch: a property test needs the server's behaviour, not a network.
   const respond = async (
     _input: RequestInfo | URL,
     init?: RequestInit,
   ): Promise<Response> => {
     world.inFlight++
+
     try {
-      if (s.latency > 0) await answerAfter(s.latency, init?.signal)
+      if (s.latency > 0) {
+        await answerAfter(s.latency, init?.signal)
+      }
       return serve()
     } finally {
       world.inFlight--
     }
   }
+
   const serve = (): Response => {
     const choice = world.served
-    if (choice === 'offline') throw new TypeError('offline')
-    if (choice === 'malformed') return Response.json({})
+
+    if (choice === 'offline') {
+      throw new TypeError('offline')
+    }
+    if (choice === 'malformed') {
+      return Response.json({})
+    }
     const name =
       typeof choice === 'string' ? choice : choice.flap[world.flips++ % 2]!
+
     const headers = { date: new Date(serverNow()).toUTCString() } // 1 s resolution, like real servers
+
     return Response.json(builds[name], { headers })
   }
+
   const host = createFakeHost({ fetch: respond })
   vi.spyOn(console, 'warn').mockImplementation(() => {})
+
   const store = createStore(host, {
     idleFor: '5s',
     escalation: configs[s.config],
     reload: async () => false, // reloads are "blocked": the page never unloads mid-test
     onAttentionChange: (attention, d) => {
-      if (world.veto && d.cancelable) d.cancel()
+      if (world.veto && d.cancelable) {
+        d.cancel()
+      }
       world.offers.push({
         attention,
         reason: d.reason,
@@ -253,8 +281,10 @@ export function createWorld(s: Scenario, clock: Clock) {
       })
     },
   })
+
   return { world, store, serverNow, host, clock }
 }
+
 export type World = ReturnType<typeof createWorld>
 
 /** Wait like a slow server: resolves after `ms` of (fake) time, rejects when the client aborts. */

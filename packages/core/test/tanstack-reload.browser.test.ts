@@ -16,6 +16,7 @@ const current = {
 }
 
 let navigations: NavigationRequest[]
+
 beforeEach(() => {
   navigations = captureNavigations()
 })
@@ -25,15 +26,18 @@ function setup() {
     routeTree: createRootRoute(),
     history: createMemoryHistory({ initialEntries: ['/jobs'] }),
   })
+
   const appUpdates = createAppUpdatesCore({
     current,
     url: '/version.json',
     // README recipe:
     reload: async ({ href }) => {
       await router.navigate({ href, reloadDocument: true, replace: true })
+
       return false // still here afterwards = a blocker stopped it (otherwise the page is unloading)
     },
   })
+
   return { router, appUpdates }
 }
 
@@ -56,10 +60,12 @@ describe('TanStack Router reload recipe', () => {
 
   it("blockers that compare pathnames don't block reloads (current === next)", async () => {
     const { router, appUpdates } = setup()
+
     const blockerFn = vi.fn(
       ({ currentLocation, nextLocation }) =>
         currentLocation.pathname !== nextLocation.pathname,
     )
+
     const unblock = router.history.block({ blockerFn })
     await appUpdates.refresh()
     expect(navigations).toHaveLength(1) // documented caveat: block on dirty state, not on path change
