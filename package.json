@@ -1,0 +1,38 @@
+{
+  "name": "app-version",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@12.18.0",
+  "engines": {
+    "node": "^22.22.2 || ^24.15.0 || >=26.0.0"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "test": "turbo run test",
+    "test:edge": "turbo run test:edge",
+    "check:types": "turbo run typecheck",
+    "lint": "oxlint --type-aware --deny-warnings",
+    "format": "oxfmt",
+    "check": "run-p \"check:*\"",
+    "check:format": "oxfmt --check",
+    "check:lint": "pnpm lint",
+    "check:test": "turbo run coverage test:edge",
+    "check:build": "turbo run build",
+    "check:fallow": "fallow",
+    "coverage": "turbo run coverage"
+  },
+  "devDependencies": {
+    "@oxlint/plugins": "^1.92.0",
+    "@types/node": "^26.6.6",
+    "eslint-plugin-no-only-tests": "^3.4.0",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "fallow": "^3.41.0",
+    "npm-run-all2": "^9.0.4",
+    "oxfmt": "^0.77.0",
+    "oxlint": "^1.92.0",
+    "oxlint-tsgolint": "^7.0.2006",
+    "turbo": "^2.11.10",
+    "typescript": "^7.0.2"
+  }
+}
