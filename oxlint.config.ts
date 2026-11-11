@@ -136,6 +136,11 @@ export default defineConfig({
   },
   overrides: [
     {
+      // The libraries report misuse and recoverable failures as "[app-version] …" warnings.
+      files: ['packages/*/src/**'],
+      rules: { 'no-console': ['error', { allow: ['warn', 'error'] }] },
+    },
+    {
       files: ['**/*.test.{ts,tsx,js,jsx}', '**/test/**'],
       rules: {
         'max-lines-per-function': 'off',
