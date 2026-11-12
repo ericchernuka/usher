@@ -17,7 +17,6 @@ class Machine {
   state: UpdateState = { attention: 'none', reason: 'unknown' }
   knownBad: KnownBad | undefined
   serverMinusTick: number | undefined
-  nextAt: number | undefined
 
   constructor(deps: MachineDeps) {
     this.deps = deps
@@ -35,8 +34,13 @@ class Machine {
 
     const result = this.decision(latest, now)
     this.knownBad = result.knownBad
-    this.nextAt = result.nextAt
     this.publish(result.state)
+  }
+
+  get nextAt() {
+    return this.state.latest
+      ? this.decision(this.state.latest, Date.now()).nextAt
+      : undefined
   }
 
   decision = (
@@ -84,7 +88,6 @@ class Machine {
     }
 
     this.deps.snoozes.write(proposed)
-    this.nextAt = result.nextAt
     this.publish(result.state)
 
     return true

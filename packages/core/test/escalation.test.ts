@@ -1,8 +1,33 @@
 import { server } from './mocks/node'
 import { serveBuild, serveNetworkError } from './mocks/overrides'
-import { HOUR, describe, expect, newer, older, test } from './fixtures'
+import { HOUR, MINUTE, describe, expect, newer, older, test } from './fixtures'
 
 describe('escalating as the running build ages', () => {
+  test('given a backward clock change and a failed focus check, then urgency still starts on time', async ({
+    app,
+    clock,
+    host,
+  }) => {
+    clock.setSystemTime('2026-11-12T14:58:00Z')
+    server.use(serveBuild(newer, { date: new Date(Date.now()) }))
+    const store = app.create()
+    app.subscribe(store)
+    await clock.settle()
+    expect(store.getState().attention).toBe('prompt')
+
+    await clock.runFor(MINUTE)
+    clock.setSystemTime(Date.now() - HOUR)
+    server.use(serveNetworkError())
+    host.focus()
+    await clock.settle()
+    await clock.runFor(MINUTE)
+
+    expect(store.getState()).toMatchObject({
+      attention: 'urgent',
+      reason: 'expired',
+    })
+  })
+
   test('given a deploy and every later check fails, then the tab still escalates on time', async ({
     app,
     clock,

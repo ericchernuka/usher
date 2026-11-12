@@ -157,7 +157,15 @@ export default defineConfig({
         'max-nested-callbacks': 'off',
         'vitest/expect-expect': [
           'error',
-          { assertFunctionNames: ['expect', 'expect.*', 'fc.assert', 'run'] },
+          {
+            assertFunctionNames: [
+              'expect',
+              'expect.*',
+              'expectTypeOf',
+              'fc.assert',
+              'run',
+            ],
+          },
         ],
       },
     },

@@ -68,21 +68,17 @@ describe('appVersion plugin', () => {
 })
 
 describe('plugin and edge (first review #12)', () => {
-  it('treats empty CI variables as missing and warns when commit time is unknown', async () => {
-    const warn = vi.fn<() => void>()
-
+  it('treats empty CI variables as missing and accepts an explicit commit time', () => {
     const info = resolveVersionInfo(
       {},
       {
         env: { APP_VERSION: '', GITHUB_SHA: 'abc', APP_COMMIT_TIME: '' },
         now: new Date('2026-11-11T16:00:00Z'),
-        warn,
       },
     )
 
     expect(info.version).toBe('abc')
 
-    // This repo has .git, so commit time comes from git; simulate its absence via APP_COMMIT_TIME.
     const explicit = resolveVersionInfo(
       {},
       { env: { GITHUB_SHA: 'abc', APP_COMMIT_TIME: '2026-11-10T00:00:00Z' } },

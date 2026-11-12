@@ -9,6 +9,7 @@ import {
   createAppUpdates,
   defaultCopy,
   type AppUpdates,
+  type ReloadBlocker,
 } from '@app-version/core'
 import { useAppUpdates, useReloadBlocker } from '../src/index'
 import { captureNavigations } from '../../core/test/navigation'
@@ -198,15 +199,22 @@ describe('useReloadBlocker with a function', () => {
   it('blocks only the reloads the function accepts', async () => {
     const navigations = captureNavigations()
     const updates = createAppUpdates()
+    let blocking = true
+    const blocker = vi.fn<ReloadBlocker>(() => blocking)
 
     function Form() {
-      useReloadBlocker(updates, d => d.href.endsWith('/different-page'))
+      useReloadBlocker(updates, blocker)
 
       return null
     }
 
     const view = await render(<Form />)
-    expect(await updates.refresh()).toBe(true) // a refresh isn't a navigation
+    expect(await updates.refresh()).toBe(false)
+    expect(navigations).toEqual([])
+    expect(blocker).toHaveBeenCalledWith({ href: window.location.href })
+
+    blocking = false
+    expect(await updates.refresh()).toBe(true)
     expect(navigations).toHaveLength(1)
     await view.unmount()
   })
