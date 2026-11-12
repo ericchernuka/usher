@@ -56,8 +56,11 @@ The handler (`packages/cloudflare/src/edge-handler.mjs`, standalone ESM) serves 
 ```ts
 import { createAppUpdates } from '@app-version/vite/client'
 
+const HOUR = 60 * 60 * 1000
+
 export const appUpdates = createAppUpdates({
-  escalation: { prompt: { after: '12h' }, urgent: { after: '24h' } },
+  promptAfter: 12 * HOUR,
+  urgentAfter: 24 * HOUR,
 })
 ```
 
@@ -112,7 +115,7 @@ Create one store at module scope. It starts polling when the first subscriber ar
 
 Rollback and forced-update knowledge stays urgent until this tab reloads, even if a later response reports the running version again. A forced cutoff applies even when the version matches. Urgent states cannot be dismissed.
 
-A prompt dismissal records its server time in localStorage. It quiets every tab whose prompt threshold had started at that time, until each tab reaches urgent. A build that reaches its prompt threshold later can still prompt. An explicit `prompt.snooze` can set a shorter or longer duration; it never suppresses urgent. With urgent disabled and no explicit snooze, a dismissed prompt has no expiry.
+A prompt dismissal records its server time in localStorage. It quiets every tab whose prompt threshold had started at that time, until each tab reaches urgent. A build that reaches its prompt threshold later can still prompt. An explicit `promptSnooze` can set a shorter or longer duration; it never suppresses urgent. With urgent disabled and no explicit snooze, a dismissed prompt has no expiry.
 
 ## Store interface
 
@@ -128,14 +131,16 @@ interface AppUpdates {
 
 Snapshots keep the same identity until attention, reason, or any of the latest build facts change. `dismiss()` succeeds only for a prompt that can still be lowered. It returns false without writing storage for urgent, passive, and unknown states.
 
-| Option       | Default                                       | Meaning                                                                                                       |
-| ------------ | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `running`    | Required by core; embedded by the Vite helper | Build facts for the running build.                                                                            |
-| `versionUrl` | Required by core; supplied by the Vite helper | The serving deployment's `version.json` URL.                                                                  |
-| `escalation` | Prompt at `12h`, urgent at `24h`              | Typed build-age thresholds. Set either level to `false` to disable it. Only prompt accepts `snooze`.          |
-| `pollEvery`  | `5m`                                          | Visible-tab polling interval, at least `10s`. Focus and visibility can also trigger a check after one minute. |
-| `reload`     | `location.reload()`                           | An explicit refresh. Receives `{ href }`; may return or resolve false to decline.                             |
-| `storageKey` | `app-version`                                 | Set separately for apps on the same origin.                                                                   |
+| Option         | Default                                       | Meaning                                                                                                                            |
+| -------------- | --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `running`      | Required by core; embedded by the Vite helper | Build facts for the running build.                                                                                                 |
+| `versionUrl`   | Required by core; supplied by the Vite helper | The serving deployment's `version.json` URL.                                                                                       |
+| `promptAfter`  | 12 hours                                      | Build age in milliseconds at which an outdated tab reaches prompt attention. `false` turns the level off.                          |
+| `urgentAfter`  | 24 hours                                      | Build age in milliseconds at which it reaches urgent attention. `false` turns the level off. Must be later than `promptAfter`.     |
+| `promptSnooze` | Until urgent                                  | How long, in milliseconds, a prompt dismissal quiets prompt attention.                                                             |
+| `pollInterval` | 5 minutes                                     | Visible-tab polling interval in milliseconds, at least 10 seconds. Focus and visibility can also trigger a check after one minute. |
+| `reload`       | `location.reload()`                           | An explicit refresh. Receives `{ href }`; may return or resolve false to decline.                                                  |
+| `storageKey`   | `app-version`                                 | Set separately for apps on the same origin.                                                                                        |
 
 There are no cancelable attention changes, input-idle delays, navigation reloads, or chunk-error reloads. Apps can subscribe to observe state. R2 fallback keeps old chunks available; the library refreshes only when the app calls `refresh()`.
 

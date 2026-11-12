@@ -1,4 +1,4 @@
-import type { ResolvedEscalation } from './duration'
+import type { Thresholds } from './options'
 import type { PromptDismissal } from './prompt-dismissal'
 import type { BuildFacts, UpdateState } from './types'
 
@@ -10,7 +10,7 @@ export interface AttentionInput {
   now: number
   stickyUrgency?: StickyUrgency
   dismissal: PromptDismissal
-  escalation: ResolvedEscalation
+  thresholds: Thresholds
 }
 
 export interface Decision {
@@ -35,17 +35,24 @@ function detectBad(i: AttentionInput): StickyUrgency | undefined {
 
 function promptUntil(i: AttentionInput): number | undefined {
   const at = i.dismissal.dismissedAt
-  const duration = i.escalation.prompt?.snoozeMs
+  const snooze = i.thresholds.promptSnooze
 
-  return at !== undefined && duration !== undefined ? at + duration : undefined
+  return at !== undefined && snooze !== undefined ? at + snooze : undefined
+}
+
+/** Server time at which an age level starts, if the level is on. */
+function startOf(i: AttentionInput, level: 'promptAfter' | 'urgentAfter') {
+  const after = i.thresholds[level]
+
+  return after === undefined
+    ? undefined
+    : Date.parse(i.running.buildTime) + after
 }
 
 function nextAt(i: AttentionInput): number | undefined {
-  const buildTime = Date.parse(i.running.buildTime)
-
   const serverTimes = [
-    i.escalation.prompt && buildTime + i.escalation.prompt.afterMs,
-    i.escalation.urgent && buildTime + i.escalation.urgent.afterMs,
+    startOf(i, 'promptAfter'),
+    startOf(i, 'urgentAfter'),
     promptUntil(i),
   ]
 
@@ -67,14 +74,14 @@ function attention(i: AttentionInput): UpdateState {
     return { attention: 'none', reason: 'caught-up', latest }
   }
 
-  const buildTime = Date.parse(i.running.buildTime)
-  const { prompt, urgent } = i.escalation
+  const promptStart = startOf(i, 'promptAfter')
+  const urgentStart = startOf(i, 'urgentAfter')
 
-  if (urgent && i.now >= buildTime + urgent.afterMs) {
+  if (urgentStart !== undefined && i.now >= urgentStart) {
     return { attention: 'urgent', reason: 'outdated', latest }
   }
 
-  if (!prompt || i.now < buildTime + prompt.afterMs) {
+  if (promptStart === undefined || i.now < promptStart) {
     return { attention: 'passive', reason: 'outdated', latest }
   }
 
@@ -83,7 +90,7 @@ function attention(i: AttentionInput): UpdateState {
 
   const dismissed =
     dismissedAt !== undefined &&
-    dismissedAt >= buildTime + prompt.afterMs &&
+    dismissedAt >= promptStart &&
     (until === undefined || i.now < until)
 
   return dismissed

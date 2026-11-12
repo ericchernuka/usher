@@ -1,8 +1,5 @@
-import {
-  createAppUpdatesStore,
-  type AppUpdates,
-  type AppUpdatesOptions,
-} from '../src/app-updates'
+import { createAppUpdatesStore, type AppUpdates } from '../src/app-updates'
+import type { AppUpdatesOptions } from '../src/types'
 import type {
   BrowserEnvironment,
   StorageChange,

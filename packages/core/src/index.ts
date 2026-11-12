@@ -1,14 +1,7 @@
-import {
-  createAppUpdatesStore,
-  type AppUpdates,
-  type AppUpdatesOptions,
-} from './app-updates'
+import { createAppUpdatesStore, type AppUpdates } from './app-updates'
+import type { AppUpdatesOptions } from './types'
 
-export type {
-  AppUpdates,
-  AppUpdatesOptions,
-  ReloadBlocker,
-} from './app-updates'
+export type { AppUpdates, ReloadBlocker } from './app-updates'
 
 export {
   connectPrompt,
@@ -21,10 +14,8 @@ export {
 } from './prompt'
 
 export type {
+  AppUpdatesOptions,
   Attention,
-  Duration,
-  Escalation,
-  EscalationLevel,
   ReloadDetails,
   ReloadFn,
   UpdateState,

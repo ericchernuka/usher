@@ -1,14 +1,8 @@
 import * as fc from 'fast-check'
 import { describe, expect, it, vi } from 'vitest'
 import { installPlainClock } from './clock'
-import {
-  aged,
-  createWorld,
-  running,
-  random,
-  rollbackThenFix,
-  DISMISSAL_KEY,
-} from './model/world'
+import { DISMISSAL_KEY, HOUR, running } from './fixtures'
+import { aged, createWorld, random, rollbackThenFix } from './model/world'
 import type { Action, Scenario, World } from './model/world'
 
 interface Run {
@@ -30,7 +24,7 @@ function dismiss(w: World, r: Run) {
     expect(before.attention).toBe('prompt')
     expect(w.store.getState().attention).toBe('passive')
     r.promptQuietUntil =
-      w.world.config === 'promptSnooze' ? w.serverNow() + 3_600_000 : Infinity
+      w.world.config === 'promptSnooze' ? w.serverNow() + HOUR : Infinity
   } else {
     expect(w.store.getState()).toBe(before)
     expect(w.host.localStorage.getItem(DISMISSAL_KEY)).toBe(stored)

@@ -1,17 +1,11 @@
 import * as fc from 'fast-check'
 import { vi } from 'vitest'
-import type { Escalation, BuildFacts } from '../../src/types'
+import type { BuildFacts } from '../../src/types'
 import type { Clock } from '../clock'
-import { createFakeHost, createStore } from '../fake-host'
+import { running } from '../fixtures'
+import { createFakeHost, createStore, type StoreOptions } from '../fake-host'
 
-const H = 3_600_000
-export const DISMISSAL_KEY = 'app-version:prompt-dismissal'
-
-export const running: BuildFacts = {
-  version: 'aaa',
-  commitTime: '2026-11-11T15:00:00.000Z',
-  buildTime: '2026-11-11T15:00:00.000Z',
-}
+const H = 3_600 * 1_000
 
 const builds = {
   running,
@@ -42,12 +36,12 @@ export type Served = Build | 'offline' | 'malformed' | { flap: [Build, Build] }
 
 const configs = {
   default: {},
-  noPrompt: { prompt: false },
-  noUrgent: { urgent: false },
-  promptSnooze: { prompt: { after: '12h', snooze: '1h' } },
-  off: { prompt: false, urgent: false },
-  fast: { prompt: { after: '2h' }, urgent: { after: '3h' } },
-} satisfies Record<string, Escalation>
+  noPrompt: { promptAfter: false },
+  noUrgent: { urgentAfter: false },
+  promptSnooze: { promptSnooze: H },
+  off: { promptAfter: false, urgentAfter: false },
+  fast: { promptAfter: 2 * H, urgentAfter: 3 * H },
+} satisfies Record<string, StoreOptions>
 
 export type ConfigName = keyof typeof configs
 
@@ -261,7 +255,7 @@ export function createWorld(s: Scenario, clock: Clock) {
   vi.spyOn(console, 'warn').mockImplementation(() => {})
 
   const store = createStore(host, {
-    escalation: configs[s.config],
+    ...configs[s.config],
     reload: async () => false,
   })
 

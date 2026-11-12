@@ -24,29 +24,6 @@ export function isBuildFacts(value: unknown): value is BuildFacts {
   return v.is(BuildFactsSchema, value)
 }
 
-/** A duration such as "30s", "5m", "12h" or "2d". Checked at runtime too ("-5m", "1e3s" throw). */
-export type Duration = `${number}${'s' | 'm' | 'h' | 'd'}`
-
-export interface EscalationLevel {
-  /** Build age (server clock) at which this level starts. */
-  after: Duration
-  /**
-   * How long dismissing a prompt quiets it. Default: until urgent starts.
-   * A dismissal covers every tab whose prompt level had already started.
-   */
-  snooze?: Duration
-}
-
-/**
- * When an outdated tab escalates, by the age of the build it's running. `false` turns a
- * level off. Known-bad builds (rollback, forced) are always urgent, independent of age.
- * Defaults follow Vercel's skew-protection max ages: prompt at 12 h (Pro), urgent at 24 h (Enterprise).
- */
-export interface Escalation {
-  prompt?: EscalationLevel | false
-  urgent?: Pick<EscalationLevel, 'after'> | false
-}
-
 /**
  * How loudly the app should signal an update. Each surface picks its own threshold:
  * a toast might show at "prompt"+, a nav-bar button at "passive"+.
@@ -87,3 +64,36 @@ export interface ReloadDetails {
 export type ReloadFn = (
   details: ReloadDetails,
 ) => void | boolean | Promise<void | boolean>
+
+export interface AppUpdatesOptions {
+  /** Build facts of the running build. */
+  running: BuildFacts
+  /** URL of the serving deployment's version.json. */
+  versionUrl: string
+  /**
+   * Build age, in milliseconds, at which an outdated tab reaches prompt attention.
+   * `false` turns the level off. Default 12 hours.
+   */
+  promptAfter?: number | false
+  /**
+   * Build age, in milliseconds, at which an outdated tab reaches urgent attention.
+   * `false` turns the level off. Must be later than `promptAfter`. Default 24 hours.
+   * Rollbacks and forced updates are urgent at once, whatever this says.
+   */
+  urgentAfter?: number | false
+  /**
+   * How long, in milliseconds, a prompt dismissal quiets prompt attention.
+   * Default: until urgent attention starts. It never quiets urgent attention.
+   */
+  promptSnooze?: number
+  /** How often, in milliseconds, a visible tab checks for a new build. Default 5 minutes, minimum 10 seconds. */
+  pollInterval?: number
+  /**
+   * Performs an explicit refresh, after reload blockers allow it. Route it
+   * through your router to reuse its blockers, e.g. TanStack
+   * `router.navigate({ href, reloadDocument: true, replace: true })`. See README.
+   */
+  reload?: ReloadFn
+  /** localStorage key prefix; set one per app if apps share an origin. Default "app-version". */
+  storageKey?: string
+}

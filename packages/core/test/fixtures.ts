@@ -7,8 +7,9 @@ import { recordRequests } from './requests'
 
 export { describe, expect } from 'vitest'
 
-export const HOUR = 3_600_000
-export const MINUTE = 60_000
+export const HOUR = 3_600 * 1_000
+export const SECOND = 1_000
+export const MINUTE = 60 * SECOND
 
 export const running: BuildFacts = {
   version: 'aaa',

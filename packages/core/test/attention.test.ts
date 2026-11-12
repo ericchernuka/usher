@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest'
 import { resolveAttention, type AttentionInput } from '../src/attention'
-import { resolveEscalation } from '../src/duration'
+import { resolveThresholds } from '../src/options'
 import { running, newer, older, HOUR } from './fixtures'
 
 const at = (hours: number) => Date.parse(running.buildTime) + hours * HOUR
@@ -10,7 +10,7 @@ const input = (patch: Partial<AttentionInput> = {}): AttentionInput => ({
   latest: newer,
   now: at(1),
   dismissal: {},
-  escalation: resolveEscalation(),
+  thresholds: resolveThresholds(),
   ...patch,
 })
 
@@ -83,32 +83,39 @@ it('shares prompt dismissal until urgent, without muting urgent', () => {
 })
 
 it('supports an explicit prompt snooze and disabled age levels', () => {
-  const escalation = resolveEscalation({
-    prompt: { after: '2h', snooze: '1h' },
-    urgent: false,
+  const thresholds = resolveThresholds({
+    promptAfter: 2 * HOUR,
+    promptSnooze: HOUR,
+    urgentAfter: false,
   })
 
   expect(
     resolveAttention(
-      input({ now: at(2), escalation, dismissal: { dismissedAt: at(2) } }),
+      input({ now: at(2), thresholds, dismissal: { dismissedAt: at(2) } }),
     ).nextAt,
   ).toBe(at(3))
   expect(
     resolveAttention(
-      input({ now: at(3), escalation, dismissal: { dismissedAt: at(2) } }),
+      input({ now: at(3), thresholds, dismissal: { dismissedAt: at(2) } }),
     ).state.attention,
   ).toBe('prompt')
   expect(
     resolveAttention(
       input({
         now: at(40),
-        escalation: resolveEscalation({ prompt: false, urgent: false }),
+        thresholds: resolveThresholds({
+          promptAfter: false,
+          urgentAfter: false,
+        }),
       }),
     ).state.attention,
   ).toBe('passive')
   expect(
     resolveAttention(
-      input({ now: at(1), escalation: resolveEscalation({ prompt: false }) }),
+      input({
+        now: at(1),
+        thresholds: resolveThresholds({ promptAfter: false }),
+      }),
     ).nextAt,
   ).toBe(at(24))
 })
@@ -118,23 +125,11 @@ it('with urgent disabled, a default prompt dismissal has no expiry', () => {
     resolveAttention(
       input({
         now: at(40),
-        escalation: resolveEscalation({ urgent: false }),
+        thresholds: resolveThresholds({ urgentAfter: false }),
         dismissal: { dismissedAt: at(13) },
       }),
     ),
   ).toEqual({
     state: { attention: 'passive', reason: 'dismissed', latest: newer },
   })
-})
-
-it('validates durations, snooze lengths and threshold order', () => {
-  expect(() =>
-    resolveEscalation(JSON.parse('{"prompt":{"after":"12 hours"}}')),
-  ).toThrow(/not a duration/)
-  expect(() =>
-    resolveEscalation({ prompt: { after: '24h' }, urgent: { after: '12h' } }),
-  ).toThrow(/later than/)
-  expect(() =>
-    resolveEscalation({ prompt: { after: '12h', snooze: '0m' } }),
-  ).toThrow(/positive/)
 })

@@ -148,20 +148,13 @@ describe('slow and hung checks', () => {
 })
 
 describe('polling schedule', () => {
-  test('given pollEvery is below 10s, then creating the store fails', ({
-    app,
-  }) => {
-    expect(() => app.create({ pollEvery: '0s' })).toThrow(/at least "10s"/)
-    expect(() => app.create({ pollEvery: '10s' })).not.toThrow()
-  })
-
   test('given a focus-triggered check, then the next poll counts from it', async ({
     app,
     clock,
     host,
     requests,
   }) => {
-    app.subscribe(app.create({ pollEvery: '5m' }))
+    app.subscribe(app.create({ pollInterval: 5 * MINUTE }))
     await clock.waitForResponse()
     await clock.runFor(4 * MINUTE + 50_000)
     host.focus()
@@ -198,7 +191,7 @@ describe('hidden tabs', () => {
     host,
     requests,
   }) => {
-    app.subscribe(app.create({ pollEvery: '5m' }))
+    app.subscribe(app.create({ pollInterval: 5 * MINUTE }))
     await clock.waitForResponse()
     await clock.runFor(5 * MINUTE)
     expect(requests).toHaveLength(2)

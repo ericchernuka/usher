@@ -1,38 +1,17 @@
-import { ms, resolveEscalation, type ResolvedEscalation } from './duration'
+import {
+  resolvePollInterval,
+  resolveThresholds,
+  type Thresholds,
+} from './options'
 import { createUpdateMonitor } from './update-monitor'
 import { createBrowserEnvironment, type BrowserEnvironment } from './browser'
 import { resolveAttention, type StickyUrgency } from './attention'
 import { isolate } from './callbacks'
 import { createRefresh, type ReloadBlocker } from './refresh'
 import { createPromptDismissal } from './prompt-dismissal'
-import type {
-  Duration,
-  Escalation,
-  ReloadFn,
-  UpdateState,
-  BuildFacts,
-} from './types'
+import type { AppUpdatesOptions, BuildFacts, UpdateState } from './types'
 
 export type { ReloadBlocker } from './refresh'
-
-export interface AppUpdatesOptions {
-  /** Build facts of the running build. */
-  running: BuildFacts
-  /** URL of the serving deployment's version.json. */
-  versionUrl: string
-  /** When outdated tabs escalate, by build age. Default `{ prompt: { after: "12h" }, urgent: { after: "24h" } }`. */
-  escalation?: Escalation
-  /**
-   * Performs an explicit refresh, after reload blockers allow it. Route it
-   * through your router to reuse its blockers, e.g. TanStack
-   * `router.navigate({ href, reloadDocument: true, replace: true })`. See README.
-   */
-  reload?: ReloadFn
-  /** How often a visible tab checks for a new build. Hidden tabs don't. Default "5m", minimum "10s". */
-  pollEvery?: Duration
-  /** localStorage key prefix; set one per app if apps share an origin. */
-  storageKey?: string
-}
 
 export interface UpdateStoreOptions extends AppUpdatesOptions {
   browser?: BrowserEnvironment
@@ -52,18 +31,6 @@ export interface AppUpdates {
   refresh: () => Promise<boolean>
   /** Dismiss the current prompt for every tab. Urgent states cannot be dismissed. */
   dismiss: () => boolean
-}
-
-const MIN_POLL_MS = 10_000
-
-function pollMs(value: Duration = '5m'): number {
-  const result = ms(value, 'pollEvery')
-
-  if (result < MIN_POLL_MS) {
-    throw new Error(`[app-version] pollEvery must be at least "10s"`)
-  }
-
-  return result
 }
 
 const FACTS = [
@@ -96,7 +63,7 @@ function notifyAll(listeners: ReadonlySet<{ listener: () => void }>) {
 class AppUpdatesStore implements AppUpdates {
   readonly options: UpdateStoreOptions
   readonly browser: BrowserEnvironment
-  readonly escalation: ResolvedEscalation
+  readonly thresholds: Thresholds
   readonly dismissal: ReturnType<typeof createPromptDismissal>
   readonly refreshes: ReturnType<typeof createRefresh>
   readonly monitor: ReturnType<typeof createUpdateMonitor>
@@ -108,7 +75,7 @@ class AppUpdatesStore implements AppUpdates {
   constructor(options: UpdateStoreOptions) {
     this.options = options
     this.browser = options.browser ?? createBrowserEnvironment()
-    this.escalation = resolveEscalation(options.escalation)
+    this.thresholds = resolveThresholds(options)
     this.dismissal = createPromptDismissal(
       options.storageKey ?? 'app-version',
       this.browser,
@@ -119,7 +86,7 @@ class AppUpdatesStore implements AppUpdates {
     })
     this.monitor = createUpdateMonitor({
       versionUrl: options.versionUrl,
-      pollMs: pollMs(options.pollEvery),
+      pollMs: resolvePollInterval(options.pollInterval),
       browser: this.browser,
       dismissal: this.dismissal,
       evaluate: this.evaluate,
@@ -135,7 +102,7 @@ class AppUpdatesStore implements AppUpdates {
           now: this.monitor.serverNow(),
           ...(this.stickyUrgency && { stickyUrgency: this.stickyUrgency }),
           dismissal,
-          escalation: this.escalation,
+          thresholds: this.thresholds,
         })
       : undefined
 

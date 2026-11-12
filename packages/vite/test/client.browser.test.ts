@@ -2,6 +2,8 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { createAppUpdates } from '../src/client'
 import { runningBuild } from './build-info.stub'
 
+const SECOND = 1_000
+
 beforeEach(() => {
   vi.useFakeTimers({
     toFake: ['Date', 'performance', 'setTimeout', 'clearTimeout'],
@@ -41,13 +43,13 @@ it('uses the embedded build and version URL without configuration', async () => 
 })
 
 it('forwards the configured polling interval to the core store', async () => {
-  const updates = createAppUpdates({ pollEvery: '10s' })
+  const updates = createAppUpdates({ pollInterval: 10 * SECOND })
   const stop = updates.subscribe(() => {})
 
   try {
     await vi.waitFor(() => expect(updates.getState().reason).toBe('caught-up'))
     expect(fetch).toHaveBeenCalledTimes(1)
-    await vi.advanceTimersByTimeAsync(10_000)
+    await vi.advanceTimersByTimeAsync(10 * SECOND)
     expect(fetch).toHaveBeenCalledTimes(2)
   } finally {
     stop()

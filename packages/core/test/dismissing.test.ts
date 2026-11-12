@@ -117,8 +117,9 @@ test('given a custom prompt snooze, then its expiry wakes without another poll',
   server.use(serveBuild(newer))
 
   const store = app.create({
-    pollEvery: '60m',
-    escalation: { prompt: { after: '1h', snooze: '1m' } },
+    pollInterval: HOUR,
+    promptAfter: HOUR,
+    promptSnooze: MINUTE,
   })
 
   app.subscribe(store)
