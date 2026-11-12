@@ -22,14 +22,23 @@ export interface ChunkArchive {
   head(key: string): Promise<ArchivedChunk | null>
 }
 
-/** The bindings the handler reads. A Worker's own `Env` satisfies it when it has both. */
+/**
+ * The bindings the handler reads. A Worker's own `Env` satisfies it when it has
+ * both, so a missing or misnamed R2 binding is a type error in the Worker.
+ */
 export type AssetFallbackEnv<Binding extends string = 'CHUNK_ARCHIVE'> = {
   /** The current deployment's static assets. */
   readonly ASSETS: { fetch(request: Request): Promise<Response> }
 } & {
-  /** The chunk archive. When it is missing the handler warns and serves no fallback. */
-  readonly [Name in Binding | 'CHUNK_ARCHIVE']?: ChunkArchive
+  /** The chunk archive, an R2 bucket bound under the name given as `r2Binding`. */
+  readonly [Name in Binding]: ChunkArchive
 }
+
+/** The handler: call it from a Worker's `fetch` with the request and the Worker's `env`. */
+export type AssetFallback<Binding extends string> = (
+  request: Request,
+  env: AssetFallbackEnv<Binding>,
+) => Promise<Response>
 
 /**
  * Create the asset fallback handler: it serves a request from the current
@@ -44,9 +53,15 @@ export type AssetFallbackEnv<Binding extends string = 'CHUNK_ARCHIVE'> = {
  * Generated workers inline this function's own source text, so it must stay
  * self-contained: no imports and no references outside its body.
  */
-export function createAssetFallback<Binding extends string = 'CHUNK_ARCHIVE'>(
+export function createAssetFallback(
+  options?: Omit<AssetFallbackOptions, 'r2Binding'>,
+): AssetFallback<'CHUNK_ARCHIVE'>
+export function createAssetFallback<Binding extends string>(
+  options: AssetFallbackOptions<Binding> & { r2Binding: Binding },
+): AssetFallback<Binding>
+export function createAssetFallback<Binding extends string>(
   options: AssetFallbackOptions<Binding> = {},
-): (request: Request, env: AssetFallbackEnv<Binding>) => Promise<Response> {
+): AssetFallback<Binding | 'CHUNK_ARCHIVE'> {
   const base = options.base ?? '/'
   const prefix = `${base}${options.assetsDir ?? 'assets'}/`
   const binding = options.r2Binding ?? 'CHUNK_ARCHIVE'
@@ -87,11 +102,12 @@ export function createAssetFallback<Binding extends string = 'CHUNK_ARCHIVE'>(
       return current
     }
 
-    const archive = env[binding]
+    // The type requires the binding, but a deployed Worker can still lack it.
+    const archive: ChunkArchive | undefined = env[binding]
 
     if (!archive) {
       console.warn(
-        `[usher] R2 binding "${binding}" is missing; skew protection is off`,
+        `[usher] R2 binding "${binding}" is missing, so skew protection is off. Add an R2 bucket binding named "${binding}" to this Worker or Pages project.`,
       )
     }
 

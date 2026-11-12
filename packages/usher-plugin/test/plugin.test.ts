@@ -12,11 +12,8 @@ import { build, createLogger, createServer, type InlineConfig } from 'vite'
 import { describe, expect, it, vi } from 'vitest'
 import { resolveBuildFacts } from '../src/build-facts'
 import { versionMiddleware } from '../src/dev-server'
-import {
-  usher,
-  type SkewProtectionAdapter,
-  type SkewProtectionFiles,
-} from '../src/vite'
+import type { SkewProtectionAdapter, SkewProtectionFiles } from '../src/adapter'
+import { usher } from '../src/vite'
 
 describe('resolveBuildFacts', () => {
   it('prefers env and normalizes dates', () => {

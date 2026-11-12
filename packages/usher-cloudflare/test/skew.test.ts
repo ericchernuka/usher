@@ -2,10 +2,15 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { describe, expect, it, vi } from 'vitest'
-import type { ClientBuild } from '@rndsqr/usher-plugin/vite'
+import { describe, expect, expectTypeOf, it, vi } from 'vitest'
+import type { ClientBuild } from '@rndsqr/usher-plugin/adapter'
 import { cloudflarePages, cloudflareWorkers } from '../src/index'
-import { createAssetFallback, type ChunkArchive } from '../src/worker'
+import {
+  createAssetFallback,
+  type AssetFallback,
+  type AssetFallbackEnv,
+  type ChunkArchive,
+} from '../src/worker'
 
 const assetsHtml = () =>
   new Response('<!doctype html>', {
@@ -28,7 +33,15 @@ const clientBuild = (base = '/', root = tempRoot()): ClientBuild => ({
 })
 
 type Worker = {
-  default: { fetch: ReturnType<typeof createAssetFallback<'CHUNKS'>> }
+  default: { fetch: AssetFallback<'CHUNKS'> }
+}
+
+/** A deployed Worker whose R2 binding was never added: the type promises it, the runtime lacks it. */
+function withoutBinding(assets: AssetFallbackEnv['ASSETS']): AssetFallbackEnv {
+  const env: AssetFallbackEnv = { ASSETS: assets, CHUNK_ARCHIVE: archiveOf({}) }
+  Reflect.deleteProperty(env, 'CHUNK_ARCHIVE')
+
+  return env
 }
 
 async function loadWorker(source: string): Promise<Worker> {
@@ -147,25 +160,34 @@ describe('createAssetFallback()', () => {
   it("without its R2 binding warns and returns 404, not the SPA's HTML", async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
 
-    const env = {
-      ASSETS: {
-        fetch: async () =>
-          new Response('<!doctype html>', {
-            headers: { 'content-type': 'text/html' },
-          }),
-      },
-    }
+    const env = withoutBinding({ fetch: async () => assetsHtml() })
 
     const res = await fallback(new Request('https://app.test/assets/x.js'), env)
 
     expect(res.status).toBe(404)
     expect(warn).toHaveBeenCalledWith(
-      expect.stringContaining('R2 binding "CHUNK_ARCHIVE" is missing'),
+      expect.stringMatching(
+        /R2 binding "CHUNK_ARCHIVE" is missing.*Add an R2 bucket binding named "CHUNK_ARCHIVE"/,
+      ),
     )
   })
 
+  it('requires the R2 binding in the env type, under the name it was given', () => {
+    expectTypeOf(createAssetFallback())
+      .parameter(1)
+      .toHaveProperty('CHUNK_ARCHIVE')
+      .toEqualTypeOf<ChunkArchive>()
+
+    expectTypeOf(createAssetFallback({ r2Binding: 'CHUNKS' }))
+      .parameter(1)
+      .toEqualTypeOf<AssetFallbackEnv<'CHUNKS'>>()
+  })
+
   it('passes non-GET requests straight through', async () => {
-    const env = { ASSETS: { fetch: async () => assetsHtml() } }
+    const env = {
+      ASSETS: { fetch: async () => assetsHtml() },
+      CHUNK_ARCHIVE: archiveOf({}),
+    }
 
     const res = await fallback(
       new Request('https://app.test/assets/x.js', { method: 'POST' }),
@@ -179,9 +201,9 @@ describe('createAssetFallback()', () => {
   it('keeps the original 404 when the binding is missing', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {})
 
-    const env = {
-      ASSETS: { fetch: async () => new Response('gone', { status: 404 }) },
-    }
+    const env = withoutBinding({
+      fetch: async () => new Response('gone', { status: 404 }),
+    })
 
     const res = await fallback(new Request('https://app.test/assets/x.js'), env)
 

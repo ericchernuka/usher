@@ -6,6 +6,7 @@
   "sideEffects": false,
   "exports": {
     "./vite": "./dist/vite.js",
+    "./adapter": "./dist/adapter.js",
     "./client": "./dist/client.js",
     "./package.json": "./package.json"
   },

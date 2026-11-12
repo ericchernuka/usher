@@ -53,6 +53,10 @@ Serving a previously shipped chunk when the current deployment no longer has it.
 The append-only store of every chunk shipped, which asset fallback reads from.
 _Avoid_: Build cache.
 
+**Skew-protection adapter**:
+A host-specific description of the files a deployment needs so that asset fallback works there. The build plugin writes the files.
+_Avoid_: Hosting adapter, provider plugin.
+
 **Attention**:
 The update signal for a tab: none, passive, prompt, or urgent.
 _Avoid_: Severity, which can imply an error classification.

@@ -1,3 +1,6 @@
+// The contract between the build plugin and a skew-protection adapter. It names no
+// bundler, so an adapter works with any plugin entry this package gains.
+
 /** What a skew-protection adapter needs to know about the client build. */
 export interface ClientBuild {
   /** URL path of the build's base, always ending in "/". A CDN base keeps only its path. */

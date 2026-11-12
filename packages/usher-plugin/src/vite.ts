@@ -5,13 +5,6 @@ import { adapterFiles, writePrivateFiles } from './adapter-files'
 import { resolveBuildFacts } from './build-facts'
 import { isRelativeBase, versionMiddleware } from './dev-server'
 
-export type {
-  ClientBuild,
-  GeneratedFile,
-  SkewProtectionAdapter,
-  SkewProtectionFiles,
-} from './adapter'
-
 export interface UsherPluginOptions {
   /** Output file name, relative to outDir and `base`. Default "version.json". */
   fileName?: string

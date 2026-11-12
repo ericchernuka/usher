@@ -7,6 +7,7 @@ The [glossary](GLOSSARY.md) defines the domain terms. The [architecture document
 | Import                            | What it gives you                                                                        | Needs      |
 | --------------------------------- | ---------------------------------------------------------------------------------------- | ---------- |
 | `@rndsqr/usher-plugin/vite`       | `usher()`: writes `version.json`, embeds the build facts, runs a skew-protection adapter | Vite       |
+| `@rndsqr/usher-plugin/adapter`    | `SkewProtectionAdapter` and its types, for writing an adapter for another host           | Nothing    |
 | `@rndsqr/usher-plugin/client`     | `createAppUpdates()` with the build facts filled in, and `runningBuild`                  | The plugin |
 | `@rndsqr/react-usher`             | `useUpdateState(updates)`, `useRefreshBlocker(updates, shouldBlock)`                     | React      |
 | `@rndsqr/usher-cloudflare`        | `cloudflarePages()`, `cloudflareWorkers()`: adapters that serve old chunks from R2       | Cloudflare |

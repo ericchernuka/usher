@@ -6,14 +6,14 @@ The repository contains the libraries, two example apps, and local browser and w
 
 ## Package ownership
 
-| Package                    | Responsibility                                                                                                                                                                                                                                                                              |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `@rndsqr/usher-core`       | Build-tool-independent update state, polling, prompt dismissal, explicit refresh, and update surfaces. Its constructor accepts running-build facts and a version URL.                                                                                                                       |
-| `@rndsqr/usher-plugin`     | The build plugin at `/vite`, which also defines the skew-protection adapter contract, and the browser entry at `/client`, which creates the core store with the embedded build facts and version URL. Only Vite is implemented; the bundler is a subpath so another can be added beside it. |
-| `@rndsqr/react-usher`      | Hooks that read a core store and register explicit refresh blockers.                                                                                                                                                                                                                        |
-| `@rndsqr/usher-cloudflare` | Build adapters for Pages and Workers, plus the asset fallback handler at `/worker`.                                                                                                                                                                                                         |
+| Package                    | Responsibility                                                                                                                                                                                                                                                                                                 |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@rndsqr/usher-core`       | Build-tool-independent update state, polling, prompt dismissal, explicit refresh, and update surfaces. Its constructor accepts running-build facts and a version URL.                                                                                                                                          |
+| `@rndsqr/usher-plugin`     | The build plugin at `/vite`, the skew-protection adapter contract at `/adapter`, which names no bundler, and the browser entry at `/client`, which creates the core store with the embedded build facts and version URL. Only Vite is implemented; the bundler is a subpath so another can be added beside it. |
+| `@rndsqr/react-usher`      | Hooks that read a core store and register explicit refresh blockers.                                                                                                                                                                                                                                           |
+| `@rndsqr/usher-cloudflare` | Build adapters for Pages and Workers, plus the asset fallback handler at `/worker`.                                                                                                                                                                                                                            |
 
-Core does not import a build tool. The plugin's client entry imports core. React uses the core store interface. Cloudflare implements the adapter contract exported by the plugin package. The example apps assemble these pieces.
+Core does not import a build tool. The plugin's client entry imports core. React uses the core store interface. Cloudflare implements the adapter contract from the plugin package's `/adapter` entry and uses only its types, so an app that imports just the asset fallback handler does not need the plugin installed. The example apps assemble these pieces.
 
 Decisions that someone may want to reopen are recorded in [docs/adr](adr/).
 
@@ -23,9 +23,9 @@ The `usher()` plugin writes `version.json` and embeds the same build facts in th
 
 The version defaults to environment values and then Git. Commit time defaults to an explicit option, `APP_COMMIT_TIME`, and then Git. If no commit time is available, the plugin warns and uses build time, which prevents reliable detection of an old-commit redeploy. Malformed configured timestamps fail the build.
 
-The plugin serves the version file during development and emits it only for client builds. A hosting adapter describes the files its host needs: client files, which the plugin emits into the client output, and private files, which it writes relative to the Vite root. The plugin fails the build when a private file would land inside the client output, and it logs the adapter's warnings. Adapters write nothing themselves, so each one can be tested as a function call.
+The plugin serves the version file during development and emits it only for client builds. A skew-protection adapter describes the files its host needs: client files, which the plugin emits into the client output, and private files, which it writes relative to the Vite root. The plugin fails the build when a private file would land inside the client output, and it logs the adapter's warnings. Adapters write nothing themselves, so each one can be tested as a function call.
 
-## Generated hosting adapters
+## Skew-protection adapters
 
 Apps configure an adapter rather than copy the handler:
 
@@ -56,7 +56,7 @@ The sample apps demonstrate the Vite configuration and update UI. Deployment con
 4. Look up the old asset in R2, using the request path relative to the configured base.
 5. Return the stored asset with its HTTP metadata, ETag, and immutable cache header. Return a real 404 when no copy exists.
 
-HEAD requests use R2 metadata without opening an object body. The handler releases an unused current-deployment response before returning a fallback. If the R2 binding is missing, it warns and returns a 404 for a missing asset rather than an HTML success response.
+HEAD requests use R2 metadata without opening an object body. The handler releases an unused current-deployment response before returning a fallback. The handler's `env` type requires the R2 binding under its configured name. If a deployed Worker still lacks it, the handler warns, naming the binding to add, and returns a 404 for a missing asset rather than an HTML success response.
 
 The handler is `createAssetFallback()` in `@rndsqr/usher-cloudflare/worker`, one type-checked module with no imports. Generated workers inline its source text and add a default export, so there is one copy of the handler and the generated file deploys without bundling. An app that already has a Worker imports the same function and calls it for requests it does not answer itself; that app owns its routing configuration.
 
@@ -107,7 +107,7 @@ The proposed deployment order is:
 
 The proposed R2 retention is about 30 days. Bucket lifecycle rules, credentials, preview isolation, and production deployment remain operator decisions. No live deployment or Datadog outcome is claimed by the local tests.
 
-A Pages-to-Workers migration reuses the R2 asset pool. Change the adapter factory, supply Workers deployment configuration, verify routing and bindings, and then move the domain. Existing tabs must retain access to the same chunk URLs throughout the change.
+A Pages-to-Workers migration reuses the chunk archive. Change the adapter factory, supply Workers deployment configuration, verify routing and bindings, and then move the domain. Existing tabs must retain access to the same chunk URLs throughout the change.
 
 ## Rollbacks and scope
 

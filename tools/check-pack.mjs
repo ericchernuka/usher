@@ -92,12 +92,15 @@ const appFiles = {
     include: ['src', 'vite.config.ts'],
   }),
   'vite.config.ts': `import { cloudflarePages } from '@rndsqr/usher-cloudflare'
+import type { SkewProtectionAdapter } from '@rndsqr/usher-plugin/adapter'
 import { usher } from '@rndsqr/usher-plugin/vite'
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 
+const adapter: SkewProtectionAdapter = cloudflarePages()
+
 export default defineConfig({
-  plugins: [react(), usher({ version: 'pack-smoke', adapter: cloudflarePages() })],
+  plugins: [react(), usher({ version: 'pack-smoke', adapter })],
 })
 `,
   'index.html':

@@ -3,7 +3,7 @@ import { resolve } from 'node:path'
 import type {
   ClientBuild,
   SkewProtectionAdapter,
-} from '@rndsqr/usher-plugin/vite'
+} from '@rndsqr/usher-plugin/adapter'
 import { createAssetFallback, type AssetFallbackOptions } from './worker'
 
 const DEFAULT_BINDING = 'CHUNK_ARCHIVE'
