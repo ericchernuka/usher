@@ -54,6 +54,7 @@ Time outdated and dismissals are measured against the server's clock, read from 
 | `commitTime`             | `APP_COMMIT_TIME`, then `git log`                 | ISO 8601 commit time, used to detect rollbacks.                                                                                        |
 | `forceUpdateBuiltBefore` | `APP_FORCE_UPDATE_BUILT_BEFORE`                   | ISO 8601 build time. Tabs running a build made before it become urgent. Not a deadline: a value later than this build fails the build. |
 | `adapter`                | None                                              | A skew-protection adapter. See below.                                                                                                  |
+| `devtools`               | `false`                                           | Development only. Adds `__USHER_DEVTOOLS__.deploy()` to the page for simulating deploys. See below.                                    |
 
 ## Use it in an app
 
@@ -349,6 +350,26 @@ wrangler pages deploy dist                       # or: wrangler deploy
 Uploading first means a tab that loads the new `index.html` in the first seconds can already fall back to R2. Leaving out `--delete` is what keeps old tabs working; expire old chunks with an R2 lifecycle rule instead.
 
 Deploy one Workers version at a time. Alternating version responses during a gradual deployment can look like a rollback. R2 keeps serving bad-build tabs until their users refresh.
+
+## Trying the flows in development
+
+Turn on `usher({ devtools: true })` to simulate a deploy from the browser console while `vite` runs:
+
+```js
+await __USHER_DEVTOOLS__.deploy() // same as { mode: 'advance' }
+await __USHER_DEVTOOLS__.deploy({ mode: 'force' })
+await __USHER_DEVTOOLS__.deploy({ mode: 'rollback' })
+await __USHER_DEVTOOLS__.deploy({ mode: 'reset' })
+```
+
+The dev server then serves different build facts from the version URL. The tab still runs the real build, so:
+
+- `advance` serves a new version built now from the same commit. The tab is outdated, and attention follows the app's thresholds counted from now.
+- `force` does the same with a forced-update cutoff that covers the real build. The tab becomes urgent with reason `forced`.
+- `rollback` serves a new version whose commit time is earlier than the real one. The tab becomes urgent with reason `rollback`.
+- `reset` serves the real build facts again.
+
+The promise resolves with the build facts now being served, once the server has changed. The tab notices on its next check, or when it regains focus. Forced-update and rollback urgency stay until the tab reloads, as they do in production. A newly loaded tab still runs the real build, so it stays outdated until you call `reset` or restart Vite. This only changes `version.json`; it does not exercise asset fallback. Production builds contain neither the global nor the endpoint.
 
 ## Development
 

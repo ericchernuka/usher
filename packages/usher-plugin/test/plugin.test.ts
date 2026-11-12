@@ -309,11 +309,11 @@ describe('given a malformed timestamp', () => {
 })
 
 function devHandler(base: string) {
-  const handler = versionMiddleware(base, 'version.json', {
+  const handler = versionMiddleware(base, 'version.json', () => ({
     version: 'sha-dev',
     commitTime: '2026-11-11T09:00:00.000Z',
     buildTime: '2026-11-11T09:00:00.000Z',
-  })
+  }))
 
   return (url?: string) => {
     let body: string | undefined
