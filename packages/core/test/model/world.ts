@@ -1,5 +1,3 @@
-// The simulated world for model-based tests: builds, a server with its own clock (skew,
-// 1 s Date headers), the user's clock (which can jump), tabs, and the actions over them.
 import * as fc from 'fast-check'
 import { vi } from 'vitest'
 import type { Escalation, VersionInfo } from '../../src/types'
@@ -84,7 +82,7 @@ const served: fc.Arbitrary<Served> = fc.oneof(
       'malformed',
     ),
   },
-  { weight: 1, arbitrary: fc.constantFrom<Served>('older', 'forced') }, // bad builds are sticky: keep them rare
+  { weight: 1, arbitrary: fc.constantFrom<Served>('older', 'forced') },
   {
     weight: 2,
     arbitrary: fc
@@ -133,9 +131,7 @@ const action: fc.Arbitrary<Action> = fc.oneof(
 
 export interface Scenario {
   config: ConfigName
-  /** Server clock − true time. */
   skew: number
-  /** How long the server takes to answer; 0 answers on a microtask. Above 30 s, checks time out. */
   latency: number
   actions: Action[]
 }
@@ -153,7 +149,6 @@ const scenario = (actions: fc.Arbitrary<Action[]>): fc.Arbitrary<Scenario> =>
       ] satisfies ConfigName[]),
     ),
     skew: fc.oneof(fc.constant(0), fc.integer({ min: -3 * H, max: 3 * H })),
-    // Responses landing late found a real bug (held raises not released on resubscribe).
     latency: fc.constantFrom(0, 0, 300, 5_000, 35_000),
     actions,
   })
@@ -162,7 +157,6 @@ const noise = fc.array(action, { maxLength: 10 })
 
 export const random = scenario(fc.array(action, { maxLength: 60 }))
 
-/** A rollback reaches the tab, then a fix ships: the known-bad build must stay urgent. */
 export const rollbackThenFix = scenario(
   fc
     .tuple(noise, noise, fc.constantFrom<Build>('newer', 'newest', 'current'))
@@ -183,7 +177,6 @@ export const rollbackThenFix = scenario(
     ),
 )
 
-/** Age-based escalation: wait into a level, dismiss, wait into the next, dismiss. */
 export const aged = scenario(
   fc
     .tuple(
@@ -202,7 +195,6 @@ export const aged = scenario(
     ),
 )
 
-/** The world the store runs in, plus what the invariants need to remember. */
 function initialServed(): Served {
   return 'current'
 }
@@ -213,14 +205,13 @@ export function createWorld(s: Scenario, clock: Clock) {
     visible: true,
     jumped: 0,
     latency: s.latency,
-    inFlight: 0, // checks the server hasn't answered yet
+    inFlight: 0,
     served: initialServed(),
     flips: 0,
   }
 
   const serverNow = () => Date.now() - world.jumped + s.skew
 
-  // In-memory fetch: a property test needs the server's behaviour, not a network.
   const respond = async (
     _input: RequestInfo | URL,
     init?: RequestInit,
@@ -252,7 +243,7 @@ export function createWorld(s: Scenario, clock: Clock) {
     const name =
       choice instanceof Object ? choice.flap[world.flips++ % 2]! : choice
 
-    const headers = { date: new Date(serverNow()).toUTCString() } // 1 s resolution, like real servers
+    const headers = { date: new Date(serverNow()).toUTCString() }
 
     return Response.json(builds[name], { headers })
   }
@@ -262,7 +253,7 @@ export function createWorld(s: Scenario, clock: Clock) {
 
   const store = createStore(host, {
     escalation: configs[s.config],
-    reload: async () => false, // reloads are "blocked": the page never unloads mid-test
+    reload: async () => false,
   })
 
   return { world, store, serverNow, host, clock }
@@ -270,7 +261,6 @@ export function createWorld(s: Scenario, clock: Clock) {
 
 export type World = ReturnType<typeof createWorld>
 
-/** Wait like a slow server: resolves after `ms` of (fake) time, rejects when the client aborts. */
 function answerAfter(ms: number, signal: AbortSignal | null | undefined) {
   return new Promise<void>((resolve, reject) => {
     const answer = setTimeout(resolve, ms)

@@ -116,12 +116,7 @@ it('with urgent disabled, a default prompt dismissal has no expiry', () => {
 
 it('validates durations, snooze lengths and threshold order', () => {
   expect(() =>
-    resolveEscalation({
-      prompt: {
-        // @ts-expect-error Reject invalid runtime strings.
-        after: '12 hours',
-      },
-    }),
+    resolveEscalation(JSON.parse('{"prompt":{"after":"12 hours"}}')),
   ).toThrow(/not a duration/)
   expect(() =>
     resolveEscalation({ prompt: { after: '24h' }, urgent: { after: '12h' } }),

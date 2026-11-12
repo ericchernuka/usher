@@ -45,7 +45,6 @@ async function buildFixture(
   return root
 }
 
-/** Fake Cloudflare env: ASSETS answers like Pages SPA mode, R2 holds one old chunk. */
 function fakeEnv(files: Record<string, string>, r2: Record<string, string>) {
   return {
     ASSETS: {
@@ -60,7 +59,7 @@ function fakeEnv(files: Record<string, string>, r2: Record<string, string>) {
 
         return new Response('<!doctype html>', {
           headers: { 'content-type': 'text/html' },
-        }) // SPA fallback, 200
+        })
       },
     },
     BUILD_CACHE: {
@@ -111,16 +110,16 @@ describe('skewProtection: pages', () => {
     const get = (p: string) =>
       worker.default.fetch(new Request(`https://app.test${p}`), env)
 
-    expect(await (await get('/assets/new-abc.js')).text()).toBe('new') // current deploy
-    const old = await get('/assets/old-123.js') // gone from deploy, in R2
+    expect(await (await get('/assets/new-abc.js')).text()).toBe('new')
+    const old = await get('/assets/old-123.js')
     expect(await old.text()).toBe('old')
     expect(old.headers.get('cache-control')).toBe(
       'public, max-age=31536000, immutable',
     )
-    expect((await get('/assets/never.js')).status).toBe(404) // not a SPA-fallback 200
+    expect((await get('/assets/never.js')).status).toBe(404)
     expect((await get('/jobs/42')).headers.get('content-type')).toBe(
       'text/html',
-    ) // non-asset passes through
+    )
   })
 
   it('warns that Pages ignores functions/ once a _worker.js exists', async () => {

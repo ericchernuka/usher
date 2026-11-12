@@ -63,7 +63,7 @@ describe('hearing from other tabs while running', () => {
     await clock.settle()
     store.dismiss()
 
-    host.storageEventFor(null, host.sessionStorage) // another area's clear()
+    host.storageEventFor(null, host.sessionStorage)
 
     expect(store.getState().attention).toBe('passive')
   })
@@ -109,7 +109,7 @@ describe('dismissing for every tab', () => {
     await clock.runFor(12 * HOUR)
     expect(store.getState().attention).toBe('prompt')
 
-    host.otherTabSets(SNOOZE_KEY, JSON.stringify({ promptAt: Date.now() })) // an already stale tab
+    host.otherTabSets(SNOOZE_KEY, JSON.stringify({ promptAt: Date.now() }))
 
     expect(store.getState()).toMatchObject({
       attention: 'passive',
@@ -136,7 +136,7 @@ describe('clearing and blocking storage', () => {
     store.dismiss()
     expect(store.getState().attention).toBe('passive')
 
-    host.storageEvent(null) // localStorage.clear() elsewhere
+    host.storageEvent(null)
 
     expect(store.getState().attention).toBe('prompt')
   })
@@ -181,7 +181,7 @@ describe('clearing and blocking storage', () => {
     expect(store.dismiss()).toBe(true)
     await app.poll()
 
-    expect(store.getState().attention).toBe('passive') // still snoozed at the next check
+    expect(store.getState().attention).toBe('passive')
   })
 
   test('given a write failed and an older snooze is in storage, then the newer dismissal is not overridden', async ({

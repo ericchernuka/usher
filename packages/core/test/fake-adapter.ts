@@ -1,4 +1,3 @@
-// A stand-in for a toast library: records what connectPrompt asked it to do.
 import type { Prompt, PromptAdapter } from '../src/index'
 
 export function fakeAdapter(minAttention?: PromptAdapter['minAttention']) {
@@ -20,7 +19,6 @@ export function fakeAdapter(minAttention?: PromptAdapter['minAttention']) {
   return {
     log,
     adapter,
-    /** The prompt currently on screen; throws if none, so a test can't misread "nothing shown". */
     get open(): Prompt {
       if (!open) {
         throw new Error('no prompt is showing')

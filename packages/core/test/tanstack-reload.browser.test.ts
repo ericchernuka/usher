@@ -1,5 +1,3 @@
-// The README's TanStack Router reload recipe, against the real router: the app's
-// navigation blockers (what useBlocker registers) decide reloads too.
 import {
   createMemoryHistory,
   createRootRoute,
@@ -30,11 +28,10 @@ function setup() {
   const appUpdates = createAppUpdatesCore({
     current,
     url: '/version.json',
-    // README recipe:
     reload: async ({ href }) => {
       await router.navigate({ href, reloadDocument: true, replace: true })
 
-      return false // still here afterwards = a blocker stopped it (otherwise the page is unloading)
+      return false
     },
   })
 
@@ -70,7 +67,7 @@ describe('TanStack Router reload recipe', () => {
 
     const unblock = router.history.block({ blockerFn })
     await appUpdates.refresh()
-    expect(navigations).toHaveLength(1) // documented caveat: block on dirty state, not on path change
+    expect(navigations).toHaveLength(1)
     unblock()
   })
 })

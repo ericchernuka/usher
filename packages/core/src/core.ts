@@ -1,5 +1,3 @@
-// The update store: a thin assembly of the state machine (machine.ts), the DOM engine
-// (engine.ts) and reloads (reloads.ts) behind a five-method external store.
 import { ms, resolveEscalation } from './duration'
 import { createEngine } from './engine'
 import { browserHost, type Host } from './host'
@@ -32,11 +30,9 @@ export interface AppUpdatesOptions {
   storageKey?: string
 }
 
-/** Internal: build info normally comes from `virtual:app-version`; tests pass it directly. */
 export interface CoreOptions extends AppUpdatesOptions {
   current: VersionInfo
   url: string
-  /** The browser surface; tests substitute a fake. Default: the real globals. */
   host?: Host
 }
 
@@ -68,7 +64,6 @@ function pollMs(value: Duration = '5m'): number {
   return result
 }
 
-/** Snapshot first: a listener may (un)subscribe while we notify. */
 function notifyAll(listeners: ReadonlySet<{ listener: () => void }>) {
   for (const entry of Array.from(listeners)) {
     isolate('listener', entry.listener)
@@ -88,7 +83,7 @@ export function createAppUpdatesCore(o: CoreOptions): AppUpdates {
 
   const machine = createMachine({
     current: o.current,
-    escalation: resolveEscalation(o.escalation), // validates eagerly: bad config throws here
+    escalation: resolveEscalation(o.escalation),
     snoozes,
     notify: () => notifyAll(listeners),
   })
@@ -123,7 +118,7 @@ function subscribeTo(
   engine: ReturnType<typeof createEngine>,
 ) {
   return (listener: () => void) => {
-    const entry = { listener } // a token per call, so the same function can subscribe twice
+    const entry = { listener }
     listeners.add(entry)
 
     if (listeners.size === 1) {

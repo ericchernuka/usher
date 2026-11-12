@@ -1,5 +1,3 @@
-// A stand-in for the browser, so store tests run in Node. Events go through real
-// EventTargets; storage is a Map. Only what the store reads exists (see src/host.ts).
 import {
   createAppUpdatesCore,
   type AppUpdates,
@@ -9,7 +7,6 @@ import type { Host, StorageChange, StorageLike } from '../src/host'
 import { appVersion } from './build-info.stub'
 import { VERSION_URL } from './mocks/handlers'
 
-/** A `storage` event as another tab's write would deliver it. */
 class FakeStorageEvent extends Event implements StorageChange {
   readonly key: string | null
   readonly newValue: string | null
@@ -41,8 +38,6 @@ class MemoryStorage implements StorageLike {
     this.#items.clear()
   }
 }
-
-/** An explicit page refresh. */
 
 interface MutableVisibility {
   visibilityState: DocumentVisibilityState
@@ -76,7 +71,7 @@ export function createFakeHost(options: { fetch?: typeof fetch } = {}) {
     document: doc,
     localStorage,
     location,
-    fetch: options.fetch ?? ((...args) => fetch(...args)), // MSW answers these
+    fetch: options.fetch ?? ((...args) => fetch(...args)),
   }
 
   return {
@@ -87,22 +82,18 @@ export function createFakeHost(options: { fetch?: typeof fetch } = {}) {
     navigations,
     focus: () => windowTarget.dispatchEvent(new Event('focus')),
     keydown: () => windowTarget.dispatchEvent(new Event('keydown')),
-    /** Change visibility and tell the page, as the browser does. */
     setVisibility(state: DocumentVisibilityState) {
       doc.visibilityState = state
       documentTarget.dispatchEvent(new Event('visibilitychange'))
     },
-    /** Change visibility without the event (a tab that was hidden before the store started). */
     setVisibilitySilently(state: DocumentVisibilityState) {
       doc.visibilityState = state
     },
-    /** What this tab sees when another tab writes `localStorage[key]` (or `clear()`s, with a null key). */
     storageEvent(key: string | null, newValue: string | null = null) {
       windowTarget.dispatchEvent(
         new FakeStorageEvent({ key, newValue, storageArea: localStorage }),
       )
     },
-    /** Another tab sets the key: storage changes first, then the event arrives. */
     otherTabSets(key: string, value: string) {
       localStorage.setItem(key, value)
       windowTarget.dispatchEvent(
@@ -113,7 +104,6 @@ export function createFakeHost(options: { fetch?: typeof fetch } = {}) {
         }),
       )
     },
-    /** Another tab removes the key. */
     otherTabRemoves(key: string) {
       localStorage.removeItem(key)
       windowTarget.dispatchEvent(
@@ -124,14 +114,12 @@ export function createFakeHost(options: { fetch?: typeof fetch } = {}) {
         }),
       )
     },
-    /** `vite:preloadError`, returning whether the app's handler claimed it. */
     preloadError() {
       const event = new Event('vite:preloadError', { cancelable: true })
       windowTarget.dispatchEvent(event)
 
       return event.defaultPrevented
     },
-    /** `window.dispatchEvent` with an arbitrary event, e.g. a storage event for another area. */
     dispatch: (event: Event) => windowTarget.dispatchEvent(event),
     storageEventFor(key: string | null, area: StorageLike | null) {
       windowTarget.dispatchEvent(
@@ -145,7 +133,6 @@ export type FakeHost = ReturnType<typeof createFakeHost>
 
 const stubBuild = appVersion
 
-/** The store under test, on the fake host and the MSW-served version URL. */
 export function createStore(
   fake: FakeHost,
   options: AppUpdatesOptions = {},

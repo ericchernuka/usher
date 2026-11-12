@@ -1,19 +1,12 @@
-// Internal. Dismissals ("snoozes"), shared across tabs. Times are server-clock (see policy.ts).
-//
-// Memory is this tab's working copy; localStorage is the channel between tabs. On start,
-// readable storage wins (so a clear while we weren't listening still un-snoozes), unless
-// our last write failed, in which case memory holds something storage never got.
 import * as v from 'valibot'
 import type { Host, StorageChange } from './host'
 import type { Snoozes } from './policy'
 
 const Finite = v.pipe(v.number(), v.finite())
 
-/** A field of the stored record that's unreadable counts as absent; the others still apply. */
 const lenient = <const T extends v.GenericSchema>(schema: T) =>
   v.fallback(v.optional(schema), undefined)
 
-/** What another tab or an older version may have left in storage, read field by field. */
 const StoredSnoozes = v.pipe(
   v.object({
     promptAt: lenient(Finite),
@@ -34,7 +27,6 @@ function parse(raw: string): Snoozes | undefined {
 const max = (x?: number, y?: number) =>
   x === undefined ? y : y === undefined ? x : Math.max(x, y)
 
-/** Dismissals only ever move later (covering more), so merging by the later time is safe. */
 function later(a: Snoozes, b: Snoozes): Snoozes {
   const promptAt = max(a.promptAt, b.promptAt)
 
@@ -52,30 +44,26 @@ function isOurArea(e: StorageChange, host: Host) {
 export function createSnoozes(storageKey: string, host: Host) {
   const key = `${storageKey}:snooze`
   let memory: Snoozes = {}
-  let unsynced = false // our last write didn't reach storage
+  let unsynced = false
 
   return {
     get: (): Snoozes => memory,
 
-    /** Catch up with what other tabs did while we weren't listening. */
     hydrate() {
       try {
         const raw = host.localStorage.getItem(key)
         const stored = (raw === null ? undefined : parse(raw)) ?? {}
         memory = unsynced ? later(memory, stored) : stored
-      } catch {
-        /* storage blocked: memory only */
-      }
+      } catch {}
     },
 
-    /** Apply another tab's change. Returns true if it concerned us. */
     onStorage(e: StorageChange): boolean {
       if (!isOurArea(e, host)) {
         return false
       }
 
       if (e.key === null || (e.key === key && e.newValue === null)) {
-        memory = {} // storage cleared or our key removed: un-snooze
+        memory = {}
 
         return true
       }
@@ -100,7 +88,7 @@ export function createSnoozes(storageKey: string, host: Host) {
         host.localStorage.setItem(key, JSON.stringify(memory))
         unsynced = false
       } catch {
-        unsynced = true /* blocked or full: the snooze still holds in this tab */
+        unsynced = true
       }
     },
   }

@@ -177,7 +177,7 @@ describe('dev server middleware', () => {
 
 describe('given no git and no environment', () => {
   it('when the version is resolved, then it falls back to a dev version and warns about the commit time', () => {
-    vi.stubEnv('PATH', '/nonexistent') // `git` can't be found
+    vi.stubEnv('PATH', '/nonexistent')
     const warn = vi.fn<() => void>()
     const now = new Date('2026-11-11T16:00:00Z')
 
@@ -208,7 +208,7 @@ describe('given a server-side build', () => {
     })
 
     const emitted = readdirSync(join(root, 'dist'))
-    expect(emitted).not.toHaveLength(0) // the server bundle was built
+    expect(emitted).not.toHaveLength(0)
     expect(emitted).not.toContain('version.json')
   })
 })

@@ -29,7 +29,6 @@ export function useAppUpdates<T>(
     const state = store.getState()
     const value = selector ? selector(state) : identity(state)
 
-    // Dev-only footgun check: a selector that builds a new object loops useSyncExternalStore.
     if (
       import.meta.env?.DEV &&
       !warnedUnstableSelector &&

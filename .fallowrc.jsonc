@@ -1,6 +1,5 @@
 {
   "$schema": "./node_modules/fallow/schema.json",
-  // The Cloudflare adapter reads the handler as text and inlines it into the emitted worker.
   "entry": ["packages/cloudflare/src/edge-handler.mjs"],
   "ignorePatterns": ["tools/**", "**/.edge-fixture/**", "**/dist-worker/**"],
   "ignoreDependencies": ["@oxlint/plugins"],

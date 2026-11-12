@@ -5,6 +5,5 @@ export default defineConfig({
   platform: 'node',
   fixedExtension: false,
   dts: true,
-  // The adapter reads the handler as text and inlines it into the emitted worker.
   copy: ['src/edge-handler.mjs'],
 })

@@ -57,7 +57,6 @@ export interface PromptAdapter {
  */
 const keyOf = (s: UpdateState) => `${s.attention}:${s.reason}`
 
-/** Adapter code is app code: isolate it so it can't break the store or leak this connection. */
 function safely(label: string, fn: () => void) {
   try {
     fn()
@@ -93,7 +92,7 @@ class PromptConnection {
   hideAfterStep = false
 
   closeAfterDismiss = (key: string) => {
-    this.view = { kind: 'closed', key } // set first: hide() may fire onClose → stale dismiss
+    this.view = { kind: 'closed', key }
 
     if (this.syncing) {
       this.hideAfterStep = true
@@ -105,7 +104,7 @@ class PromptConnection {
   step = () => {
     if (this.dismissing) {
       return
-    } // closing on the dismissed state happens right after
+    }
 
     const state = this.updates.getState()
 
@@ -114,7 +113,7 @@ class PromptConnection {
       rank[state.attention] < rank[this.minAttention]
     ) {
       const wasShown = this.view.kind === 'shown'
-      this.view = { kind: 'hidden' } // set first: our own hide must not read as a user dismiss
+      this.view = { kind: 'hidden' }
 
       if (wasShown) {
         safely('hide', this.hide)
@@ -123,7 +122,6 @@ class PromptConnection {
       return
     }
 
-    // Re-show only when attention or reason changes; a newer `latest` alone isn't news.
     const key = keyOf(state)
 
     if (this.view.kind !== 'hidden' && this.view.key === key) {
@@ -132,7 +130,6 @@ class PromptConnection {
 
     const prompt = this.makePrompt(state, key)
 
-    // Record it as shown only once show() succeeded; a throwing show() retries on the next change.
     const previous = this.view
     this.view = { kind: 'shown', handle: prompt, key }
 
@@ -153,7 +150,7 @@ class PromptConnection {
       dismiss: () => {
         if (this.view.kind !== 'shown' || this.view.handle !== prompt) {
           return
-        } // stale handle
+        }
 
         if (prompt.attention === 'urgent') {
           return
@@ -161,9 +158,8 @@ class PromptConnection {
 
         if (prompt.attention === 'passive') {
           return this.closeAfterDismiss(key)
-        } // nothing to snooze
+        }
 
-        // Pause steps while the store updates, then close on whatever it actually published.
         this.dismissing = true
         let dismissed = false
 

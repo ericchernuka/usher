@@ -1,6 +1,5 @@
 import * as v from 'valibot'
 
-/** A string `Date.parse` can read; the policy orders builds by it. */
 const Timestamp = v.pipe(
   v.string(),
   v.check(value => !Number.isNaN(Date.parse(value))),

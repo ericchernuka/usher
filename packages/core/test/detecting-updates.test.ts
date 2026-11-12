@@ -11,7 +11,7 @@ describe('checking for a new build', () => {
     clock,
     requests,
   }) => {
-    const fetchCall = vi.spyOn(globalThis, 'fetch') // passes through to MSW
+    const fetchCall = vi.spyOn(globalThis, 'fetch')
     const store = app.create()
     app.subscribe(store)
     await clock.settle()
@@ -21,7 +21,6 @@ describe('checking for a new build', () => {
     expect(request?.method).toBe('GET')
     expect(url.origin + url.pathname).toBe(VERSION_URL)
     expect(Number(url.searchParams.get('t'))).toBe(Date.now())
-    // MSW rebuilds the request without its `cache` mode, so read it off the real fetch call.
     expect(fetchCall).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({ cache: 'no-store' }),
@@ -103,7 +102,7 @@ describe('slow and hung checks', () => {
         async () => {
           await late.promise
 
-          return HttpResponse.json(older) // would read as a rollback if it landed
+          return HttpResponse.json(older)
         },
         { once: true },
       ),
@@ -112,7 +111,7 @@ describe('slow and hung checks', () => {
     const store = app.create()
     const first = store.subscribe(() => {})
     await clock.settle()
-    first() // e.g. a Strict Mode remount
+    first()
     app.subscribe(store)
     await clock.settle()
 
@@ -136,7 +135,7 @@ describe('slow and hung checks', () => {
 
     await clock.runFor(30_000)
 
-    expect(store.getState().attention).toBe('none') // nothing arrived
+    expect(store.getState().attention).toBe('none')
     await app.poll()
     expect(store.getState()).toMatchObject({
       attention: 'passive',
@@ -199,7 +198,7 @@ describe('hidden tabs', () => {
     app.subscribe(app.create({ pollEvery: '5m' }))
     await clock.settle()
     await clock.runFor(5 * MINUTE)
-    expect(requests).toHaveLength(2) // visible: polls on schedule
+    expect(requests).toHaveLength(2)
 
     host.setVisibility('hidden')
     expect(clock.pendingStoreTimers()).toBe(0)
@@ -208,9 +207,9 @@ describe('hidden tabs', () => {
 
     host.setVisibility('visible')
     await clock.settle()
-    expect(requests).toHaveLength(3) // stale on return: immediate check
+    expect(requests).toHaveLength(3)
     await clock.runFor(5 * MINUTE)
-    expect(requests).toHaveLength(4) // and back on schedule
+    expect(requests).toHaveLength(4)
   })
 
   test("given a tab that starts hidden, then it doesn't fetch until it's visible", async ({
@@ -238,8 +237,8 @@ describe('build age and the server clock', () => {
     app,
     clock,
   }) => {
-    clock.setSystemTime('2026-11-12T22:00:00Z') // the page thinks the build is 31 h old
-    server.use(serveBuild(newer, { date: new Date('2026-11-11T16:00:00Z') })) // the server says 1 h
+    clock.setSystemTime('2026-11-12T22:00:00Z')
+    server.use(serveBuild(newer, { date: new Date('2026-11-11T16:00:00Z') }))
     const store = app.create()
     app.subscribe(store)
     await clock.settle()
@@ -254,7 +253,7 @@ describe('build age and the server clock', () => {
     app,
     clock,
   }) => {
-    server.use(serveBuild(newer, { skewMs: 11 * HOUR })) // the server says the build is already 12 h old
+    server.use(serveBuild(newer, { skewMs: 11 * HOUR }))
     const store = app.create()
     app.subscribe(store)
     await clock.settle()

@@ -1,5 +1,3 @@
-// The store on the real browser globals (no fake host): window and document events,
-// localStorage, sessionStorage and location. Everything else is tested in Node.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createAppUpdatesCore } from '../src/core'
 import { createAppUpdates } from '../src/index'
@@ -20,7 +18,6 @@ const older: VersionInfo = {
 
 const settle = () => new Promise(resolve => setTimeout(resolve, 20))
 
-// No service worker is registered in these runs, so the version endpoint is a narrow fetch stub.
 let served: VersionInfo
 
 beforeEach(() => {

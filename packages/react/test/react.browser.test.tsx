@@ -22,12 +22,11 @@ const older = {
   builtAt: '2026-11-10T15:00:00.000Z',
 }
 
-// Real time: only Date and performance are faked, so React's scheduler and fetch run normally.
 const tick = () => new Promise(resolve => setTimeout(resolve, 20))
 
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date', 'performance'] })
-  vi.setSystemTime(new Date('2026-11-11T16:00:00Z')) // an hour after the stub build
+  vi.setSystemTime(new Date('2026-11-11T16:00:00Z'))
   localStorage.clear()
   vi.stubGlobal(
     'fetch',
@@ -75,7 +74,7 @@ describe('useAppUpdates', () => {
     await expect.element(button).toHaveAttribute('data-attention', 'prompt')
 
     const before = renders
-    window.dispatchEvent(new Event('focus')) // a poll that changes nothing
+    window.dispatchEvent(new Event('focus'))
     await tick()
     expect(renders).toBe(before)
 
@@ -85,7 +84,7 @@ describe('useAppUpdates', () => {
     await view.unmount()
     const calls = vi.mocked(fetch).mock.calls.length
     window.dispatchEvent(new Event('focus'))
-    expect(vi.mocked(fetch).mock.calls.length).toBe(calls) // last subscriber left: engine stopped
+    expect(vi.mocked(fetch).mock.calls.length).toBe(calls)
   })
 })
 
@@ -132,9 +131,7 @@ describe('useAppUpdates selector check', () => {
 
     try {
       await (await render(<Worse />)).unmount()
-    } catch {
-      /* infinite-loop guard from React */
-    }
+    } catch {}
 
     expect(
       error.mock.calls.some(([m]) =>
@@ -164,7 +161,6 @@ describe('useAppUpdates deferral', () => {
 
     const { unmount } = await render(<Probe />)
     await tick()
-    // Some render saw the store ahead of the deferred value, and the last one caught up.
     expect(seen.some(([u, d]) => u !== d)).toBe(true)
     expect(seen.at(-1)).toEqual(['urgent', 'urgent'])
     await unmount()
@@ -190,7 +186,7 @@ describe('useReloadBlocker', () => {
     expect(navigations).toHaveLength(1)
     await view.rerender(<Form dirty />)
     await view.unmount()
-    expect(await updates.refresh()).toBe(true) // unmount removed the blocker
+    expect(await updates.refresh()).toBe(true)
     expect(navigations).toHaveLength(2)
   })
 })
@@ -220,7 +216,6 @@ describe('useReloadBlocker with a function', () => {
   })
 })
 
-// The README's Base UI recipe, verbatim, run against real Base UI.
 function connectBaseUIToast(
   appUpdates: AppUpdates,
   toastManager: ReturnType<typeof Toast.createToastManager>,
@@ -250,7 +245,7 @@ function Toasts() {
   return (
     <>
       {toasts
-        .filter(t => t.transitionStatus !== 'ending') // closed, waiting on an exit animation
+        .filter(t => t.transitionStatus !== 'ending')
         .map(t => (
           <button
             type="button"

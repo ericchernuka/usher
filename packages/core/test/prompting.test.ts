@@ -26,7 +26,7 @@ describe('showing and hiding', () => {
     expect(ui.log).toEqual(['show:prompt'])
     expect(ui.open.id).toBe('app-update')
 
-    await app.poll() // nothing changed: no duplicate show
+    await app.poll()
     expect(ui.log).toEqual(['show:prompt'])
 
     server.use(serveBuild(current))
@@ -52,7 +52,7 @@ describe('showing and hiding', () => {
     server.use(serveBuild({ ...older, version: 'older-still' }))
     await app.poll()
 
-    expect(shows).toEqual(['urgent:old']) // same level and reason: not news
+    expect(shows).toEqual(['urgent:old'])
   })
 
   test('given the prompt is up, when the app disconnects, then it hides and polling stops', async ({
@@ -112,7 +112,7 @@ describe('closing the prompt', () => {
 
     expect(store.getState().attention).toBe('passive')
     expect(ui.log).toEqual(['show:prompt', 'hide'])
-    handle.dismiss() // libraries often fire onClose twice
+    handle.dismiss()
     expect(ui.log).toEqual(['show:prompt', 'hide'])
   })
 
@@ -134,7 +134,7 @@ describe('closing the prompt', () => {
         },
         hide: () => {
           ui.adapter.hide()
-          handle?.dismiss() // e.g. Base UI calls onClose on programmatic close
+          handle?.dismiss()
         },
       }),
     )
@@ -152,7 +152,7 @@ describe('closing the prompt', () => {
     clock,
   }) => {
     server.use(serveBuild(newer))
-    clock.setSystemTime('2026-11-12T16:00:00Z') // expired and stale at once
+    clock.setSystemTime('2026-11-12T16:00:00Z')
     const ui = fakeAdapter()
     app.track(connectPrompt(app.create(), ui.adapter))
     await clock.settle()
@@ -177,7 +177,7 @@ describe('closing the prompt', () => {
     await app.poll()
     expect(ui.log).toEqual(['show:passive', 'hide'])
 
-    server.use(serveBuild(older)) // escalates
+    server.use(serveBuild(older))
     await app.poll()
 
     expect(ui.log).toEqual(['show:passive', 'hide', 'show:urgent'])
@@ -188,7 +188,7 @@ describe('closing the prompt', () => {
     clock,
   }) => {
     server.use(serveBuild(newer))
-    clock.setSystemTime('2026-11-12T05:00:00Z') // prompt:stale
+    clock.setSystemTime('2026-11-12T05:00:00Z')
     const ui = fakeAdapter('passive')
     app.track(connectPrompt(app.create(), ui.adapter))
     await clock.settle()

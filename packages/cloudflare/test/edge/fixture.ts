@@ -1,5 +1,3 @@
-// Runs in Node (from vitest.edge.config.ts): builds a tiny app with the real plugin
-// so the edge tests exercise exactly what we ship.
 import { mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { build } from 'vite'

@@ -59,7 +59,7 @@ describe('adapters that misbehave', () => {
     )
     await app.poll()
 
-    expect(shows).toEqual(['urgent']) // not stuck as "shown" from the failed attempt
+    expect(shows).toEqual(['urgent'])
   })
 
   test('given show() throws on an update, when the next change arrives, then the prompt is retried', async ({
@@ -86,7 +86,7 @@ describe('adapters that misbehave', () => {
     await clock.settle()
     failNext = true
     server.use(serveBuild(older))
-    await app.poll() // passive -> urgent: show() throws
+    await app.poll()
 
     failNext = false
     server.use(serveBuild({ ...older, version: 'older-still' }))

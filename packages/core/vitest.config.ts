@@ -4,7 +4,6 @@ import { defineConfig } from 'vitest/config'
 export default defineConfig({
   resolve: {
     alias: {
-      // Supplied by the appVersion() plugin in a real build.
       'virtual:app-version': new URL('test/build-info.stub.ts', import.meta.url)
         .pathname,
     },

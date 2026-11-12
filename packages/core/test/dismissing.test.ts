@@ -15,18 +15,18 @@ test('given the user dismissed the prompt level, then it stays quiet until the u
   clock,
 }) => {
   server.use(serveBuild(newer))
-  clock.setSystemTime('2026-11-12T04:00:00Z') // 13 h: prompt:stale
+  clock.setSystemTime('2026-11-12T04:00:00Z')
   const store = app.create()
   app.subscribe(store)
   await clock.settle()
   expect(store.getState().reason).toBe('stale')
 
   store.dismiss()
-  await clock.runFor(10 * HOUR) // 23 h: still quiet
+  await clock.runFor(10 * HOUR)
 
   expect(store.getState().attention).toBe('passive')
 
-  await clock.runFor(HOUR) // 24 h: urgent
+  await clock.runFor(HOUR)
 
   expect(store.getState().reason).toBe('expired')
 })
@@ -45,7 +45,7 @@ test("given Date headers round down to the second, then a prompt dismissal can't
   await clock.settle()
   await clock.runFor(12 * HOUR)
   expect(store.dismiss()).toBe(true)
-  await clock.runFor(60_900) // checks now land at .900 ms: the header rounds down
+  await clock.runFor(60_900)
   host.focus()
   await clock.settle()
   states.length = 0

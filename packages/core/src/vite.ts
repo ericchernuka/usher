@@ -62,7 +62,6 @@ const git = (args: string) => {
   }
 }
 
-/** A set value: "" and whitespace (an unset CI variable) count as missing. */
 const Present = v.pipe(v.string(), v.trim(), v.nonEmpty())
 
 const Timestamp = v.pipe(
@@ -71,10 +70,8 @@ const Timestamp = v.pipe(
   v.transform(value => new Date(value).toISOString()),
 )
 
-/** Where a setting came from, so a bad value names its source. */
 type Source = readonly [name: string, value: string | undefined]
 
-/** The first source that is set, trimmed. */
 function firstSet(...sources: ReadonlyArray<Source>) {
   for (const [name, value] of sources) {
     const result = v.safeParse(Present, value)
@@ -87,7 +84,6 @@ function firstSet(...sources: ReadonlyArray<Source>) {
   return undefined
 }
 
-/** A set source as a normalized ISO timestamp; a malformed one fails the build by name. */
 function timestamp(source: { name: string; value: string } | undefined) {
   if (!source) {
     return undefined
@@ -104,7 +100,6 @@ function timestamp(source: { name: string; value: string } | undefined) {
   return result.output
 }
 
-/** What a build reads from its surroundings; tests substitute each. */
 export interface VersionRuntime {
   env?: NodeJS.ProcessEnv
   now?: Date
@@ -126,7 +121,6 @@ export function resolveVersionInfo(
     ['git rev-parse HEAD', git('rev-parse HEAD')],
   )
 
-  // Commit time orders builds for rollback detection, so "now" is only a last resort.
   const commitTime = timestamp(
     firstSet(
       ['commitTime', opts.commitTime],
@@ -167,15 +161,9 @@ const isCdnBase = (base: string) => /^https?:/.test(base)
 const isRelativeBase = (base: string) =>
   !base.startsWith('/') && !isCdnBase(base)
 
-/** URL path of `base`, e.g. "/" or "/app/" (a CDN base keeps only its path). Vite always ends `base` in "/". */
 const pathBase = (base: string) =>
   isCdnBase(base) ? new URL(base).pathname : base
 
-/**
- * Whether a dev-server request is for the version file. Compare paths: with a CDN `base` the
- * url is absolute, and with a relative base it resolves against the page, but requests
- * always arrive as paths.
- */
 function isVersionRequest(
   base: string,
   fileName: string,
@@ -236,7 +224,6 @@ export function appVersion(opts: AppVersionOptions = {}) {
       return `export const appVersion = ${JSON.stringify(info)};\nexport const versionUrl = ${JSON.stringify(config.base + fileName)};\n`
     },
     configureServer(server: VersionServer) {
-      // Dev serves the same build info, so the watcher sees "up to date".
       server.middlewares.use(versionMiddleware(config.base, fileName, info))
     },
     generateBundle() {
@@ -269,7 +256,6 @@ export function appVersion(opts: AppVersionOptions = {}) {
   } satisfies Plugin
 }
 
-/** The slice of a Vite 6+ hook context that names its environment (absent on Vite 5). */
 interface HookEnvironment {
   readonly environment?: { readonly config: { readonly consumer?: string } }
 }

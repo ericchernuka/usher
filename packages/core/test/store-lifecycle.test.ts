@@ -30,11 +30,11 @@ describe('subscribing', () => {
 
     first()
     await clock.runFor(5 * MINUTE)
-    expect(requests).toHaveLength(2) // still one subscriber
+    expect(requests).toHaveLength(2)
 
     second()
     await clock.runFor(10 * MINUTE)
-    expect(requests).toHaveLength(2) // stopped
+    expect(requests).toHaveLength(2)
   })
 
   test('given the same function subscribed twice, then each is its own subscription and unsubscribing is idempotent', async ({
@@ -52,7 +52,7 @@ describe('subscribing', () => {
 
     await app.poll()
 
-    expect(requests).toHaveLength(1) // still running for the second
+    expect(requests).toHaveLength(1)
     second()
   })
 

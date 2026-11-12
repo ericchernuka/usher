@@ -4,12 +4,10 @@ import { defineConfig } from 'vitest/config'
 export default defineConfig({
   resolve: {
     alias: {
-      // `@app-version/core` imports this; the appVersion() plugin supplies it in a real build.
       'virtual:app-version': new URL('test/build-info.stub.ts', import.meta.url)
         .pathname,
     },
   },
-  // Listed up front so Vite doesn't discover them mid-run and reload the test page.
   optimizeDeps: {
     include: [
       'vitest-browser-react',

@@ -2,7 +2,6 @@ import * as v from 'valibot'
 import type { ResolvedEscalation } from './duration'
 import { VersionInfoSchema, type UpdateState, type VersionInfo } from './types'
 
-/** The server time at which a prompt was dismissed, shared across tabs. */
 export interface Snoozes {
   promptAt?: number
 }
@@ -22,7 +21,6 @@ export interface PolicyInput {
 export interface Decision {
   state: UpdateState
   knownBad?: KnownBad
-  /** Next client-clock deadline, without another network response. */
   nextAt?: number
 }
 

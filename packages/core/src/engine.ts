@@ -1,7 +1,3 @@
-// Internal. The DOM side: lifecycle, the one timer, and fetching version.json.
-//
-// Polling and policy deadlines share one wake timer. Hidden tabs keep no wake timer.
-// A pending fetch has its own timeout until it settles.
 import type { Host, StorageChange } from './host'
 import * as v from 'valibot'
 import { isVersionInfo } from './policy'
@@ -11,7 +7,7 @@ import type { VersionInfo } from './types'
 
 const MIN = 60_000
 const FETCH_TIMEOUT_MS = 30_000
-const MAX_TIMER_MS = 2 ** 31 - 1 // larger delays fire immediately in browsers
+const MAX_TIMER_MS = 2 ** 31 - 1
 
 export interface EngineDeps {
   url: string
@@ -23,16 +19,12 @@ export interface EngineDeps {
 
 type Running = {
   cleanups: Array<() => void>
-  /** The one fetch in progress; a newer check() or stop() aborts it. */
   inFlight?: AbortController | undefined
-  /** The one wake-up timer (never set while hidden). */
   wake?: ReturnType<typeof setTimeout> | undefined
 }
 
-/** Monotonic: polling and idleness survive the user's clock jumping. Policy times stay on Date. */
 const tick = () => performance.now()
 
-/** A valid version.json and the server time, or undefined (bad status, aborted, malformed). */
 async function readResponse(res: Response, signal: AbortSignal) {
   if (!res.ok) {
     return undefined
@@ -48,7 +40,6 @@ async function readResponse(res: Response, signal: AbortSignal) {
     return console.warn('[app-version] ignoring malformed version.json', body)
   }
 
-  // Cross-origin responses need `Access-Control-Expose-Headers: Date` for this; else no correction.
   const serverDate = Date.parse(res.headers.get('date') ?? '')
 
   return {
@@ -77,7 +68,7 @@ function readStorageChange(
 
     return parsed.success ? { ...parsed.output, storageArea } : undefined
   } catch {
-    return undefined // Storage access can be denied by browser settings.
+    return undefined
   }
 }
 
@@ -110,7 +101,7 @@ class Engine {
 
     if (!this.visible()) {
       return
-    } // hidden: no timer; visibilitychange brings us back
+    }
 
     const deadline = this.deps.machine.nextAt
     const delays = [this.lastCheck + this.deps.pollMs - tick()]
@@ -124,7 +115,7 @@ class Engine {
   }
 
   onWake = () => {
-    this.evaluate() // thresholds and snooze expiry don't depend on the network
+    this.evaluate()
 
     if (this.sinceCheck() >= this.deps.pollMs) {
       void this.check()
@@ -136,11 +127,11 @@ class Engine {
       return
     }
 
-    this.running.inFlight?.abort() // newest check wins; a stale response can never land
+    this.running.inFlight?.abort()
     const controller = new AbortController()
     this.running.inFlight = controller
     this.lastCheck = tick()
-    this.reschedule() // the next poll counts from now, whatever triggered this check
+    this.reschedule()
 
     const timeout = setTimeout(
       () => controller.abort(new DOMException('timed out', 'TimeoutError')),
@@ -165,7 +156,6 @@ class Engine {
       this.deps.machine.observeServerTime(result.serverTime, tick())
       this.evaluate(result.latest)
     } catch {
-      /* aborted, timed out, offline or mid-deploy: the timer still evaluates */
     } finally {
       clearTimeout(timeout)
 
@@ -208,7 +198,7 @@ class Engine {
     this.listenStorage()
 
     this.evaluate()
-    void this.check() // no-op while hidden; visibilitychange triggers the first check
+    void this.check()
   }
 
   stop = () => {

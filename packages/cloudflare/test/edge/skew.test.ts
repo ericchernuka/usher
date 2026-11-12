@@ -1,4 +1,3 @@
-// Runs inside workerd. One file, executed against both the Pages and Workers builds.
 import { env, SELF } from 'cloudflare:test'
 import { beforeEach, describe, expect, it } from 'vitest'
 

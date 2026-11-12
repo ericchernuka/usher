@@ -39,14 +39,14 @@ describe('escalating as the running build ages', () => {
     expect(store.getState().attention).toBe('passive')
 
     server.use(serveNetworkError())
-    await clock.runFor(11 * HOUR) // the build is now 12 h old
+    await clock.runFor(11 * HOUR)
 
     expect(store.getState()).toMatchObject({
       attention: 'prompt',
       reason: 'stale',
     })
 
-    await clock.runFor(12 * HOUR) // 24 h
+    await clock.runFor(12 * HOUR)
 
     expect(store.getState()).toMatchObject({
       attention: 'urgent',

@@ -53,9 +53,9 @@ describe('refreshing', () => {
     expect(await store.refresh()).toBe(false)
     expect(seen).toEqual([{ href: host.location.href }])
 
-    answer = undefined // void: it happened
+    answer = undefined
     expect(await store.refresh()).toBe(true)
-    expect(host.navigations).toEqual([]) // the app's reload, not ours
+    expect(host.navigations).toEqual([])
 
     vi.spyOn(console, 'error').mockImplementation(() => {})
 
@@ -80,7 +80,7 @@ describe('refreshing', () => {
 
     removeForm()
 
-    expect(await store.refresh()).toBe(true) // the other blocker allows refreshing
+    expect(await store.refresh()).toBe(true)
     expect(host.navigations).toEqual([
       { type: 'reload', url: host.location.href },
     ])

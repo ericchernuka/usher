@@ -31,9 +31,6 @@ export default defineConfig({
   ],
   jsPlugins: [
     { name: 'anti-slop', specifier: './tools/oxlint/anti-slop/index.ts' },
-    // The React Compiler's own rules ship in eslint-plugin-react-hooks. Its
-    // rules-of-hooks and exhaustive-deps duplicate oxlint's built-in react
-    // rules, so only the compiler rules are enabled under this name.
     { name: 'react-compiler', specifier: 'eslint-plugin-react-hooks' },
     { name: 'no-only-tests', specifier: 'eslint-plugin-no-only-tests' },
   ],
@@ -74,9 +71,7 @@ export default defineConfig({
     'anti-slop/require-safety-comment-for-type-assertion': 'error',
 
     'react/react-in-jsx-scope': 'off',
-    // The React Compiler memoizes context values.
     'react/jsx-no-constructed-context-values': 'off',
-    // eslint-plugin-jsx-a11y's recommended options, so a table can be an ARIA grid.
     'jsx-a11y/no-noninteractive-element-to-interactive-role': [
       'error',
       {
@@ -136,15 +131,22 @@ export default defineConfig({
   },
   overrides: [
     {
+      files: ['packages/core/test/fixtures.ts'],
+      rules: {
+        'no-empty-pattern': [
+          'error',
+          { allowObjectPatternsAsParameters: true },
+        ],
+      },
+    },
+    {
       files: [
         'packages/core/test/clock.ts',
         'packages/core/test/model.test.ts',
       ],
-      // Simulated events and timer steps depend on each preceding result.
       rules: { 'no-await-in-loop': 'off' },
     },
     {
-      // The libraries report misuse and recoverable failures as "[app-version] …" warnings.
       files: ['packages/*/src/**'],
       rules: { 'no-console': ['error', { allow: ['warn', 'error'] }] },
     },

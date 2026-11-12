@@ -28,7 +28,7 @@ describe('a rollback', () => {
     app.subscribe(store)
     await clock.settle()
 
-    server.use(serveBuild(newer)) // a fix, newer than us
+    server.use(serveBuild(newer))
     await app.poll()
 
     expect(store.getState()).toMatchObject({

@@ -36,7 +36,6 @@ type Target = 'pages' | 'workers'
 const handlerSource = () =>
   readFileSync(new URL('./edge-handler.mjs', import.meta.url), 'utf8')
 
-/** The emitted module: the handler verbatim, plus an entry that runs it only for hashed assets. */
 function renderWorker(
   context: SkewProtectionContext,
   binding: string,
@@ -52,7 +51,6 @@ const SETTINGS = ${settings};
 
 export default {
   fetch(request, env) {
-    // ${target === 'pages' ? '_routes.json already limits this worker to the asset prefix' : 'wrangler run_worker_first should limit this worker to the asset prefix'}; check anyway.
     if (!new URL(request.url).pathname.startsWith(PREFIX)) return env.ASSETS.fetch(request);
     return serveAsset(request, env, SETTINGS);
   },
