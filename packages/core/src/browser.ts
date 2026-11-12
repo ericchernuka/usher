@@ -6,7 +6,7 @@ export interface StorageChange {
   readonly storageArea: StorageLike | null
 }
 
-export interface Host {
+export interface BrowserEnvironment {
   readonly window: EventTarget
   readonly document: EventTarget & {
     readonly visibilityState: DocumentVisibilityState
@@ -16,7 +16,7 @@ export interface Host {
   readonly fetch: typeof fetch
 }
 
-export function browserHost(): Host {
+export function createBrowserEnvironment(): BrowserEnvironment {
   return {
     get window() {
       return window

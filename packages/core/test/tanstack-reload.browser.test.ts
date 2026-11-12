@@ -4,7 +4,7 @@ import {
   createRouter,
 } from '@tanstack/react-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { createAppUpdatesCore } from '../src/core'
+import { createAppUpdatesStore } from '../src/app-updates'
 import { captureNavigations, type NavigationRequest } from './navigation'
 
 const current = {
@@ -25,7 +25,7 @@ function setup() {
     history: createMemoryHistory({ initialEntries: ['/jobs'] }),
   })
 
-  const appUpdates = createAppUpdatesCore({
+  const appUpdates = createAppUpdatesStore({
     current,
     url: '/version.json',
     reload: async ({ href }) => {

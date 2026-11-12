@@ -1,9 +1,13 @@
 import {
-  createAppUpdatesCore,
+  createAppUpdatesStore,
   type AppUpdates,
   type AppUpdatesOptions,
-} from '../src/core'
-import type { Host, StorageChange, StorageLike } from '../src/host'
+} from '../src/app-updates'
+import type {
+  BrowserEnvironment,
+  StorageChange,
+  StorageLike,
+} from '../src/browser'
 import { appVersion } from './build-info.stub'
 import { VERSION_URL } from './mocks/handlers'
 
@@ -66,7 +70,7 @@ export function createFakeHost(options: { fetch?: typeof fetch } = {}) {
     reload: () => void navigations.push({ type: 'reload', url: location.href }),
   }
 
-  const host: Host = {
+  const host: BrowserEnvironment = {
     window: windowTarget,
     document: doc,
     localStorage,
@@ -137,10 +141,10 @@ export function createStore(
   fake: FakeHost,
   options: AppUpdatesOptions = {},
 ): AppUpdates {
-  return createAppUpdatesCore({
+  return createAppUpdatesStore({
     current: stubBuild,
     url: VERSION_URL,
-    host: fake.host,
+    browser: fake.host,
     ...options,
   })
 }

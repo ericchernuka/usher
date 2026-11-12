@@ -1,4 +1,4 @@
-import type { AppUpdates } from './core'
+import type { AppUpdates } from './app-updates'
 import type {
   Attention,
   Behind,

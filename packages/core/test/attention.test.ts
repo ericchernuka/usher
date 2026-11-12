@@ -1,16 +1,19 @@
 import { describe, expect, it } from 'vitest'
-import { decide, isVersionInfo, type PolicyInput } from '../src/policy'
+import {
+  resolveAttention,
+  isVersionInfo,
+  type AttentionInput,
+} from '../src/attention'
 import { resolveEscalation } from '../src/duration'
 import { current, newer, older, HOUR } from './fixtures'
 
 const at = (hours: number) => Date.parse(current.builtAt) + hours * HOUR
 
-const input = (patch: Partial<PolicyInput> = {}): PolicyInput => ({
+const input = (patch: Partial<AttentionInput> = {}): AttentionInput => ({
   current,
   latest: newer,
   now: at(1),
-  clockOffset: 0,
-  snoozes: {},
+  dismissal: {},
   escalation: resolveEscalation(),
   ...patch,
 })
@@ -22,7 +25,7 @@ it.each([
 ])(
   'at $hours hours reports $attention:$reason',
   ({ hours, attention, reason }) => {
-    expect(decide(input({ now: at(hours) })).state).toEqual({
+    expect(resolveAttention(input({ now: at(hours) })).state).toEqual({
       attention,
       reason,
       latest: newer,
@@ -30,44 +33,53 @@ it.each([
   },
 )
 
-it('uses server time and returns the next client deadline', () => {
-  const result = decide(input({ clockOffset: 11 * HOUR }))
+it('uses the supplied server time and returns the next server deadline', () => {
+  const result = resolveAttention(input({ now: at(12) }))
   expect(result.state.attention).toBe('prompt')
-  expect(result.nextAt).toBe(at(13))
-  expect(decide(input({ latest: current }))).toEqual({
+  expect(result.nextAt).toBe(at(24))
+  expect(resolveAttention(input({ latest: current }))).toEqual({
     state: { attention: 'none', reason: 'caught-up', latest: current },
   })
 })
 
 it('keeps rollback and forced urgency even if the latest later matches the running version', () => {
-  expect(decide(input({ latest: older })).knownBad).toBe('rollback')
+  expect(resolveAttention(input({ latest: older })).knownBad).toBe('rollback')
   expect(
-    decide(input({ latest: current, knownBad: 'rollback' })).state.reason,
+    resolveAttention(input({ latest: current, knownBad: 'rollback' })).state
+      .reason,
   ).toBe('rollback')
   const forced = { ...current, forceUpdateBefore: '2026-11-12T00:00:00Z' }
-  expect(decide(input({ latest: forced })).state.reason).toBe('forced')
-  expect(decide(input({ latest: forced, knownBad: 'rollback' })).knownBad).toBe(
+  expect(resolveAttention(input({ latest: forced })).state.reason).toBe(
     'forced',
   )
+  expect(
+    resolveAttention(input({ latest: forced, knownBad: 'rollback' })).knownBad,
+  ).toBe('forced')
 })
 
 it('does not apply an old forced cutoff', () => {
   expect(
-    decide(
+    resolveAttention(
       input({ latest: { ...current, forceUpdateBefore: current.builtAt } }),
     ).state.attention,
   ).toBe('none')
 })
 
 it('shares prompt dismissal until urgent, without muting urgent', () => {
-  const snoozes = { promptAt: at(13) }
-  expect(decide(input({ now: at(14), snoozes })).state.reason).toBe('dismiss')
-  expect(decide(input({ now: at(24), snoozes })).state.reason).toBe('expired')
+  const dismissal = { promptAt: at(13) }
+  expect(resolveAttention(input({ now: at(14), dismissal })).state.reason).toBe(
+    'dismiss',
+  )
+  expect(resolveAttention(input({ now: at(24), dismissal })).state.reason).toBe(
+    'expired',
+  )
   expect(
-    decide(input({ now: at(14), snoozes: { promptAt: at(11) } })).state.reason,
+    resolveAttention(input({ now: at(14), dismissal: { promptAt: at(11) } }))
+      .state.reason,
   ).toBe('stale')
   expect(
-    decide(input({ now: at(14), snoozes, latest: older })).state.reason,
+    resolveAttention(input({ now: at(14), dismissal, latest: older })).state
+      .reason,
   ).toBe('rollback')
 })
 
@@ -78,15 +90,17 @@ it('supports an explicit prompt snooze and disabled age levels', () => {
   })
 
   expect(
-    decide(input({ now: at(2), escalation, snoozes: { promptAt: at(2) } }))
-      .nextAt,
+    resolveAttention(
+      input({ now: at(2), escalation, dismissal: { promptAt: at(2) } }),
+    ).nextAt,
   ).toBe(at(3))
   expect(
-    decide(input({ now: at(3), escalation, snoozes: { promptAt: at(2) } }))
-      .state.reason,
+    resolveAttention(
+      input({ now: at(3), escalation, dismissal: { promptAt: at(2) } }),
+    ).state.reason,
   ).toBe('stale')
   expect(
-    decide(
+    resolveAttention(
       input({
         now: at(40),
         escalation: resolveEscalation({ prompt: false, urgent: false }),
@@ -94,7 +108,7 @@ it('supports an explicit prompt snooze and disabled age levels', () => {
     ).state.reason,
   ).toBe('new-build')
   expect(
-    decide(
+    resolveAttention(
       input({ now: at(1), escalation: resolveEscalation({ prompt: false }) }),
     ).nextAt,
   ).toBe(at(24))
@@ -102,11 +116,11 @@ it('supports an explicit prompt snooze and disabled age levels', () => {
 
 it('with urgent disabled, a default prompt dismissal has no expiry', () => {
   expect(
-    decide(
+    resolveAttention(
       input({
         now: at(40),
         escalation: resolveEscalation({ urgent: false }),
-        snoozes: { promptAt: at(13) },
+        dismissal: { promptAt: at(13) },
       }),
     ),
   ).toEqual({

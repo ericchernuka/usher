@@ -1,20 +1,16 @@
 import * as v from 'valibot'
 import type { ResolvedEscalation } from './duration'
+import type { PromptDismissal } from './prompt-dismissal'
 import { VersionInfoSchema, type UpdateState, type VersionInfo } from './types'
-
-export interface Snoozes {
-  promptAt?: number
-}
 
 export type KnownBad = 'rollback' | 'forced'
 
-export interface PolicyInput {
+export interface AttentionInput {
   current: VersionInfo
   latest: VersionInfo
   now: number
-  clockOffset: number
   knownBad?: KnownBad
-  snoozes: Snoozes
+  dismissal: PromptDismissal
   escalation: ResolvedEscalation
 }
 
@@ -24,7 +20,7 @@ export interface Decision {
   nextAt?: number
 }
 
-function detectBad(i: PolicyInput): KnownBad | undefined {
+function detectBad(i: AttentionInput): KnownBad | undefined {
   const cutoff = Date.parse(i.latest.forceUpdateBefore ?? '')
 
   if (cutoff > Date.parse(i.current.builtAt)) {
@@ -38,14 +34,14 @@ function detectBad(i: PolicyInput): KnownBad | undefined {
   return i.knownBad
 }
 
-function promptUntil(i: PolicyInput): number | undefined {
-  const at = i.snoozes.promptAt
+function promptUntil(i: AttentionInput): number | undefined {
+  const at = i.dismissal.promptAt
   const duration = i.escalation.prompt?.snoozeMs
 
   return at !== undefined && duration !== undefined ? at + duration : undefined
 }
 
-function nextAt(i: PolicyInput): number | undefined {
+function nextAt(i: AttentionInput): number | undefined {
   const builtAt = Date.parse(i.current.builtAt)
 
   const serverTimes = [
@@ -59,47 +55,44 @@ function nextAt(i: PolicyInput): number | undefined {
       return []
     }
 
-    const client = time - i.clockOffset
-
-    return client > i.now ? [client] : []
+    return time > i.now ? [time] : []
   })
 
   return future.length ? Math.min(...future) : undefined
 }
 
-function attention(i: PolicyInput): UpdateState {
+function attention(i: AttentionInput): UpdateState {
   const latest = i.latest
 
   if (latest.version === i.current.version) {
     return { attention: 'none', reason: 'caught-up', latest }
   }
 
-  const serverNow = i.now + i.clockOffset
   const builtAt = Date.parse(i.current.builtAt)
   const { prompt, urgent } = i.escalation
 
-  if (urgent && serverNow >= builtAt + urgent.afterMs) {
+  if (urgent && i.now >= builtAt + urgent.afterMs) {
     return { attention: 'urgent', reason: 'expired', latest }
   }
 
-  if (!prompt || serverNow < builtAt + prompt.afterMs) {
+  if (!prompt || i.now < builtAt + prompt.afterMs) {
     return { attention: 'passive', reason: 'new-build', latest }
   }
 
-  const dismissedAt = i.snoozes.promptAt
+  const dismissedAt = i.dismissal.promptAt
   const until = promptUntil(i)
 
   const dismissed =
     dismissedAt !== undefined &&
     dismissedAt >= builtAt + prompt.afterMs &&
-    (until === undefined || serverNow < until)
+    (until === undefined || i.now < until)
 
   return dismissed
     ? { attention: 'passive', reason: 'dismiss', latest }
     : { attention: 'prompt', reason: 'stale', latest }
 }
 
-export function decide(i: PolicyInput): Decision {
+export function resolveAttention(i: AttentionInput): Decision {
   const knownBad = detectBad(i)
 
   if (knownBad) {

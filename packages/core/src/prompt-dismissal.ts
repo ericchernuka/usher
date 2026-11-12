@@ -1,25 +1,28 @@
 import * as v from 'valibot'
-import type { Host, StorageChange } from './host'
-import type { Snoozes } from './policy'
+import type { BrowserEnvironment, StorageChange } from './browser'
+
+export interface PromptDismissal {
+  promptAt?: number
+}
 
 const Finite = v.pipe(v.number(), v.finite())
 
 const lenient = <const T extends v.GenericSchema>(schema: T) =>
   v.fallback(v.optional(schema), undefined)
 
-const StoredSnoozes = v.pipe(
+const StoredDismissal = v.pipe(
   v.object({
     promptAt: lenient(Finite),
   }),
-  v.transform(({ promptAt }): Snoozes => ({
+  v.transform(({ promptAt }): PromptDismissal => ({
     ...(promptAt !== undefined && { promptAt }),
   })),
 )
 
-const StoredSnoozesJson = v.pipe(v.string(), v.parseJson(), StoredSnoozes)
+const StoredDismissalJson = v.pipe(v.string(), v.parseJson(), StoredDismissal)
 
-function parse(raw: string): Snoozes | undefined {
-  const result = v.safeParse(StoredSnoozesJson, raw)
+function parse(raw: string): PromptDismissal | undefined {
+  const result = v.safeParse(StoredDismissalJson, raw)
 
   return result.success ? result.output : undefined
 }
@@ -27,38 +30,41 @@ function parse(raw: string): Snoozes | undefined {
 const max = (x?: number, y?: number) =>
   x === undefined ? y : y === undefined ? x : Math.max(x, y)
 
-function later(a: Snoozes, b: Snoozes): Snoozes {
+function later(a: PromptDismissal, b: PromptDismissal): PromptDismissal {
   const promptAt = max(a.promptAt, b.promptAt)
 
   return promptAt === undefined ? {} : { promptAt }
 }
 
-function isOurArea(e: StorageChange, host: Host) {
+function isOurArea(e: StorageChange, browser: BrowserEnvironment) {
   try {
-    return e.storageArea === host.localStorage
+    return e.storageArea === browser.localStorage
   } catch {
     return false
   }
 }
 
-export function createSnoozes(storageKey: string, host: Host) {
+export function createPromptDismissal(
+  storageKey: string,
+  browser: BrowserEnvironment,
+) {
   const key = `${storageKey}:snooze`
-  let memory: Snoozes = {}
+  let memory: PromptDismissal = {}
   let unsynced = false
 
   return {
-    get: (): Snoozes => memory,
+    get: (): PromptDismissal => memory,
 
     hydrate() {
       try {
-        const raw = host.localStorage.getItem(key)
+        const raw = browser.localStorage.getItem(key)
         const stored = (raw === null ? undefined : parse(raw)) ?? {}
         memory = unsynced ? later(memory, stored) : stored
       } catch {}
     },
 
     onStorage(e: StorageChange): boolean {
-      if (!isOurArea(e, host)) {
+      if (!isOurArea(e, browser)) {
         return false
       }
 
@@ -81,11 +87,11 @@ export function createSnoozes(storageKey: string, host: Host) {
       return true
     },
 
-    write(next: Snoozes) {
+    write(next: PromptDismissal) {
       memory = next
 
       try {
-        host.localStorage.setItem(key, JSON.stringify(memory))
+        browser.localStorage.setItem(key, JSON.stringify(memory))
         unsynced = false
       } catch {
         unsynced = true

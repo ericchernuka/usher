@@ -1,11 +1,15 @@
 import { appVersion, versionUrl } from 'virtual:app-version'
 import {
-  createAppUpdatesCore,
+  createAppUpdatesStore,
   type AppUpdates,
   type AppUpdatesOptions,
-} from './core'
+} from './app-updates'
 
-export type { AppUpdates, AppUpdatesOptions, ReloadBlocker } from './core'
+export type {
+  AppUpdates,
+  AppUpdatesOptions,
+  ReloadBlocker,
+} from './app-updates'
 
 export {
   connectPrompt,
@@ -35,7 +39,7 @@ export type {
  * No side effects until the first subscribe(); polls while subscribed.
  */
 export function createAppUpdates(options: AppUpdatesOptions = {}): AppUpdates {
-  return createAppUpdatesCore({
+  return createAppUpdatesStore({
     ...options,
     current: appVersion,
     url: versionUrl,

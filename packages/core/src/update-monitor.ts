@@ -1,20 +1,21 @@
-import type { Host, StorageChange } from './host'
+import type { BrowserEnvironment, StorageChange } from './browser'
 import * as v from 'valibot'
-import { isVersionInfo } from './policy'
-import type { createMachine } from './machine'
-import type { createSnoozes } from './snoozes'
+import { isVersionInfo } from './attention'
+import type { createPromptDismissal } from './prompt-dismissal'
 import type { VersionInfo } from './types'
 
 const MIN = 60_000
 const FETCH_TIMEOUT_MS = 30_000
 const MAX_TIMER_MS = 2 ** 31 - 1
+const CLOCK_JITTER_MS = 2_000
 
-export interface EngineDeps {
+export interface UpdateMonitorOptions {
   url: string
   pollMs: number
-  machine: ReturnType<typeof createMachine>
-  snoozes: ReturnType<typeof createSnoozes>
-  host: Host
+  evaluate: (latest?: VersionInfo) => void
+  nextDeadline: () => number | undefined
+  dismissal: ReturnType<typeof createPromptDismissal>
+  browser: BrowserEnvironment
 }
 
 type Running = {
@@ -55,10 +56,10 @@ const StorageFields = v.object({
 
 function readStorageChange(
   event: Event,
-  host: Host,
+  browser: BrowserEnvironment,
 ): StorageChange | undefined {
   try {
-    const storageArea = host.localStorage
+    const storageArea = browser.localStorage
 
     if (!('storageArea' in event) || event.storageArea !== storageArea) {
       return undefined
@@ -72,22 +73,43 @@ function readStorageChange(
   }
 }
 
-class Engine {
-  readonly deps: EngineDeps
+class UpdateMonitor {
+  readonly deps: UpdateMonitorOptions
 
-  constructor(deps: EngineDeps) {
+  constructor(deps: UpdateMonitorOptions) {
     this.deps = deps
   }
-  visible = () => this.deps.host.document.visibilityState === 'visible'
+  visible = () => this.deps.browser.document.visibilityState === 'visible'
 
   running: Running | undefined
 
   lastCheck = -Infinity
+  serverMinusTick: number | undefined
+
+  serverNow = () =>
+    this.serverMinusTick === undefined
+      ? Date.now()
+      : this.serverMinusTick + tick()
+
+  observeServerTime = (serverTime: number | undefined) => {
+    if (serverTime === undefined) {
+      return
+    }
+
+    const next = serverTime - tick()
+
+    if (
+      this.serverMinusTick === undefined ||
+      Math.abs(next - this.serverMinusTick) >= CLOCK_JITTER_MS
+    ) {
+      this.serverMinusTick = next
+    }
+  }
 
   sinceCheck = () => tick() - this.lastCheck
 
   evaluate = (latest?: VersionInfo) => {
-    this.deps.machine.apply(latest)
+    this.deps.evaluate(latest)
     this.reschedule()
   }
 
@@ -103,11 +125,11 @@ class Engine {
       return
     }
 
-    const deadline = this.deps.machine.nextAt
+    const deadline = this.deps.nextDeadline()
     const delays = [this.lastCheck + this.deps.pollMs - tick()]
 
     if (deadline !== undefined) {
-      delays.push(deadline - Date.now())
+      delays.push(deadline - this.serverNow())
     }
 
     const delay = Math.min(Math.max(0, Math.min(...delays)), MAX_TIMER_MS)
@@ -139,7 +161,7 @@ class Engine {
     )
 
     try {
-      const res = await this.deps.host.fetch(
+      const res = await this.deps.browser.fetch(
         `${this.deps.url}?t=${Date.now()}`,
         {
           cache: 'no-store',
@@ -153,7 +175,7 @@ class Engine {
         return
       }
 
-      this.deps.machine.observeServerTime(result.serverTime, tick())
+      this.observeServerTime(result.serverTime)
       this.evaluate(result.latest)
     } catch {
     } finally {
@@ -171,10 +193,10 @@ class Engine {
   }
 
   listenStorage = () => {
-    this.listen(this.deps.host.window, 'storage', e => {
-      const change = readStorageChange(e, this.deps.host)
+    this.listen(this.deps.browser.window, 'storage', e => {
+      const change = readStorageChange(e, this.deps.browser)
 
-      if (change && this.deps.snoozes.onStorage(change)) {
+      if (change && this.deps.dismissal.onStorage(change)) {
         this.evaluate()
       }
     })
@@ -182,15 +204,15 @@ class Engine {
 
   start = () => {
     this.running = { cleanups: [] }
-    this.deps.snoozes.hydrate()
-    this.listen(this.deps.host.document, 'visibilitychange', () => {
+    this.deps.dismissal.hydrate()
+    this.listen(this.deps.browser.document, 'visibilitychange', () => {
       this.evaluate()
 
       if (this.visible() && this.sinceCheck() >= MIN) {
         void this.check()
       }
     })
-    this.listen(this.deps.host.window, 'focus', () => {
+    this.listen(this.deps.browser.window, 'focus', () => {
       if (this.sinceCheck() >= MIN) {
         void this.check()
       }
@@ -214,6 +236,6 @@ class Engine {
   }
 }
 
-export function createEngine(deps: EngineDeps) {
-  return new Engine(deps)
+export function createUpdateMonitor(options: UpdateMonitorOptions) {
+  return new UpdateMonitor(options)
 }

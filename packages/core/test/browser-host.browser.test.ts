@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createAppUpdatesCore } from '../src/core'
+import { createAppUpdatesStore } from '../src/app-updates'
 import { createAppUpdates } from '../src/index'
 import type { VersionInfo } from '../src/types'
 import { captureNavigations } from './navigation'
@@ -51,7 +51,7 @@ describe('the store on the real browser', () => {
   })
 
   it('given a tab that stays open, when it regains focus after a minute, then it checks again and finds the new build', async () => {
-    const updates = createAppUpdatesCore({
+    const updates = createAppUpdatesStore({
       current,
       url: '/version.json',
     })
@@ -81,7 +81,7 @@ describe('the store on the real browser', () => {
         }),
       ),
     )
-    const updates = createAppUpdatesCore({ current, url: '/version.json' })
+    const updates = createAppUpdatesStore({ current, url: '/version.json' })
     const stop = updates.subscribe(() => {})
     await vi.waitFor(() => expect(updates.getState().attention).toBe('prompt'))
     window.dispatchEvent(
@@ -97,7 +97,7 @@ describe('the store on the real browser', () => {
 
   it('given a chunk error, then the library does not prevent it or reload', () => {
     const navigations = captureNavigations()
-    const updates = createAppUpdatesCore({ current, url: '/version.json' })
+    const updates = createAppUpdatesStore({ current, url: '/version.json' })
     const stop = updates.subscribe(() => {})
     const event = new Event('vite:preloadError', { cancelable: true })
     window.dispatchEvent(event)

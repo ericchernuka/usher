@@ -1,5 +1,5 @@
 import { test as base, vi } from 'vitest'
-import type { AppUpdates, AppUpdatesOptions } from '../src/core'
+import type { AppUpdates, AppUpdatesOptions } from '../src/app-updates'
 import type { VersionInfo } from '../src/types'
 import { installClock } from './clock'
 import { createFakeHost, createStore } from './fake-host'

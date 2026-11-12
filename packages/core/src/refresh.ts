@@ -1,4 +1,4 @@
-import type { Host } from './host'
+import type { BrowserEnvironment } from './browser'
 import type { ReloadDetails, ReloadFn } from './types'
 
 /** Return true to block the reload. Must be synchronous. */
@@ -45,14 +45,14 @@ async function perform(
   }
 }
 
-export interface ReloadsOptions {
+export interface RefreshOptions {
   reload?: ReloadFn
-  host: Host
+  browser: BrowserEnvironment
 }
 
-export function createReloads({ reload, host }: ReloadsOptions) {
+export function createRefresh({ reload, browser }: RefreshOptions) {
   const blockers = createBlockers()
-  const performReload = reload ?? (() => host.location.reload())
+  const performReload = reload ?? (() => browser.location.reload())
   let inFlight: Promise<boolean> | undefined
 
   function request(details: ReloadDetails): Promise<boolean> {
