@@ -1,11 +1,22 @@
-import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { build, createLogger } from 'vite'
+import { build, createLogger, createServer, type InlineConfig } from 'vite'
 import { describe, expect, it, vi } from 'vitest'
 import { resolveBuildFacts } from '../src/build-facts'
 import { versionMiddleware } from '../src/dev-server'
-import { appVersion } from '../src/index'
+import {
+  appVersion,
+  type SkewProtectionAdapter,
+  type SkewProtectionFiles,
+} from '../src/index'
 
 describe('resolveBuildFacts', () => {
   it('prefers env and normalizes dates', () => {
@@ -49,11 +60,6 @@ describe('appVersion plugin', () => {
         appVersion({
           version: 'sha-test',
           commitTime: '2026-11-11T09:00:00Z',
-          skewProtection: {
-            bundleAssets: ({ base }) => [
-              { fileName: 'adapter.txt', source: base },
-            ],
-          },
         }),
       ],
     })
@@ -63,7 +69,6 @@ describe('appVersion plugin', () => {
     )
 
     expect(json.version).toBe('sha-test')
-    expect(readFileSync(join(root, 'dist/adapter.txt'), 'utf8')).toBe('/app/')
 
     const html = readFileSync(join(root, 'dist/index.html'), 'utf8')
     const js = html.match(/src="\/app\/(assets\/[^"]+\.js)"/)?.[1]
@@ -95,38 +100,146 @@ it('reports a missing commit time through the build logger', async () => {
   expect(warn).toHaveBeenCalledWith(expect.stringContaining('no commit time'))
 })
 
-it.each(['bundleAssets', 'writeBundle'] as const)(
-  'fails the build when an adapter rejects it during %s',
-  async phase => {
-    const root = mkdtempSync(join(tmpdir(), 'app-version-rejected-'))
-    writeFileSync(join(root, 'index.html'), '<main>App</main>')
+it('warns that a relative base resolves the version file from the page URL', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'app-version-relative-'))
+  writeFileSync(join(root, 'index.html'), '<main>App</main>')
+  const logger = createLogger('warn')
+  const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
 
-    await expect(
-      build({
-        root,
-        logLevel: 'silent',
-        plugins: [
-          appVersion({
-            version: 'test',
-            commitTime: '2026-11-11T09:00:00Z',
-            skewProtection: {
-              bundleAssets(context) {
-                if (phase === 'bundleAssets') {
-                  context.error('adapter rejected the build')
-                }
+  await build({
+    root,
+    base: './',
+    customLogger: logger,
+    plugins: [
+      appVersion({ version: 'test', commitTime: '2026-11-11T09:00:00Z' }),
+    ],
+  })
 
-                return []
-              },
-              writeBundle(context) {
-                context.error('adapter rejected the build')
-              },
-            },
-          }),
-        ],
+  expect(warn).toHaveBeenCalledWith(
+    expect.stringContaining('base "./" is relative'),
+  )
+})
+
+it('serves the version file from the dev server, uncached', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'app-version-dev-'))
+  writeFileSync(join(root, 'index.html'), '<main>App</main>')
+
+  const server = await createServer({
+    root,
+    logLevel: 'silent',
+    server: { port: 0, host: '127.0.0.1' },
+    plugins: [
+      appVersion({ version: 'sha-dev', commitTime: '2026-11-11T09:00:00Z' }),
+    ],
+  })
+
+  try {
+    await server.listen()
+    const res = await fetch(`${server.resolvedUrls?.local[0]}version.json`)
+
+    expect(res.headers.get('cache-control')).toBe('no-store')
+    expect(await res.json()).toMatchObject({ version: 'sha-dev' })
+  } finally {
+    await server.close()
+  }
+})
+
+const stub = (files: SkewProtectionFiles): SkewProtectionAdapter => ({
+  name: 'stub-host',
+  files: clientBuild => ({
+    ...files,
+    clientFiles: [
+      { fileName: 'build.json', source: JSON.stringify(clientBuild) },
+      ...(files.clientFiles ?? []),
+    ],
+  }),
+})
+
+async function buildWith(
+  adapter: SkewProtectionAdapter,
+  config: InlineConfig = {},
+) {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'app-version-stub-')))
+  writeFileSync(join(root, 'index.html'), '<main>App</main>')
+  writeFileSync(join(root, 'server.js'), 'export default 1\n')
+
+  await build({
+    root,
+    base: '/app/',
+    logLevel: 'silent',
+    ...config,
+    plugins: [
+      appVersion({
+        version: 'test',
+        commitTime: '2026-11-11T09:00:00Z',
+        skewProtection: adapter,
       }),
-    ).rejects.toThrow('adapter rejected the build')
-  },
-)
+    ],
+  })
+
+  return root
+}
+
+describe('given a skew-protection adapter', () => {
+  it('when the client is built, then it describes the build to the adapter and emits its client files', async () => {
+    const root = await buildWith(
+      stub({
+        clientFiles: [{ fileName: '_host/routes.txt', source: 'routes' }],
+      }),
+    )
+
+    expect(readFileSync(join(root, 'dist/_host/routes.txt'), 'utf8')).toBe(
+      'routes',
+    )
+    expect(
+      JSON.parse(readFileSync(join(root, 'dist/build.json'), 'utf8')),
+    ).toEqual({ base: '/app/', assetsPrefix: '/app/assets/', root })
+  })
+
+  it('when the adapter has private files, then they are written relative to the root, outside outDir', async () => {
+    const root = await buildWith(
+      stub({
+        privateFiles: [{ fileName: 'edge/worker.js', source: 'worker' }],
+      }),
+    )
+
+    expect(readFileSync(join(root, 'edge/worker.js'), 'utf8')).toBe('worker')
+    expect(existsSync(join(root, 'dist/edge'))).toBe(false)
+  })
+
+  it('when a private file would land inside outDir, then the build fails naming the adapter and the file', async () => {
+    await expect(
+      buildWith(
+        stub({ privateFiles: [{ fileName: 'dist/worker.js', source: '' }] }),
+      ),
+    ).rejects.toThrow(/stub-host: "dist\/worker\.js" must be outside outDir/)
+  })
+
+  it('when the adapter returns warnings, then they reach the build logger with its name', async () => {
+    const logger = createLogger('warn')
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+
+    await buildWith(stub({ warnings: ['check your routes'] }), {
+      customLogger: logger,
+    })
+
+    expect(warn).toHaveBeenCalledWith(
+      '[app-version] stub-host: check your routes',
+    )
+  })
+
+  it('when the app is built for SSR, then nothing from the adapter is written', async () => {
+    const root = await buildWith(
+      stub({
+        privateFiles: [{ fileName: 'edge/worker.js', source: 'worker' }],
+      }),
+      { build: { ssr: 'server.js' } },
+    )
+
+    expect(existsSync(join(root, 'edge/worker.js'))).toBe(false)
+    expect(readdirSync(join(root, 'dist'))).not.toContain('build.json')
+  })
+})
 
 describe('plugin and edge (first review #12)', () => {
   it('treats empty CI variables as missing and accepts an explicit commit time', () => {

@@ -1,14 +1,15 @@
-import { resolve } from 'node:path'
 import type { Plugin, ResolvedConfig } from 'vite'
 import type { BuildFacts } from '@app-version/core'
-import type { SkewProtectionAdapter, SkewProtectionContext } from './adapter'
+import type { SkewProtectionAdapter } from './adapter'
+import { adapterFiles, writePrivateFiles } from './adapter-files'
 import { resolveBuildFacts } from './build-facts'
-import { isRelativeBase, pathBase, versionMiddleware } from './dev-server'
+import { isRelativeBase, versionMiddleware } from './dev-server'
 
 export type {
+  ClientBuild,
+  GeneratedFile,
   SkewProtectionAdapter,
-  SkewProtectionAsset,
-  SkewProtectionContext,
+  SkewProtectionFiles,
 } from './adapter'
 
 export interface AppVersionOptions {
@@ -30,20 +31,6 @@ export interface AppVersionOptions {
 const VIRTUAL_ID = 'virtual:app-version'
 const RESOLVED_ID = `\0${VIRTUAL_ID}`
 
-function skewContext(
-  config: ResolvedConfig,
-  fail: (message: string) => never,
-): SkewProtectionContext {
-  return {
-    base: pathBase(config.base),
-    assetsDir: config.build.assetsDir,
-    root: config.root,
-    outDir: resolve(config.root, config.build.outDir),
-    logger: config.logger,
-    error: fail,
-  }
-}
-
 interface HookEnvironment {
   readonly environment?: { readonly config: { readonly consumer?: string } }
 }
@@ -53,6 +40,9 @@ function isServerBuild(config: ResolvedConfig, hook: HookEnvironment) {
     Boolean(config.build.ssr) || hook.environment?.config.consumer === 'server'
   )
 }
+
+const relativeBaseWarning = (base: string, fileName: string) =>
+  `[app-version] base "${base}" is relative; ${fileName} is resolved from the page URL.`
 
 /**
  * Writes `version.json` into the client build and embeds the same build facts
@@ -72,9 +62,7 @@ export function appVersion(options: AppVersionOptions = {}): Plugin {
       })
 
       if (isRelativeBase(config.base)) {
-        config.logger.warn(
-          `[app-version] base "${config.base}" is relative; ${fileName} is resolved from the page URL.`,
-        )
+        config.logger.warn(relativeBaseWarning(config.base, fileName))
       }
     },
     resolveId: id => (id === VIRTUAL_ID ? RESOLVED_ID : undefined),
@@ -99,21 +87,34 @@ export function appVersion(options: AppVersionOptions = {}): Plugin {
         source: `${JSON.stringify(facts, null, 2)}\n`,
       })
 
-      const context = skewContext(config, m => this.error(m))
-      const assets = options.skewProtection?.bundleAssets?.(context) ?? []
+      const adapter = options.skewProtection
 
-      for (const asset of assets) {
-        this.emitFile({ type: 'asset', ...asset })
-      }
-    },
-    writeBundle() {
-      if (isServerBuild(config, this)) {
+      if (!adapter) {
         return
       }
 
-      options.skewProtection?.writeBundle?.(
-        skewContext(config, m => this.error(m)),
-      )
+      const files = adapterFiles(adapter, config)
+
+      if (files.error) {
+        this.error(files.error)
+      }
+
+      files.warnings.forEach(warning => config.logger.warn(warning))
+
+      for (const file of files.clientFiles) {
+        this.emitFile({
+          type: 'asset',
+          fileName: file.fileName,
+          source: file.source,
+        })
+      }
+    },
+    writeBundle() {
+      const adapter = options.skewProtection
+
+      if (adapter && !isServerBuild(config, this)) {
+        writePrivateFiles(adapterFiles(adapter, config).privateFiles)
+      }
     },
   }
 }

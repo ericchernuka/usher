@@ -8,9 +8,13 @@ import {
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { build, createLogger, type Logger } from 'vite'
+import { build } from 'vite'
 import { describe, expect, it, vi } from 'vitest'
-import { appVersion, type SkewProtectionAdapter } from '@app-version/vite'
+import {
+  appVersion,
+  type ClientBuild,
+  type SkewProtectionAdapter,
+} from '@app-version/vite'
 import { cloudflarePages, cloudflareWorkers } from '../src/index'
 
 const assetsHtml = () =>
@@ -18,17 +22,16 @@ const assetsHtml = () =>
     headers: { 'content-type': 'text/html' },
   })
 
-async function buildFixture(
-  skewProtection: SkewProtectionAdapter,
-  base = '/',
-  customLogger?: Logger,
-) {
-  const root = mkdtempSync(join(tmpdir(), 'app-version-skew-'))
+const tempRoot = () => mkdtempSync(join(tmpdir(), 'app-version-skew-'))
 
-  if (customLogger) {
-    mkdirSync(join(root, 'functions'))
-  }
+const clientBuild = (base = '/', root = tempRoot()): ClientBuild => ({
+  base,
+  assetsPrefix: `${base}assets/`,
+  root,
+})
 
+async function buildFixture(skewProtection: SkewProtectionAdapter) {
+  const root = tempRoot()
   writeFileSync(
     join(root, 'index.html'),
     `<script type="module" src="/main.js"></script>`,
@@ -36,9 +39,7 @@ async function buildFixture(
   writeFileSync(join(root, 'main.js'), `console.log("hi")`)
   await build({
     root,
-    base,
     logLevel: 'silent',
-    ...(customLogger && { customLogger }),
     plugins: [appVersion({ version: 'sha', skewProtection })],
   })
 
@@ -57,9 +58,7 @@ function fakeEnv(files: Record<string, string>, r2: Record<string, string>) {
           })
         }
 
-        return new Response('<!doctype html>', {
-          headers: { 'content-type': 'text/html' },
-        })
+        return assetsHtml()
       },
     },
     BUILD_CACHE: {
@@ -88,19 +87,40 @@ type Worker = {
   }
 }
 
-describe('skewProtection: pages', () => {
-  it('emits _worker.js and _routes.json limited to the assets prefix', async () => {
-    const root = await buildFixture(cloudflarePages())
+async function loadWorker(source: string): Promise<Worker> {
+  const file = join(tempRoot(), 'worker.mjs')
+  writeFileSync(file, source)
 
-    const routes = JSON.parse(
-      readFileSync(join(root, 'dist/_routes.json'), 'utf8'),
-    )
+  return import(pathToFileURL(file).href)
+}
 
-    expect(routes).toEqual({ version: 1, include: ['/assets/*'], exclude: [] })
+const fileNamed = (
+  files: ReadonlyArray<{ fileName: string; source: string }> = [],
+  fileName: string,
+) => {
+  const file = files.find(candidate => candidate.fileName === fileName)
 
-    const worker: Worker = await import(
-      pathToFileURL(join(root, 'dist/_worker.js')).href
-    )
+  if (!file) {
+    throw new Error(`adapter did not describe ${fileName}`)
+  }
+
+  return file.source
+}
+
+describe('cloudflarePages()', () => {
+  it('describes _worker.js and a _routes.json limited to the assets prefix', async () => {
+    const { clientFiles, privateFiles, warnings } =
+      cloudflarePages().files(clientBuild())
+
+    expect(privateFiles).toBeUndefined()
+    expect(warnings).toEqual([])
+    expect(JSON.parse(fileNamed(clientFiles, '_routes.json'))).toEqual({
+      version: 1,
+      include: ['/assets/*'],
+      exclude: [],
+    })
+
+    const worker = await loadWorker(fileNamed(clientFiles, '_worker.js'))
 
     const env = fakeEnv(
       { '/assets/new-abc.js': 'new' },
@@ -122,25 +142,23 @@ describe('skewProtection: pages', () => {
     )
   })
 
-  it('warns that Pages ignores functions/ once a _worker.js exists', async () => {
-    const logger = createLogger('silent')
-    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
-    await buildFixture(cloudflarePages(), '/', logger)
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('functions/'))
+  it('warns that Pages ignores functions/ once a _worker.js exists', () => {
+    const root = tempRoot()
+    mkdirSync(join(root, 'functions'))
+
+    expect(cloudflarePages().files(clientBuild('/', root)).warnings).toEqual([
+      expect.stringContaining('functions/'),
+    ])
   })
 
   it('respects base: routes and R2 keys', async () => {
-    const root = await buildFixture(cloudflarePages(), '/app/')
+    const { clientFiles } = cloudflarePages().files(clientBuild('/app/'))
 
-    const routes = JSON.parse(
-      readFileSync(join(root, 'dist/_routes.json'), 'utf8'),
-    )
+    expect(JSON.parse(fileNamed(clientFiles, '_routes.json')).include).toEqual([
+      '/app/assets/*',
+    ])
 
-    expect(routes.include).toEqual(['/app/assets/*'])
-
-    const worker: Worker = await import(
-      pathToFileURL(join(root, 'dist/_worker.js')).href
-    )
+    const worker = await loadWorker(fileNamed(clientFiles, '_worker.js'))
 
     const res = await worker.default.fetch(
       new Request('https://app.test/app/assets/old-123.js'),
@@ -151,19 +169,23 @@ describe('skewProtection: pages', () => {
   })
 })
 
-describe('skewProtection: workers', () => {
-  it('writes the worker outside outDir and nothing extra into dist', async () => {
-    const root = await buildFixture(cloudflareWorkers({ r2Binding: 'CHUNKS' }))
-    expect(existsSync(join(root, 'dist/_worker.js'))).toBe(false)
-    const file = join(root, 'dist-worker/index.js')
-    const source = readFileSync(file, 'utf8')
-    expect(source).toContain('"binding":"CHUNKS"')
+describe('cloudflareWorkers()', () => {
+  it('describes one private worker file and nothing for the client output', async () => {
+    const { clientFiles, privateFiles } = cloudflareWorkers({
+      r2Binding: 'CHUNKS',
+    }).files(clientBuild())
 
-    const worker: Worker = await import(pathToFileURL(file).href)
-    const env = fakeEnv({}, {})
+    expect(clientFiles).toBeUndefined()
+    expect(privateFiles?.map(file => file.fileName)).toEqual([
+      'dist-worker/index.js',
+    ])
 
-    const customEnv = {
-      ...env,
+    const worker = await loadWorker(
+      fileNamed(privateFiles, 'dist-worker/index.js'),
+    )
+
+    const env = {
+      ...fakeEnv({}, {}),
       CHUNKS: {
         get: async () => ({
           body: 'old',
@@ -175,27 +197,38 @@ describe('skewProtection: workers', () => {
 
     const res = await worker.default.fetch(
       new Request('https://app.test/assets/x.js'),
-      customEnv,
+      env,
     )
 
     expect(await res.text()).toBe('old')
   })
 
-  it('accepts an .mjs workerFile', async () => {
-    const root = await buildFixture(
-      cloudflareWorkers({ workerFile: 'edge/worker.mjs' }),
-    )
+  it('accepts an .mjs workerFile', () => {
+    const { privateFiles } = cloudflareWorkers({
+      workerFile: 'edge/worker.mjs',
+    }).files(clientBuild())
 
-    const worker: Worker = await import(
-      pathToFileURL(join(root, 'edge/worker.mjs')).href
-    )
+    expect(privateFiles?.map(file => file.fileName)).toEqual([
+      'edge/worker.mjs',
+    ])
+  })
+})
 
-    const res = await worker.default.fetch(
-      new Request('https://app.test/assets/old-123.js'),
-      fakeEnv({}, { 'assets/old-123.js': 'old' }),
-    )
+describe('through the Vite plugin', () => {
+  it('a Pages build has the worker and routes in the client output', async () => {
+    const root = await buildFixture(cloudflarePages())
 
-    expect(await res.text()).toBe('old')
+    expect(existsSync(join(root, 'dist/_worker.js'))).toBe(true)
+    expect(
+      JSON.parse(readFileSync(join(root, 'dist/_routes.json'), 'utf8')).include,
+    ).toEqual(['/assets/*'])
+  })
+
+  it('a Workers build has the worker outside outDir and nothing extra in dist', async () => {
+    const root = await buildFixture(cloudflareWorkers())
+
+    expect(existsSync(join(root, 'dist-worker/index.js'))).toBe(true)
+    expect(existsSync(join(root, 'dist/_worker.js'))).toBe(false)
   })
 
   it('refuses a workerFile inside outDir', async () => {

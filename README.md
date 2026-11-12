@@ -33,7 +33,7 @@ Serve `version.json` uncached (the client also adds a `t` query parameter):
 
 ### Skew protection (optional)
 
-Pass an adapter from a provider package. Each factory returns the same `SkewProtectionAdapter` interface, with hooks for bundle assets or output outside the client directory:
+Pass an adapter from a provider package. Each factory returns a `SkewProtectionAdapter`: a `name` and a `files(build)` function that describes the files the host needs. The plugin writes them.
 
 ```ts
 import { cloudflarePages, cloudflareWorkers } from '@app-version/cloudflare'

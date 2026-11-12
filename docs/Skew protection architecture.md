@@ -21,7 +21,7 @@ The `appVersion()` plugin writes `version.json` and embeds the same build facts 
 
 The version defaults to environment values and then Git. Commit time defaults to an explicit option, `APP_COMMIT_TIME`, and then Git. If no commit time is available, the plugin warns and uses build time, which prevents reliable detection of an old-commit redeploy. Malformed configured timestamps fail the build.
 
-The plugin serves the version file during development and emits it only for client builds. A hosting adapter can add output during bundle generation or after files have been written. An adapter can fail the build through its context.
+The plugin serves the version file during development and emits it only for client builds. A hosting adapter describes the files its host needs: client files, which the plugin emits into the client output, and private files, which it writes relative to the Vite root. The plugin fails the build when a private file would land inside the client output, and it logs the adapter's warnings. Adapters write nothing themselves, so each one can be tested as a function call.
 
 ## Generated hosting adapters
 
@@ -39,10 +39,10 @@ These are alternatives for the two hosting targets.
 
 | Target  | Generated output                                                                                          | Deployment configuration                                                                                                                                              |
 | ------- | --------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Pages   | `_worker.js` and `_routes.json` inside the client output directory. Routes include only the asset prefix. | Set the R2 binding on the Pages project. Advanced mode takes precedence over `functions/`; the adapter warns if that directory exists.                                |
+| Pages   | `_worker.js` and `_routes.json` inside the client output directory. Routes include only the asset prefix. | Set the R2 binding on the Pages project. Advanced mode takes precedence over `functions/`; the build warns if that directory exists.                                  |
 | Workers | A Worker entry outside the client output directory, by default `dist-worker/index.js`.                    | Point Wrangler `main` to that entry. Configure the static asset binding as `ASSETS`, enable SPA fallback, and restrict `assets.run_worker_first` to the asset prefix. |
 
-Both adapters default to the `BUILD_CACHE` R2 binding. The binding name can be configured. The asset prefix includes Vite's base path and asset directory. The Workers output must stay outside the public client output directory; the adapter rejects an output path inside it.
+Both adapters default to the `BUILD_CACHE` R2 binding. The binding name can be configured. The asset prefix includes Vite's base path and asset directory. The Workers output must stay outside the public client output directory; the plugin rejects an output path inside it.
 
 The sample apps demonstrate the Vite configuration and update UI. Deployment configuration and account resources must be supplied for the target environment.
 
@@ -113,6 +113,6 @@ The library retains age-based escalation, shared prompt dismissal, sticky urgenc
 
 Behaviour and model tests cover lifecycle, network failure, cancellation, clock changes, storage failures, shared dismissal, rollback persistence, and explicit refresh. Chromium tests cover the browser environment, the Vite client helper, React hooks, and both sample update surfaces.
 
-Vite tests build real output and check version metadata, emitted adapter assets, warnings, and build failure from adapter hooks. Workerd tests run the generated Pages and Workers handlers with static asset bindings and an R2 bucket. Local proof covers current chunks, R2 fallback, HEAD responses, missing chunks, and SPA routes.
+Vite tests build real output and check version metadata, emitted and private adapter files, warnings, and the build failure for a private file inside the client output. Workerd tests run the generated Pages and Workers handlers with static asset bindings and an R2 bucket. Local proof covers current chunks, R2 fallback, HEAD responses, missing chunks, and SPA routes.
 
 Package scripts and workspace configuration define the current verification commands. See the README for usage.
