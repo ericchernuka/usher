@@ -176,6 +176,30 @@ describe('useRefreshBlocker with a function', () => {
     expect(navigations).toHaveLength(1)
     await view.unmount()
   })
+
+  it('given an inline function, then re-rendering keeps one registration that calls the latest function', async () => {
+    const navigations = captureNavigations()
+    const updates = createAppUpdates()
+    const add = vi.spyOn(updates, 'addRefreshBlocker')
+
+    function Form({ dirty }: { dirty: boolean }) {
+      useRefreshBlocker(updates, () => dirty)
+
+      return null
+    }
+
+    const view = await render(<Form dirty />)
+    const registrations = add.mock.calls.length
+    await view.rerender(<Form dirty />)
+    expect(add).toHaveBeenCalledTimes(registrations)
+    expect(await updates.refresh()).toBe('blocked')
+
+    await view.rerender(<Form dirty={false} />)
+    expect(add).toHaveBeenCalledTimes(registrations)
+    expect(await updates.refresh()).toBe('reloading')
+    expect(navigations).toHaveLength(1)
+    await view.unmount()
+  })
 })
 
 const TOAST_ID = 'app-update'

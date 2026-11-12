@@ -75,7 +75,7 @@ function JobForm() {
 }
 ```
 
-`useUpdateState` returns the whole state and defers it, so a store change never blocks input. Read the field you need from it.
+`useUpdateState` returns the whole state and defers it, so a store change never blocks input. Read the field you need from it. `useRefreshBlocker` takes a boolean or a function; an inline function is fine, because the hook registers once and calls the latest one.
 
 To tag error reports or RUM events with the running build, import its facts:
 

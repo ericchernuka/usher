@@ -137,10 +137,7 @@ describe('snapshots', () => {
     const seen: Array<[string, string | undefined]> = []
     app.subscribe(store, () => {
       const state = store.getState()
-      seen.push([
-        state.attention,
-        'latest' in state ? state.latest.version : undefined,
-      ])
+      seen.push([state.attention, state.latest?.version])
     })
     await tab.waitForResponse()
 

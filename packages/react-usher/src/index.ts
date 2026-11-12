@@ -1,4 +1,9 @@
-import { useDeferredValue, useEffect, useSyncExternalStore } from 'react'
+import {
+  useDeferredValue,
+  useEffect,
+  useRef,
+  useSyncExternalStore,
+} from 'react'
 import type {
   AppUpdates,
   RefreshBlocker,
@@ -27,6 +32,8 @@ export function useUpdateState(updates: AppUpdates): UpdateState {
 /**
  * Block refreshes while this component needs it, like React Router's useBlocker.
  * Pass a boolean, or a function that returns one when a refresh is requested.
+ * The function may be written inline: the blocker is registered once and always
+ * calls the one from the latest render.
  *
  *   useRefreshBlocker(appUpdates, form.isDirty)
  */
@@ -34,13 +41,23 @@ export function useRefreshBlocker(
   updates: AppUpdates,
   shouldBlock: boolean | RefreshBlocker,
 ): void {
+  const latest = useRef(shouldBlock)
+
   useEffect(() => {
-    if (shouldBlock === false) {
+    latest.current = shouldBlock
+  }, [shouldBlock])
+
+  const registered = shouldBlock !== false
+
+  useEffect(() => {
+    if (!registered) {
       return undefined
     }
 
-    return updates.addRefreshBlocker(
-      shouldBlock === true ? () => true : shouldBlock,
-    )
-  }, [updates, shouldBlock])
+    return updates.addRefreshBlocker(() => {
+      const current = latest.current
+
+      return current === true || (current !== false && current())
+    })
+  }, [updates, registered])
 }

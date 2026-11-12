@@ -74,11 +74,11 @@ function sameState(a: UpdateState, b: UpdateState) {
     return false
   }
 
-  if (!('latest' in a) || !('latest' in b)) {
-    return true
-  }
-
   const [x, y] = [a.latest, b.latest]
+
+  if (!x || !y) {
+    return x === y
+  }
 
   return BUILD_FACT_NAMES.every(fact => x[fact] === y[fact])
 }

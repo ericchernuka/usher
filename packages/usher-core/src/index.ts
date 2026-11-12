@@ -13,6 +13,7 @@ export type {
   AppUpdatesOptions,
   Attention,
   BuildFacts,
+  UpdateReason,
   UpdateState,
 } from './types'
 

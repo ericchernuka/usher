@@ -34,7 +34,7 @@ export type Attention = 'none' | 'passive' | 'prompt' | 'urgent'
 
 /**
  * One update state. `reason` always belongs to `attention`, and `latest` is present
- * once a check has landed.
+ * once a check has landed, so `state.latest?.version` reads it without narrowing.
  *
  * - `unknown`: no check has landed yet.
  * - `caught-up`: the tab runs the latest build.
@@ -43,7 +43,7 @@ export type Attention = 'none' | 'passive' | 'prompt' | 'urgent'
  * - `rollback` / `forced`: sticky urgency, kept until the tab reloads.
  */
 export type UpdateState =
-  | { attention: 'none'; reason: 'unknown' }
+  | { attention: 'none'; reason: 'unknown'; latest?: undefined }
   | { attention: 'none'; reason: 'caught-up'; latest: BuildFacts }
   | {
       attention: 'passive'
@@ -56,6 +56,9 @@ export type UpdateState =
       reason: 'outdated' | 'rollback' | 'forced'
       latest: BuildFacts
     }
+
+/** Why the tab has the attention it has. */
+export type UpdateReason = UpdateState['reason']
 
 export interface AppUpdatesOptions {
   /** Build facts of the running build. */

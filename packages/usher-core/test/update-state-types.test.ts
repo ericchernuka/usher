@@ -1,9 +1,9 @@
 import { expectTypeOf, test } from 'vitest'
-import type { BuildFacts, UpdateState } from '../src/index'
+import type { BuildFacts, UpdateReason, UpdateState } from '../src/index'
 
 test('given the UpdateState union, then it is exactly the documented states', () => {
   expectTypeOf<UpdateState>().toEqualTypeOf<
-    | { attention: 'none'; reason: 'unknown' }
+    | { attention: 'none'; reason: 'unknown'; latest?: undefined }
     | { attention: 'none'; reason: 'caught-up'; latest: BuildFacts }
     | {
         attention: 'passive'
@@ -16,5 +16,12 @@ test('given the UpdateState union, then it is exactly the documented states', ()
         reason: 'outdated' | 'rollback' | 'forced'
         latest: BuildFacts
       }
+  >()
+})
+
+test('given any state, then latest and reason can be read without narrowing', () => {
+  expectTypeOf<UpdateState['latest']>().toEqualTypeOf<BuildFacts | undefined>()
+  expectTypeOf<UpdateReason>().toEqualTypeOf<
+    'unknown' | 'caught-up' | 'outdated' | 'dismissed' | 'rollback' | 'forced'
   >()
 })
