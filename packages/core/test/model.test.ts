@@ -102,15 +102,14 @@ function action(a: Action, w: World, r: Run) {
 
 function knownBadInvariant(w: World, r: Run) {
   const state = w.store.getState()
-  const latest = state.latest
-
-  if (!latest) {
-    return
-  }
-
-  r.knownBad ||=
-    Date.parse(latest.commitTime) < Date.parse(current.commitTime) ||
-    Date.parse(latest.forceUpdateBefore ?? '') > Date.parse(current.builtAt)
+  const delivered = w.delivered.splice(0)
+  r.knownBad ||= delivered.some(
+    ({ build, signal }) =>
+      !signal?.aborted &&
+      (Date.parse(build.commitTime) < Date.parse(current.commitTime) ||
+        Date.parse(build.forceUpdateBefore ?? '') >
+          Date.parse(current.builtAt)),
+  )
 
   if (r.knownBad) {
     expect(state.attention).toBe('urgent')
@@ -153,7 +152,7 @@ async function run(scenario: Scenario) {
       }
 
       await action(a, w, r)
-      await clock.settle()
+      await clock.flush()
       invariants(w, r)
     }
   } finally {

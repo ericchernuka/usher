@@ -23,7 +23,7 @@ describe('adapters that misbehave', () => {
         hide: () => log.push('hide'),
       }),
     )
-    await clock.settle()
+    await clock.waitForResponse()
 
     expect(log).toEqual(['show-start:prompt', 'show-end', 'hide'])
     expect(store.getState().attention).toBe('passive')
@@ -50,7 +50,7 @@ describe('adapters that misbehave', () => {
         hide: () => {},
       }),
     )
-    await clock.settle()
+    await clock.waitForResponse()
     expect(shows).toEqual([])
 
     ready = true
@@ -83,7 +83,7 @@ describe('adapters that misbehave', () => {
         hide: () => {},
       }),
     )
-    await clock.settle()
+    await clock.waitForResponse()
     failNext = true
     server.use(serveBuild(older))
     await app.poll()

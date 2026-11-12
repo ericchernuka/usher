@@ -21,7 +21,7 @@ describe('showing and hiding', () => {
     server.use(serveBuild(newer))
     const ui = fakeAdapter()
     app.track(connectPrompt(app.create(), ui.adapter))
-    await clock.settle()
+    await clock.waitForResponse()
 
     expect(ui.log).toEqual(['show:prompt'])
     expect(ui.open.id).toBe('app-update')
@@ -47,7 +47,7 @@ describe('showing and hiding', () => {
         hide: () => {},
       }),
     )
-    await clock.settle()
+    await clock.waitForResponse()
 
     server.use(serveBuild({ ...older, version: 'older-still' }))
     await app.poll()
@@ -63,7 +63,7 @@ describe('showing and hiding', () => {
     server.use(serveBuild(older))
     const ui = fakeAdapter()
     const disconnect = connectPrompt(app.create(), ui.adapter)
-    await clock.settle()
+    await clock.waitForResponse()
     disconnect()
     const checks = requests.length
     await app.poll()
@@ -82,7 +82,7 @@ describe('showing and hiding', () => {
     const removeBlocker = store.addReloadBlocker(() => true)
     const ui = fakeAdapter()
     app.track(connectPrompt(store, ui.adapter))
-    await clock.settle()
+    await clock.waitForResponse()
 
     await ui.open.refresh()
     expect(host.navigations).toEqual([])
@@ -105,7 +105,7 @@ describe('closing the prompt', () => {
     const store = app.create()
     const ui = fakeAdapter()
     app.track(connectPrompt(store, ui.adapter))
-    await clock.settle()
+    await clock.waitForResponse()
     const handle = ui.open
 
     handle.dismiss()
@@ -138,7 +138,7 @@ describe('closing the prompt', () => {
         },
       }),
     )
-    await clock.settle()
+    await clock.waitForResponse()
 
     server.use(serveBuild(current))
     await app.poll()
@@ -155,7 +155,7 @@ describe('closing the prompt', () => {
     clock.setSystemTime('2026-11-12T16:00:00Z')
     const ui = fakeAdapter()
     app.track(connectPrompt(app.create(), ui.adapter))
-    await clock.settle()
+    await clock.waitForResponse()
 
     ui.open.dismiss()
     await app.poll()
@@ -170,7 +170,7 @@ describe('closing the prompt', () => {
     server.use(serveBuild(newer))
     const ui = fakeAdapter('passive')
     app.track(connectPrompt(app.create(), ui.adapter))
-    await clock.settle()
+    await clock.waitForResponse()
     expect(ui.log).toEqual(['show:passive'])
 
     ui.open.dismiss()
@@ -191,7 +191,7 @@ describe('closing the prompt', () => {
     clock.setSystemTime('2026-11-12T05:00:00Z')
     const ui = fakeAdapter('passive')
     app.track(connectPrompt(app.create(), ui.adapter))
-    await clock.settle()
+    await clock.waitForResponse()
 
     ui.open.dismiss()
     await app.poll()

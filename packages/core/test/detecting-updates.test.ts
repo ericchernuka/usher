@@ -14,7 +14,7 @@ describe('checking for a new build', () => {
     const fetchCall = vi.spyOn(globalThis, 'fetch')
     const store = app.create()
     app.subscribe(store)
-    await clock.settle()
+    await clock.waitForResponse()
 
     const [request] = requests
     const url = new URL(request?.url ?? '')
@@ -45,7 +45,7 @@ describe('checking for a new build', () => {
     const store = app.create()
     const listener = vi.fn<() => void>()
     app.subscribe(store, listener)
-    await clock.settle()
+    await clock.waitForResponse()
 
     expect(store.getState()).toMatchObject({
       attention: 'passive',
@@ -62,7 +62,7 @@ describe('checking for a new build', () => {
     server.use(serveRaw({}))
     const store = app.create()
     app.subscribe(store)
-    await clock.settle()
+    await clock.waitForResponse()
 
     expect(store.getState()).toEqual({ attention: 'none', reason: 'unknown' })
   })
@@ -74,7 +74,7 @@ describe('checking for a new build', () => {
     server.use(serveBuild(newer, { once: true }))
     const store = app.create()
     app.subscribe(store)
-    await clock.settle()
+    await clock.waitForResponse()
     server.use(serveError(503))
     await app.poll()
 
@@ -110,13 +110,13 @@ describe('slow and hung checks', () => {
     )
     const store = app.create()
     const first = store.subscribe(() => {})
-    await clock.settle()
+    await clock.flush()
     first()
     app.subscribe(store)
-    await clock.settle()
+    await clock.waitForResponse()
 
     late.resolve()
-    await clock.settle()
+    await clock.waitForResponse()
 
     expect(store.getState()).toMatchObject({
       attention: 'passive',
@@ -131,7 +131,10 @@ describe('slow and hung checks', () => {
     server.use(serveHang({ once: true }), serveBuild(newer))
     const store = app.create()
     app.subscribe(store)
-    await clock.settle()
+    await clock.flush()
+    await expect(clock.waitForResponse()).rejects.toThrow(
+      /Timed out waiting for 1 response/,
+    )
 
     await clock.runFor(30_000)
 
@@ -159,10 +162,10 @@ describe('polling schedule', () => {
     requests,
   }) => {
     app.subscribe(app.create({ pollEvery: '5m' }))
-    await clock.settle()
+    await clock.waitForResponse()
     await clock.runFor(4 * MINUTE + 50_000)
     host.focus()
-    await clock.settle()
+    await clock.waitForResponse()
     const afterFocus = requests.length
 
     await clock.runFor(4 * MINUTE)
@@ -178,7 +181,7 @@ describe('polling schedule', () => {
     requests,
   }) => {
     app.subscribe(app.create())
-    await clock.settle()
+    await clock.waitForResponse()
     const before = requests.length
 
     vi.setSystemTime(Date.now() - 24 * HOUR)
@@ -196,7 +199,7 @@ describe('hidden tabs', () => {
     requests,
   }) => {
     app.subscribe(app.create({ pollEvery: '5m' }))
-    await clock.settle()
+    await clock.waitForResponse()
     await clock.runFor(5 * MINUTE)
     expect(requests).toHaveLength(2)
 
@@ -206,7 +209,7 @@ describe('hidden tabs', () => {
     expect(requests).toHaveLength(2)
 
     host.setVisibility('visible')
-    await clock.settle()
+    await clock.waitForResponse()
     expect(requests).toHaveLength(3)
     await clock.runFor(5 * MINUTE)
     expect(requests).toHaveLength(4)
@@ -220,13 +223,13 @@ describe('hidden tabs', () => {
   }) => {
     host.setVisibilitySilently('hidden')
     app.subscribe(app.create())
-    await clock.settle()
+    await clock.waitForResponse()
 
     expect(requests).toHaveLength(0)
     expect(clock.pendingStoreTimers()).toBe(0)
 
     host.setVisibility('visible')
-    await clock.settle()
+    await clock.waitForResponse()
 
     expect(requests).toHaveLength(1)
   })
@@ -241,7 +244,7 @@ describe('build age and the server clock', () => {
     server.use(serveBuild(newer, { date: new Date('2026-11-11T16:00:00Z') }))
     const store = app.create()
     app.subscribe(store)
-    await clock.settle()
+    await clock.waitForResponse()
 
     expect(store.getState()).toMatchObject({
       attention: 'passive',
@@ -256,7 +259,7 @@ describe('build age and the server clock', () => {
     server.use(serveBuild(newer, { skewMs: 11 * HOUR }))
     const store = app.create()
     app.subscribe(store)
-    await clock.settle()
+    await clock.waitForResponse()
     expect(store.getState().reason).toBe('stale')
 
     server.use(serveBuild(newer, { date: null }))

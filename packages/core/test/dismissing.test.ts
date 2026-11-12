@@ -18,7 +18,7 @@ test('given the user dismissed the prompt level, then it stays quiet until the u
   clock.setSystemTime('2026-11-12T04:00:00Z')
   const store = app.create()
   app.subscribe(store)
-  await clock.settle()
+  await clock.waitForResponse()
   expect(store.getState().reason).toBe('stale')
 
   store.dismiss()
@@ -42,12 +42,12 @@ test("given Date headers round down to the second, then a prompt dismissal can't
   app.subscribe(store, () =>
     states.push(`${store.getState().attention}:${store.getState().reason}`),
   )
-  await clock.settle()
+  await clock.waitForResponse()
   await clock.runFor(12 * HOUR)
   expect(store.dismiss()).toBe(true)
   await clock.runFor(60_900)
   host.focus()
-  await clock.settle()
+  await clock.waitForResponse()
   states.length = 0
 
   await clock.runFor(11 * HOUR)
@@ -85,7 +85,7 @@ test.for([
     server.use(serveBuild(build))
     const store = app.create()
     app.subscribe(store)
-    await clock.settle()
+    await clock.waitForResponse()
     const before = store.getState()
     expect(before.reason).toBe(reason)
     expect(store.dismiss()).toBe(false)
@@ -102,7 +102,7 @@ test('given a default prompt snooze and a clock jump, then it stays quiet until 
   server.use(serveBuild(newer))
   const store = app.create()
   app.subscribe(store)
-  await clock.settle()
+  await clock.waitForResponse()
   expect(store.dismiss()).toBe(true)
   clock.setSystemTime(Date.now() + 24 * HOUR)
   server.use(serveNetworkError())
@@ -122,7 +122,7 @@ test('given a custom prompt snooze, then its expiry wakes without another poll',
   })
 
   app.subscribe(store)
-  await clock.settle()
+  await clock.waitForResponse()
   expect(store.dismiss()).toBe(true)
   await clock.runFor(61_000)
   expect(store.getState().attention).toBe('prompt')
@@ -143,7 +143,7 @@ test('given a hidden prompt passes the urgent deadline, then dismissal writes no
   server.use(serveBuild(newer))
   const store = app.create()
   app.subscribe(store)
-  await clock.settle()
+  await clock.waitForResponse()
   host.setVisibility('hidden')
   await clock.runFor(12 * HOUR)
   const before = store.getState()

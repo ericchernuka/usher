@@ -199,7 +199,14 @@ function initialServed(): Served {
   return 'current'
 }
 
+interface DeliveredBuild {
+  build: VersionInfo
+  signal: AbortSignal | null | undefined
+}
+
 export function createWorld(s: Scenario, clock: Clock) {
+  const delivered: DeliveredBuild[] = []
+
   const world = {
     config: s.config,
     visible: true,
@@ -223,13 +230,13 @@ export function createWorld(s: Scenario, clock: Clock) {
         await answerAfter(s.latency, init?.signal)
       }
 
-      return serve()
+      return serve(init?.signal)
     } finally {
       world.inFlight--
     }
   }
 
-  const serve = (): Response => {
+  const serve = (signal: AbortSignal | null | undefined): Response => {
     const choice = world.served
 
     if (choice === 'offline') {
@@ -244,8 +251,10 @@ export function createWorld(s: Scenario, clock: Clock) {
       choice instanceof Object ? choice.flap[world.flips++ % 2]! : choice
 
     const headers = { date: new Date(serverNow()).toUTCString() }
+    const response = Response.json(builds[name], { headers })
+    delivered.push({ build: builds[name], signal })
 
-    return Response.json(builds[name], { headers })
+    return response
   }
 
   const host = createFakeHost({ fetch: respond })
@@ -256,7 +265,7 @@ export function createWorld(s: Scenario, clock: Clock) {
     reload: async () => false,
   })
 
-  return { world, store, serverNow, host, clock }
+  return { world, store, serverNow, host, clock, delivered }
 }
 
 export type World = ReturnType<typeof createWorld>

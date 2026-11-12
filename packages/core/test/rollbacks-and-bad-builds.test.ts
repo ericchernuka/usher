@@ -10,7 +10,7 @@ describe('a rollback', () => {
     server.use(serveBuild(older))
     const store = app.create()
     app.subscribe(store)
-    await clock.settle()
+    await clock.waitForResponse()
 
     expect(store.getState()).toMatchObject({
       attention: 'urgent',
@@ -26,7 +26,7 @@ describe('a rollback', () => {
     server.use(serveBuild(older))
     const store = app.create()
     app.subscribe(store)
-    await clock.settle()
+    await clock.waitForResponse()
 
     server.use(serveBuild(newer))
     await app.poll()
@@ -49,7 +49,7 @@ describe('a forced update', () => {
     )
     const store = app.create()
     app.subscribe(store)
-    await clock.settle()
+    await clock.waitForResponse()
 
     expect(store.getState()).toMatchObject({
       attention: 'urgent',
@@ -71,7 +71,7 @@ describe('a forced update', () => {
     )
     const store = app.create()
     app.subscribe(store)
-    await clock.settle()
+    await clock.waitForResponse()
 
     expect(store.getState()).toMatchObject({
       attention: 'passive',

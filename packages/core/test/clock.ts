@@ -1,13 +1,10 @@
 import { vi } from 'vitest'
-import { server } from './mocks/node'
 
 const SRC = new URL('../src/', import.meta.url).pathname
 const nextTurn = () => new Promise<void>(resolve => setImmediate(resolve))
 
-const MAX_NETWORK_TURNS = 50
-
 export interface Clock {
-  settle: () => Promise<void>
+  flush: () => Promise<void>
   runFor: (ms: number) => Promise<void>
   setSystemTime: (time: string | number | Date) => void
   pendingStoreTimers: () => number
@@ -28,7 +25,7 @@ export function installPlainClock(start = '2026-11-11T16:00:00Z'): Clock {
   vi.setSystemTime(new Date(start))
 
   return {
-    settle: async () => {
+    flush: async () => {
       await vi.advanceTimersByTimeAsync(0)
     },
     runFor: async ms => {
@@ -43,15 +40,57 @@ export function installPlainClock(start = '2026-11-11T16:00:00Z'): Clock {
   }
 }
 
-export function installClock(start = '2026-11-11T16:00:00Z'): Clock {
+function trackResponses() {
+  const pending = new Set<symbol>()
+
+  const trackedFetch: typeof fetch = async (input, init) => {
+    const token = Symbol()
+    const signal = init?.signal
+
+    const finish = () => {
+      pending.delete(token)
+      signal?.removeEventListener('abort', finish)
+    }
+
+    pending.add(token)
+    signal?.addEventListener('abort', finish, { once: true })
+
+    try {
+      const response = await globalThis.fetch(input, init)
+
+      if (response.ok) {
+        const json = response.json.bind(response)
+        response.json = () => json().finally(finish)
+      } else {
+        finish()
+      }
+
+      return response
+    } catch (error) {
+      finish()
+
+      throw error
+    }
+  }
+
+  return { fetch: trackedFetch, pending }
+}
+
+async function flush() {
+  await vi.advanceTimersByTimeAsync(0)
+
+  for (let turn = 0; turn < 3; turn++) {
+    await nextTurn()
+  }
+
+  await vi.advanceTimersByTimeAsync(0)
+}
+
+export function installClock(start = '2026-11-11T16:00:00Z') {
   const pending = new Map<unknown, number>()
   const real = new Set<unknown>()
-  const inFlight = new Set<Request>()
-  server.events.on('request:start', ({ request }) => void inFlight.add(request))
-  server.events.on(
-    'request:end',
-    ({ request }) => void inFlight.delete(request),
-  )
+  const responses = trackResponses()
+  const realNow = Date.now
   const realSet = globalThis.setTimeout
   const realClear = globalThis.clearTimeout
   {
@@ -96,18 +135,20 @@ export function installClock(start = '2026-11-11T16:00:00Z'): Clock {
     })
   }
 
-  const settle = async () => {
-    await vi.advanceTimersByTimeAsync(0)
+  const waitForResponse = async () => {
+    const deadline = realNow() + 1_000
+    await flush()
 
-    for (let turn = 0; turn < MAX_NETWORK_TURNS; turn++) {
-      await nextTurn()
-
-      if (inFlight.size === 0 && turn >= 2) {
-        break
+    while (responses.pending.size > 0) {
+      if (realNow() >= deadline) {
+        throw new Error(
+          `Timed out waiting for ${responses.pending.size} response(s) to finish`,
+        )
       }
-    }
 
-    await vi.advanceTimersByTimeAsync(0)
+      await new Promise<void>(resolve => realSet(resolve, 1))
+      await flush()
+    }
   }
 
   const runFor = async (ms: number) => {
@@ -117,7 +158,7 @@ export function installClock(start = '2026-11-11T16:00:00Z'): Clock {
       const due = Math.min(...pending.values())
       const step = Math.max(0, Math.min(due, end) - performance.now())
       await vi.advanceTimersByTimeAsync(step)
-      await settle()
+      await waitForResponse()
 
       if (performance.now() >= end) {
         return
@@ -126,9 +167,11 @@ export function installClock(start = '2026-11-11T16:00:00Z'): Clock {
   }
 
   return {
-    settle,
+    flush,
+    waitForResponse,
+    fetch: responses.fetch,
     runFor,
-    setSystemTime: time => vi.setSystemTime(time),
+    setSystemTime: (time: string | number | Date) => vi.setSystemTime(time),
     pendingStoreTimers: () => pending.size,
     dispose() {
       pending.clear()

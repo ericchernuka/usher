@@ -46,15 +46,16 @@ afterEach(() => {
 describe('useAppUpdates', () => {
   it('selects a slice and re-renders only when it changes', async () => {
     vi.setSystemTime(new Date('2026-11-12T04:00:00Z'))
+
+    let latest = {
+      ...older,
+      version: 'new',
+      commitTime: '2026-11-12T00:00:00Z',
+    }
+
     vi.stubGlobal(
       'fetch',
-      vi.fn<typeof fetch>(async () =>
-        Response.json({
-          ...older,
-          version: 'new',
-          commitTime: '2026-11-12T00:00:00Z',
-        }),
-      ),
+      vi.fn<typeof fetch>(async () => Response.json(latest)),
     )
     const updates = createAppUpdates()
     let renders = 0
@@ -78,8 +79,12 @@ describe('useAppUpdates', () => {
     await expect.element(button).toHaveAttribute('data-attention', 'prompt')
 
     const before = renders
+    latest = { ...latest, version: 'newest' }
+    vi.advanceTimersByTime(61_000)
     window.dispatchEvent(new Event('focus'))
-    await tick()
+    await vi.waitFor(() =>
+      expect(updates.getState().latest?.version).toBe('newest'),
+    )
     expect(renders).toBe(before)
 
     await button.click()
@@ -87,6 +92,7 @@ describe('useAppUpdates', () => {
 
     await view.unmount()
     const calls = vi.mocked(fetch).mock.calls.length
+    vi.advanceTimersByTime(61_000)
     window.dispatchEvent(new Event('focus'))
     expect(vi.mocked(fetch).mock.calls.length).toBe(calls)
   })

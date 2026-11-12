@@ -20,7 +20,7 @@ describe('reading what other tabs left in storage', () => {
       host.localStorage.setItem(SNOOZE_KEY, stored)
       const store = app.create()
       app.subscribe(store)
-      await clock.settle()
+      await clock.waitForResponse()
 
       expect(store.getState()).toMatchObject({
         attention: 'prompt',
@@ -40,7 +40,7 @@ describe('hearing from other tabs while running', () => {
     server.use(serveBuild(newer))
     const store = app.create()
     app.subscribe(store)
-    await clock.settle()
+    await clock.waitForResponse()
     store.dismiss()
 
     host.otherTabSets(SNOOZE_KEY, '{oops')
@@ -60,7 +60,7 @@ describe('hearing from other tabs while running', () => {
     server.use(serveBuild(newer))
     const store = app.create()
     app.subscribe(store)
-    await clock.settle()
+    await clock.waitForResponse()
     store.dismiss()
 
     host.storageEventFor(null, host.sessionStorage)
@@ -82,12 +82,12 @@ describe('a snooze this tab could not save', () => {
     })
     const store = app.create()
     const stop = app.subscribe(store)
-    await clock.settle()
+    await clock.waitForResponse()
     store.dismiss()
 
     stop()
     app.subscribe(store)
-    await clock.settle()
+    await clock.waitForResponse()
 
     expect(store.getState()).toMatchObject({
       attention: 'passive',
@@ -105,7 +105,7 @@ describe('dismissing for every tab', () => {
     server.use(serveBuild(newer))
     const store = app.create()
     app.subscribe(store)
-    await clock.settle()
+    await clock.waitForResponse()
     await clock.runFor(12 * HOUR)
     expect(store.getState().attention).toBe('prompt')
 
@@ -132,7 +132,7 @@ describe('clearing and blocking storage', () => {
     server.use(serveBuild(newer))
     const store = app.create()
     app.subscribe(store)
-    await clock.settle()
+    await clock.waitForResponse()
     store.dismiss()
     expect(store.getState().attention).toBe('passive')
 
@@ -150,13 +150,13 @@ describe('clearing and blocking storage', () => {
     server.use(serveBuild(newer))
     const store = app.create()
     const stop = app.subscribe(store)
-    await clock.settle()
+    await clock.waitForResponse()
     expect(store.dismiss()).toBe(true)
     stop()
 
     host.localStorage.clear()
     app.subscribe(store)
-    await clock.settle()
+    await clock.waitForResponse()
 
     expect(store.getState()).toMatchObject({
       attention: 'prompt',
@@ -176,7 +176,7 @@ describe('clearing and blocking storage', () => {
     })
     const store = app.create()
     app.subscribe(store)
-    await clock.settle()
+    await clock.waitForResponse()
 
     expect(store.dismiss()).toBe(true)
     await app.poll()
@@ -200,7 +200,7 @@ describe('clearing and blocking storage', () => {
     })
     const store = app.create()
     app.subscribe(store)
-    await clock.settle()
+    await clock.waitForResponse()
 
     expect(store.dismiss()).toBe(true)
     await app.poll()

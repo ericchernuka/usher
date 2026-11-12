@@ -40,7 +40,7 @@ export const test = base
 
     return clock
   })
-  .extend('host', () => createFakeHost())
+  .extend('host', ({ clock }) => createFakeHost({ fetch: clock.fetch }))
   .extend('requests', () => recordRequests())
   .extend('app', ({ host, clock }, { onCleanup }) => {
     const stops: Array<() => void> = []
@@ -61,7 +61,7 @@ export const test = base
       async poll() {
         vi.advanceTimersByTime(MINUTE)
         host.focus()
-        await clock.settle()
+        await clock.waitForResponse()
       },
     }
   })

@@ -12,14 +12,14 @@ describe('escalating as the running build ages', () => {
     server.use(serveBuild(newer, { date: new Date(Date.now()) }))
     const store = app.create()
     app.subscribe(store)
-    await clock.settle()
+    await clock.waitForResponse()
     expect(store.getState().attention).toBe('prompt')
 
     await clock.runFor(MINUTE)
     clock.setSystemTime(Date.now() - HOUR)
     server.use(serveNetworkError())
     host.focus()
-    await clock.settle()
+    await clock.waitForResponse()
     await clock.runFor(MINUTE)
 
     expect(store.getState()).toMatchObject({
@@ -35,7 +35,7 @@ describe('escalating as the running build ages', () => {
     server.use(serveBuild(newer))
     const store = app.create()
     app.subscribe(store)
-    await clock.settle()
+    await clock.waitForResponse()
     expect(store.getState().attention).toBe('passive')
 
     server.use(serveNetworkError())
@@ -64,7 +64,7 @@ test('given typing when a rollback lands, then urgency is immediate', async ({
   const store = app.create()
   app.subscribe(store)
   host.keydown()
-  await clock.settle()
+  await clock.waitForResponse()
   expect(store.getState()).toMatchObject({
     attention: 'urgent',
     reason: 'rollback',
@@ -79,13 +79,13 @@ test('given time passed while hidden, then visibility evaluates age even if the 
   server.use(serveBuild(newer))
   const store = app.create()
   app.subscribe(store)
-  await clock.settle()
+  await clock.waitForResponse()
   host.setVisibility('hidden')
   expect(clock.pendingStoreTimers()).toBe(0)
   await clock.runFor(24 * HOUR)
   server.use(serveNetworkError())
   host.setVisibility('visible')
-  await clock.settle()
+  await clock.waitForResponse()
   expect(store.getState().reason).toBe('expired')
 })
 
@@ -96,7 +96,7 @@ test('given time passed while unsubscribed, then subscribing evaluates age befor
   server.use(serveBuild(newer))
   const store = app.create()
   const stop = app.subscribe(store)
-  await clock.settle()
+  await clock.waitForResponse()
   stop()
   await clock.runFor(24 * HOUR)
   server.use(serveNetworkError())

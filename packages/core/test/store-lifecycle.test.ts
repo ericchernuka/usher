@@ -20,12 +20,12 @@ describe('subscribing', () => {
     requests,
   }) => {
     const store = app.create()
-    await clock.settle()
+    await clock.waitForResponse()
     expect(requests).toHaveLength(0)
 
     const first = store.subscribe(() => {})
     const second = store.subscribe(() => {})
-    await clock.settle()
+    await clock.waitForResponse()
     expect(requests).toHaveLength(1)
 
     first()
@@ -45,7 +45,7 @@ describe('subscribing', () => {
     const store = app.create()
     const first = store.subscribe(noop)
     const second = app.subscribe(store, noop)
-    await clock.settle()
+    await clock.waitForResponse()
     first()
     first()
     requests.length = 0
@@ -68,7 +68,7 @@ describe('subscribing', () => {
     })
     const later = vi.fn<() => void>()
     app.subscribe(store, later)
-    await clock.settle()
+    await clock.waitForResponse()
 
     expect(later).toHaveBeenCalled()
     expect(store.getState().attention).toBe('passive')
@@ -82,7 +82,7 @@ describe('subscribing', () => {
     clock.setSystemTime('2026-11-12T04:00:00Z')
     const store = app.create()
     const stop = app.subscribe(store)
-    await clock.settle()
+    await clock.waitForResponse()
     stop()
 
     expect(store.dismiss()).toBe(true)
@@ -101,7 +101,7 @@ describe('snapshots', () => {
     const store = app.create()
     const listener = vi.fn<() => void>()
     app.subscribe(store, listener)
-    await clock.settle()
+    await clock.waitForResponse()
     const first = store.getState()
     listener.mockClear()
 
@@ -122,7 +122,7 @@ describe('snapshots', () => {
     app.subscribe(store, () =>
       seen.push([store.getState().attention, store.getState().latest?.version]),
     )
-    await clock.settle()
+    await clock.waitForResponse()
 
     server.use(serveBuild(current))
     await app.poll()
