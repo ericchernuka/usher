@@ -1,4 +1,5 @@
 import * as fc from 'fast-check'
+import type { BuildFacts } from '../src/types'
 import { describe, expect, it, vi } from 'vitest'
 import { DISMISSAL_KEY, HOUR, running } from './fixtures'
 import { aged, createWorld, random, rollbackThenFix } from './model/world'
@@ -92,15 +93,13 @@ function action(a: Action, w: World, r: Run) {
   }
 }
 
-function stickyUrgencyInvariant(w: World, r: Run) {
+function stickyUrgencyInvariant(w: World, r: Run, accepted: BuildFacts[]) {
   const state = w.store.getState()
-  const delivered = w.delivered.splice(0)
-  r.stickyUrgency ||= delivered.some(
-    ({ build, signal }) =>
-      !signal?.aborted &&
-      (Date.parse(build.commitTime) < Date.parse(running.commitTime) ||
-        Date.parse(build.forceUpdateBuiltBefore ?? '') >
-          Date.parse(running.buildTime)),
+  r.stickyUrgency ||= accepted.some(
+    build =>
+      Date.parse(build.commitTime) < Date.parse(running.commitTime) ||
+      Date.parse(build.forceUpdateBuiltBefore ?? '') >
+        Date.parse(running.buildTime),
   )
 
   if (r.stickyUrgency) {
@@ -111,7 +110,18 @@ function stickyUrgencyInvariant(w: World, r: Run) {
 
 function invariants(w: World, r: Run) {
   const state = w.store.getState()
-  stickyUrgencyInvariant(w, r)
+
+  const accepted = w.delivered
+    .splice(0)
+    .flatMap(({ build, signal }) => (signal?.aborted ? [] : [build]))
+
+  stickyUrgencyInvariant(w, r, accepted)
+
+  // Catching up ends the outdated episode a dismissal belonged to. The next
+  // one counts from a later build, so its prompt is a new one.
+  if (accepted.some(build => build.version === running.version)) {
+    r.promptQuietUntil = -Infinity
+  }
 
   if (state.attention !== 'none') {
     expect(state.latest).toBeDefined()

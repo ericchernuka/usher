@@ -79,9 +79,11 @@ Inside core, the store composes five sources, and dependencies point one way. No
 
 Every source calls back into the store's single `evaluate()`. It reads the latest build, the server time and the dismissal, asks `attention.ts` for a decision, keeps sticky urgency, publishes, and sets the deadline timer. Snapshot identity stays stable while attention, reason, and the latest build facts remain unchanged.
 
+A tab is outdated since the build time of the first build it saw supersede its own, clamped to its own build time. The store keeps that time next to sticky urgency, and `attention.ts` measures the prompt and urgent thresholds from it. Later deploys do not move it, and a response that matches the running version clears it. See [ADR 0005](adr/0005-escalate-from-outdated-since.md).
+
 `attention.ts` compares source versions for ordinary update detection, commit times for rollback detection, and running-build time against the forced-update cutoff. Rollback and forced-update knowledge remains urgent after later deployments, including a deployment that matches the running version.
 
-`server-clock.ts` anchors the response's Date header to monotonic time, so changing the user's clock cannot move build age. Before a Date header is available, it uses the local clock. Missing Date headers keep the last estimate, and changes under two seconds are treated as header rounding. Cross-origin version responses need `Access-Control-Expose-Headers: Date` for clock correction.
+`server-clock.ts` anchors the response's Date header to monotonic time, so changing the user's clock cannot move a tab's time outdated. Before a Date header is available, it uses the local clock. Missing Date headers keep the last estimate, and changes under two seconds are treated as header rounding. Cross-origin version responses need `Access-Control-Expose-Headers: Date` for clock correction.
 
 Hidden tabs keep no poll or deadline timer and catch up when visible. A pending request keeps its 30-second timeout and is aborted when the final subscriber leaves. Age evaluation continues on the deadline timer when network checks fail. The clock estimate, the last observed build and sticky urgency survive periods without subscribers.
 

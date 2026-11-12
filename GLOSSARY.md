@@ -24,16 +24,20 @@ The build reported by the serving deployment. During a rollback, its source can 
 _Avoid_: Newest commit.
 
 **Build time**:
-The time a build was produced. Build age counts from it.
+The time a build was produced.
 _Avoid_: Built at.
 
 **Commit time**:
 The time associated with the source commit, used to order source revisions.
 _Avoid_: Build time.
 
-**Build age**:
-The elapsed time since the running build was produced.
-_Avoid_: Session age.
+**Outdated since**:
+The time from which a tab counts as outdated: the build time of the first build it saw supersede its running build. Later deploys do not move it, and catching up clears it.
+_Avoid_: Build age, which counts from the running build's own build time and so punishes a fresh tab on an old build.
+
+**Time outdated**:
+The elapsed server time since a tab became outdated. Escalation thresholds are measured in it.
+_Avoid_: Build age, session age.
 
 **Chunk**:
 A content-hashed JavaScript or CSS asset that a tab can request after its initial page load.
@@ -60,14 +64,15 @@ The tab's published attention and reason, together with the latest build it has 
 The state of a tab whose running build differs from the build being served. Attention says how loudly to ask for a refresh.
 _Avoid_: Stale, expired, behind.
 
-**Age-based escalation**:
-An increase in attention for an outdated running build as its build age crosses configured thresholds.
+**Escalation**:
+An increase in attention as a tab's time outdated crosses configured thresholds.
+_Avoid_: Age-based escalation.
 
 **Prompt attention**:
-A routine request to refresh after the running build reaches its prompt age threshold.
+A routine request to refresh once a tab has been outdated for the prompt threshold.
 
 **Urgent attention**:
-A request to refresh because of build age, rollback, or a forced update. It cannot be dismissed.
+A request to refresh because a tab has been outdated for the urgent threshold, or because of a rollback or a forced update. It cannot be dismissed.
 
 **Prompt dismissal**:
 An acknowledgement that quiets prompt attention for eligible tabs. It does not quiet urgent attention.

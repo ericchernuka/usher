@@ -107,12 +107,14 @@ export const appUpdates = createAppUpdates({
 | Running the latest build                        | `none`    | `caught-up` |
 | A newer build is being served                   | `passive` | `outdated`  |
 | The prompt was dismissed                        | `passive` | `dismissed` |
-| Running build is at least 12 hours old          | `prompt`  | `outdated`  |
-| Running build is at least 24 hours old          | `urgent`  | `outdated`  |
+| Outdated for at least 12 hours                  | `prompt`  | `outdated`  |
+| Outdated for at least 24 hours                  | `urgent`  | `outdated`  |
 | An older commit was deployed                    | `urgent`  | `rollback`  |
 | Running build predates the forced-update cutoff | `urgent`  | `forced`    |
 
 Every state except `unknown` carries `latest`, the build facts the server reported.
+
+A tab is outdated from the build time of the first newer build it sees, not from the age of its own build. A tab opened a minute ago on last week's build is one minute behind when the next deploy lands, so it starts passive. Later deploys do not restart the count, so a team that deploys a hundred times a day and a team that deploys once a week both prompt after 12 hours behind and turn urgent after 24. If the tab catches up, for example after a rollback to its build, the count starts over.
 
 Rollback and forced-update knowledge stays urgent until the tab reloads, even if a later response reports the running version again. A forced cutoff applies even when the version matches. Urgent attention cannot be dismissed.
 
@@ -149,8 +151,8 @@ export const appUpdates = createAppUpdates({
 | -------------- | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
 | `running`      | Required by core; set by `/client` | Build facts of the running build.                                                                                      |
 | `versionUrl`   | Required by core; set by `/client` | The serving deployment's `version.json` URL.                                                                           |
-| `promptAfter`  | 12 hours                           | Build age at which an outdated tab reaches prompt attention. `false` turns the level off.                              |
-| `urgentAfter`  | 24 hours                           | Build age at which it reaches urgent attention. `false` turns the level off. Must be later than `promptAfter`.         |
+| `promptAfter`  | 12 hours                           | Time outdated at which a tab reaches prompt attention. `false` turns the level off.                                    |
+| `urgentAfter`  | 24 hours                           | Time outdated at which it reaches urgent attention. `false` turns the level off. Must be later than `promptAfter`.     |
 | `promptSnooze` | Until urgent attention starts      | How long a prompt dismissal quiets prompt attention.                                                                   |
 | `pollInterval` | 5 minutes                          | How often a visible tab checks, at least 10 seconds. Focus and visibility also trigger a check, at most once a minute. |
 | `reload`       | `location.reload()`                | The document load a refresh performs. Return or resolve `false` if it did not happen.                                  |

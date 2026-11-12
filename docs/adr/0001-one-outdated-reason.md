@@ -6,7 +6,7 @@ Update state used to carry three reasons for the same fact: `new-build` at passi
 
 ## Decision
 
-Age-based states share one reason, `outdated`. The reason says why the tab should update: `outdated`, `dismissed`, `rollback` or `forced`. Attention says how loudly to ask.
+States reached by escalation share one reason, `outdated`. The reason says why the tab should update: `outdated`, `dismissed`, `rollback` or `forced`. Attention says how loudly to ask.
 
 ## Consequences
 

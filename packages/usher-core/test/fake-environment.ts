@@ -78,6 +78,9 @@ function trackResponses(inner: () => typeof fetch) {
 /** setTimeout stores its delay in a signed 32-bit integer; a longer one overflows. */
 const MAX_BROWSER_TIMER_MS = 2 ** 31 - 1
 
+/** Far more than any real schedule needs, so reaching it means a timer loop. */
+const MAX_TIMERS_PER_ADVANCE = 20_000
+
 export interface FakeEnvironmentOptions {
   start?: string
   fetch?: typeof fetch
@@ -157,9 +160,18 @@ export function createFakeEnvironment(options: FakeEnvironmentOptions = {}) {
   async function advance(ms: number) {
     const end = monotonic + ms
 
+    let fired = 0
+
     for (let next = nextTimer(end); next; next = nextTimer(end)) {
       const [id, timer] = next
       timers.delete(id)
+
+      if (++fired > MAX_TIMERS_PER_ADVANCE) {
+        throw new Error(
+          `More than ${MAX_TIMERS_PER_ADVANCE} timers fired in one advance; something reschedules itself in a loop`,
+        )
+      }
+
       moveTo(Math.max(monotonic, timer.due))
       timer.callback()
       await turns(2)

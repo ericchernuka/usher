@@ -22,8 +22,9 @@ export type { RefreshBlocker } from './refresh'
  * The update store, one per app at module scope.
  *
  * Polling, timers and listeners exist only while there is at least one
- * subscriber. The state, the last observed build, the server clock estimate and
- * sticky urgency survive a gap with no subscribers.
+ * subscriber. The state, the last observed build, the server clock estimate,
+ * the time the tab became outdated and sticky urgency survive a gap with no
+ * subscribers.
  */
 export interface AppUpdates {
   /**
@@ -102,6 +103,7 @@ class AppUpdatesStore implements AppUpdates {
   readonly listeners = new Set<{ listener: () => void }>()
   state: UpdateState = { attention: 'none', reason: 'unknown' }
   stickyUrgency: StickyUrgency | undefined
+  outdatedSince: number | undefined
   active: Active | undefined
 
   constructor(options: AppUpdatesOptions, env: Environment) {
@@ -128,6 +130,7 @@ class AppUpdatesStore implements AppUpdates {
           latest,
           now: this.clock.now(),
           stickyUrgency: this.stickyUrgency,
+          outdatedSince: this.outdatedSince,
           dismissedAt,
           thresholds: this.thresholds,
         })
@@ -136,6 +139,7 @@ class AppUpdatesStore implements AppUpdates {
 
   apply = (decision: Decision) => {
     this.stickyUrgency = decision.stickyUrgency
+    this.outdatedSince = decision.outdatedSince
     this.publish(decision.state)
     this.scheduleDeadline(decision.nextAt)
   }

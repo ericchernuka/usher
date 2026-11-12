@@ -11,7 +11,7 @@ const BuildFactsSchema = v.object({
   version: v.pipe(v.string(), v.nonEmpty()),
   /** Commit time (ISO). Orders builds: lower than the running tab's = rollback. */
   commitTime: Timestamp,
-  /** When the build ran (ISO). Build age, the basis of escalation, counts from here. */
+  /** When the build ran (ISO). A tab is outdated from the build time of the first build that supersedes its own. */
   buildTime: Timestamp,
   /**
    * Tabs whose build ran before this time (ISO) must update. It is a build time,
@@ -65,12 +65,12 @@ export interface AppUpdatesOptions {
   /** URL of the serving deployment's version.json. */
   versionUrl: string
   /**
-   * Build age, in milliseconds, at which an outdated tab reaches prompt attention.
+   * How long, in milliseconds, a tab may stay outdated before it reaches prompt attention.
    * `false` turns the level off. Default 12 hours.
    */
   promptAfter?: number | false
   /**
-   * Build age, in milliseconds, at which an outdated tab reaches urgent attention.
+   * How long, in milliseconds, a tab may stay outdated before it reaches urgent attention.
    * `false` turns the level off. Must be later than `promptAfter`. Default 24 hours.
    * Rollbacks and forced updates are urgent at once, whatever this says.
    */

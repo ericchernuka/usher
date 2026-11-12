@@ -162,3 +162,93 @@ test('given thresholds longer than a browser timer can hold, then the tab still 
   await tab.runFor(DAY)
   expect(store.getState().attention).toBe('prompt')
 })
+
+const deployedAt = (time: string, version = 'bbb') => ({
+  ...newer,
+  version,
+  buildTime: time,
+})
+
+describe('counting from when the tab became outdated', () => {
+  test('given a fresh tab on a build made days ago, when the next deploy lands, then it starts passive and escalates from that deploy', async ({
+    app,
+    tab,
+  }) => {
+    tab.setSystemTime('2026-11-17T09:00:00Z')
+    server.use(serveBuild(deployedAt('2026-11-17T09:00:00.000Z')))
+    const store = app.create()
+    app.subscribe(store)
+    await tab.waitForResponse()
+    expect(store.getState().attention).toBe('passive')
+
+    await tab.runFor(12 * HOUR - MINUTE)
+    expect(store.getState().attention).toBe('passive')
+
+    await tab.runFor(MINUTE)
+    expect(store.getState().attention).toBe('prompt')
+
+    await tab.runFor(12 * HOUR)
+    expect(store.getState().attention).toBe('urgent')
+  })
+
+  test('given deploys that keep landing, then the tab still escalates, counting from the first deploy it saw', async ({
+    app,
+    tab,
+  }) => {
+    tab.setSystemTime('2026-11-17T09:00:00Z')
+    server.use(serveBuild(deployedAt('2026-11-17T09:00:00.000Z', 'first')))
+    const store = app.create({ pollInterval: HOUR })
+    app.subscribe(store)
+    await tab.runFor(4 * HOUR)
+
+    server.use(serveBuild(deployedAt('2026-11-17T13:00:00.000Z', 'second')))
+    await tab.runFor(4 * HOUR)
+
+    server.use(serveBuild(deployedAt('2026-11-17T17:00:00.000Z', 'third')))
+    await tab.runFor(3 * HOUR)
+    expect(store.getState().attention).toBe('passive')
+
+    await tab.runFor(HOUR)
+
+    expect(store.getState()).toMatchObject({
+      attention: 'prompt',
+      latest: { version: 'third' },
+    })
+  })
+
+  test('given the tab caught up again after a rollback to its build, when a later deploy lands, then the count starts over', async ({
+    app,
+    tab,
+  }) => {
+    tab.setSystemTime('2026-11-17T09:00:00Z')
+    server.use(serveBuild(deployedAt('2026-11-17T09:00:00.000Z')))
+    const store = app.create({ pollInterval: HOUR })
+    app.subscribe(store)
+    await tab.runFor(11 * HOUR)
+
+    server.use(serveBuild(running))
+    await tab.runFor(HOUR)
+    expect(store.getState().reason).toBe('caught-up')
+
+    server.use(serveBuild(deployedAt('2026-11-17T21:00:00.000Z', 'ccc')))
+    await tab.runFor(HOUR)
+
+    expect(store.getState().attention).toBe('passive')
+  })
+
+  test('given a tab that loads a build superseded long ago, then it is urgent at once', async ({
+    app,
+    tab,
+  }) => {
+    tab.setSystemTime('2026-11-17T09:00:00Z')
+    server.use(serveBuild(deployedAt('2026-11-15T09:00:00.000Z')))
+    const store = app.create()
+    app.subscribe(store)
+    await tab.waitForResponse()
+
+    expect(store.getState()).toMatchObject({
+      attention: 'urgent',
+      reason: 'outdated',
+    })
+  })
+})

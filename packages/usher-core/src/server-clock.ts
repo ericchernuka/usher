@@ -4,7 +4,7 @@ import type { Environment } from './environment'
 const HEADER_ROUNDING_MS = 2_000
 
 /**
- * Server-corrected time. Build age and dismissals are measured against the
+ * Server-corrected time. Time outdated and dismissals are measured against the
  * server's clock, anchored to monotonic time so a change to the user's clock
  * cannot move them. Until a server time has been observed, it is the local clock.
  */
