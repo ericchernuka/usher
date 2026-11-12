@@ -4,5 +4,5 @@ import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 
 export default defineConfig({
-  plugins: [react(), usher({ adapter: cloudflareWorkers() })],
+  plugins: [react(), usher({ adapter: cloudflareWorkers(), devtools: true })],
 })
