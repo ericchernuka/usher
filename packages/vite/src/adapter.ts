@@ -27,9 +27,6 @@ export interface SkewProtectionAsset {
  * `appVersion({ skewProtection })`.
  */
 export interface SkewProtectionAdapter {
-  readonly kind: 'skew-protection'
-  /** Provider and target, e.g. "cloudflare-pages". */
-  readonly name: string
   /** Files to add to the client bundle. */
   bundleAssets?(
     context: SkewProtectionContext,

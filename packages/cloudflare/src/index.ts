@@ -23,14 +23,6 @@ export interface CloudflareWorkersConfig {
   workerFile?: string
 }
 
-export interface CloudflarePagesAdapter extends SkewProtectionAdapter {
-  readonly name: 'cloudflare-pages'
-}
-
-export interface CloudflareWorkersAdapter extends SkewProtectionAdapter {
-  readonly name: 'cloudflare-workers'
-}
-
 type Target = 'pages' | 'workers'
 
 const handlerSource = () =>
@@ -66,12 +58,10 @@ export default {
  */
 export function cloudflarePages(
   config: CloudflarePagesConfig = {},
-): CloudflarePagesAdapter {
+): SkewProtectionAdapter {
   const binding = config.r2Binding ?? DEFAULT_BINDING
 
   return {
-    kind: 'skew-protection',
-    name: 'cloudflare-pages',
     bundleAssets(context) {
       if (existsSync(resolve(context.root, 'functions'))) {
         context.logger.warn(
@@ -107,12 +97,10 @@ export function cloudflarePages(
  */
 export function cloudflareWorkers(
   config: CloudflareWorkersConfig = {},
-): CloudflareWorkersAdapter {
+): SkewProtectionAdapter {
   const binding = config.r2Binding ?? DEFAULT_BINDING
 
   return {
-    kind: 'skew-protection',
-    name: 'cloudflare-workers',
     writeBundle(context) {
       const out = resolve(
         context.root,

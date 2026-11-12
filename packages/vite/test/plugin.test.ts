@@ -48,8 +48,6 @@ describe('appVersion plugin', () => {
           version: 'sha-test',
           commitTime: '2026-11-11T09:00:00Z',
           skewProtection: {
-            kind: 'skew-protection',
-            name: 'test-assets',
             bundleAssets: ({ base }) => [
               { fileName: 'adapter.txt', source: base },
             ],
@@ -110,8 +108,6 @@ it.each(['bundleAssets', 'writeBundle'] as const)(
             version: 'test',
             commitTime: '2026-11-11T09:00:00Z',
             skewProtection: {
-              kind: 'skew-protection',
-              name: 'rejecting-adapter',
               bundleAssets(context) {
                 if (phase === 'bundleAssets') {
                   context.error('adapter rejected the build')

@@ -33,7 +33,7 @@ Serve `version.json` uncached (the client also adds `?t=`):
 
 ### Skew protection (optional)
 
-Pass an adapter from a provider package. Each factory returns a `SkewProtectionAdapter` (`kind: 'skew-protection'`, a `name`, and build hooks), in the style of TanStack AI's provider adapters:
+Pass an adapter from a provider package. Each factory returns the same `SkewProtectionAdapter` interface, with hooks for bundle assets or output outside the client directory:
 
 ```ts
 import { cloudflarePages, cloudflareWorkers } from '@app-version/cloudflare'
