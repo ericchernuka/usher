@@ -9,9 +9,9 @@ import {
   createAppUpdates as createCoreUpdates,
   defaultCopy,
   type AppUpdates,
-  type ReloadBlocker,
+  type RefreshBlocker,
 } from '@app-version/core'
-import { useAppUpdates, useReloadBlocker } from '../src/index'
+import { useAppUpdates, useRefreshBlocker } from '../src/index'
 import { captureNavigations } from '../../core/test/navigation'
 import { runningBuild, versionUrl } from './build-info.stub'
 
@@ -179,13 +179,13 @@ describe('useAppUpdates deferral', () => {
   })
 })
 
-describe('useReloadBlocker', () => {
+describe('useRefreshBlocker', () => {
   it('blocks refresh while mounted and blocking', async () => {
     const navigations = captureNavigations()
     const updates = createAppUpdates()
 
     function Form({ dirty }: { dirty: boolean }) {
-      useReloadBlocker(updates, dirty)
+      useRefreshBlocker(updates, dirty)
 
       return null
     }
@@ -203,15 +203,15 @@ describe('useReloadBlocker', () => {
   })
 })
 
-describe('useReloadBlocker with a function', () => {
-  it('blocks only the reloads the function accepts', async () => {
+describe('useRefreshBlocker with a function', () => {
+  it('blocks only while the function returns true', async () => {
     const navigations = captureNavigations()
     const updates = createAppUpdates()
     let blocking = true
-    const blocker = vi.fn<ReloadBlocker>(() => blocking)
+    const blocker = vi.fn<RefreshBlocker>(() => blocking)
 
     function Form() {
-      useReloadBlocker(updates, blocker)
+      useRefreshBlocker(updates, blocker)
 
       return null
     }
@@ -219,7 +219,7 @@ describe('useReloadBlocker with a function', () => {
     const view = await render(<Form />)
     expect(await updates.refresh()).toBe(false)
     expect(navigations).toEqual([])
-    expect(blocker).toHaveBeenCalledWith({ href: window.location.href })
+    expect(blocker).toHaveBeenCalledWith()
 
     blocking = false
     expect(await updates.refresh()).toBe(true)

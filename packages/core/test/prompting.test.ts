@@ -79,7 +79,7 @@ describe('showing and hiding', () => {
   }) => {
     server.use(serveBuild(older))
     const store = app.create()
-    const removeBlocker = store.addReloadBlocker(() => true)
+    const removeBlocker = store.addRefreshBlocker(() => true)
     const ui = fakeAdapter()
     app.track(connectPrompt(store, ui.adapter))
     await clock.waitForResponse()

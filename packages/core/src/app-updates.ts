@@ -7,11 +7,11 @@ import { createUpdateMonitor } from './update-monitor'
 import { createBrowserEnvironment, type BrowserEnvironment } from './browser'
 import { resolveAttention, type StickyUrgency } from './attention'
 import { isolate } from './callbacks'
-import { createRefresh, type ReloadBlocker } from './refresh'
+import { createRefresh, type RefreshBlocker } from './refresh'
 import { createPromptDismissal } from './prompt-dismissal'
 import type { AppUpdatesOptions, BuildFacts, UpdateState } from './types'
 
-export type { ReloadBlocker } from './refresh'
+export type { RefreshBlocker } from './refresh'
 
 export interface UpdateStoreOptions extends AppUpdatesOptions {
   browser?: BrowserEnvironment
@@ -25,9 +25,9 @@ export interface AppUpdates {
   getState: () => UpdateState
   /** Each call is its own subscription, even with the same function. */
   subscribe: (listener: () => void) => () => void
-  /** Register a synchronous reload veto (e.g. unsaved work); returns a cleanup. */
-  addReloadBlocker: (blocker: ReloadBlocker) => () => void
-  /** Reload onto the latest build. Resolves false if a blocker or your `reload` declined. Concurrent calls share one reload. */
+  /** Register a synchronous veto on refresh (e.g. unsaved work); returns a cleanup. */
+  addRefreshBlocker: (blocker: RefreshBlocker) => () => void
+  /** Refresh onto the latest build. Resolves false if a blocker or your `reload` declined. Concurrent calls share one attempt. */
   refresh: () => Promise<boolean>
   /** Dismiss the current prompt for every tab. Urgent states cannot be dismissed. */
   dismiss: () => boolean
@@ -80,10 +80,9 @@ class AppUpdatesStore implements AppUpdates {
       options.storageKey ?? 'app-version',
       this.browser,
     )
-    this.refreshes = createRefresh({
-      ...(options.reload && { reload: options.reload }),
-      browser: this.browser,
-    })
+    this.refreshes = createRefresh(
+      options.reload ?? (() => this.browser.location.reload()),
+    )
     this.monitor = createUpdateMonitor({
       versionUrl: options.versionUrl,
       pollMs: resolvePollInterval(options.pollInterval),
@@ -146,10 +145,10 @@ class AppUpdatesStore implements AppUpdates {
     }
   }
 
-  addReloadBlocker = (blocker: ReloadBlocker) =>
+  addRefreshBlocker = (blocker: RefreshBlocker) =>
     this.refreshes.addBlocker(blocker)
 
-  refresh = () => this.refreshes.request({ href: this.browser.location.href })
+  refresh = () => this.refreshes.request()
 
   dismiss = (): boolean => {
     if (this.state.attention !== 'prompt') {

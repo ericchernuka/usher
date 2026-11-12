@@ -1,27 +1,28 @@
-import type { BrowserEnvironment } from './browser'
-import type { ReloadDetails, ReloadFn } from './types'
+import type { AppUpdatesOptions } from './types'
 
-/** Return true to block the reload. Must be synchronous. */
-export type ReloadBlocker = (details: ReloadDetails) => boolean
+/** Return true to block the refresh. Must be synchronous. */
+export type RefreshBlocker = () => boolean
+
+type Reload = NonNullable<AppUpdatesOptions['reload']>
 
 function createBlockers() {
-  const blockers = new Set<{ blocker: ReloadBlocker }>()
+  const blockers = new Set<{ blocker: RefreshBlocker }>()
 
   return {
-    add: (blocker: ReloadBlocker) => {
+    add: (blocker: RefreshBlocker) => {
       const entry = { blocker }
       blockers.add(entry)
 
       return () => void blockers.delete(entry)
     },
-    blocked(details: ReloadDetails): boolean {
+    blocked(): boolean {
       for (const { blocker } of blockers) {
         try {
-          if (blocker(details)) {
+          if (blocker()) {
             return true
           }
         } catch (error) {
-          console.error('[app-version] reload blocker threw', error)
+          console.error('[app-version] refresh blocker threw', error)
 
           return true
         }
@@ -32,12 +33,9 @@ function createBlockers() {
   }
 }
 
-async function perform(
-  reload: ReloadFn,
-  details: ReloadDetails,
-): Promise<boolean> {
+async function perform(reload: Reload): Promise<boolean> {
   try {
-    return (await reload(details)) !== false
+    return (await reload()) !== false
   } catch (error) {
     console.error('[app-version] reload threw', error)
 
@@ -45,26 +43,23 @@ async function perform(
   }
 }
 
-export interface RefreshOptions {
-  reload?: ReloadFn
-  browser: BrowserEnvironment
-}
-
-export function createRefresh({ reload, browser }: RefreshOptions) {
+/** Owns refresh blockers and the one refresh attempt that concurrent callers share. */
+export function createRefresh(
+  reload: NonNullable<AppUpdatesOptions['reload']>,
+) {
   const blockers = createBlockers()
-  const performReload = reload ?? (() => browser.location.reload())
   let inFlight: Promise<boolean> | undefined
 
-  function request(details: ReloadDetails): Promise<boolean> {
+  function request(): Promise<boolean> {
     if (inFlight) {
       return inFlight
     }
 
-    if (blockers.blocked(details)) {
+    if (blockers.blocked()) {
       return Promise.resolve(false)
     }
 
-    const attempt = perform(performReload, details).finally(() => {
+    const attempt = perform(reload).finally(() => {
       inFlight = undefined
     })
 

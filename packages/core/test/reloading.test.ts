@@ -1,5 +1,4 @@
 import { vi } from 'vitest'
-import type { ReloadDetails } from '../src/index'
 import { server } from './mocks/node'
 import { serveBuild } from './mocks/overrides'
 import { describe, expect, newer, test } from './fixtures'
@@ -39,19 +38,12 @@ describe('refreshing', () => {
     app,
     host,
   }) => {
-    const seen: ReloadDetails[] = []
+    const reload = vi.fn<() => Promise<boolean | undefined>>(async () => answer)
     let answer: boolean | undefined = false
-
-    const store = app.create({
-      reload: async details => {
-        seen.push(details)
-
-        return answer
-      },
-    })
+    const store = app.create({ reload })
 
     expect(await store.refresh()).toBe(false)
-    expect(seen).toEqual([{ href: host.location.href }])
+    expect(reload).toHaveBeenCalledWith()
 
     answer = undefined
     expect(await store.refresh()).toBe(true)
@@ -68,13 +60,13 @@ describe('refreshing', () => {
     expect(await throwing.refresh()).toBe(false)
   })
 
-  test('given reload blockers, then any one vetoes and removing it lifts the veto', async ({
+  test('given refresh blockers, then any one vetoes and removing it lifts the veto', async ({
     app,
     host,
   }) => {
     const store = app.create()
-    const removeForm = store.addReloadBlocker(() => true)
-    store.addReloadBlocker(() => false)
+    const removeForm = store.addRefreshBlocker(() => true)
+    store.addRefreshBlocker(() => false)
 
     expect(await store.refresh()).toBe(false)
 

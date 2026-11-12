@@ -1,7 +1,7 @@
 import { createAppUpdatesStore, type AppUpdates } from './app-updates'
 import type { AppUpdatesOptions } from './types'
 
-export type { AppUpdates, ReloadBlocker } from './app-updates'
+export type { AppUpdates, RefreshBlocker } from './app-updates'
 
 export {
   connectPrompt,
@@ -16,8 +16,6 @@ export {
 export type {
   AppUpdatesOptions,
   Attention,
-  ReloadDetails,
-  ReloadFn,
   UpdateState,
   BuildFacts,
 } from './types'

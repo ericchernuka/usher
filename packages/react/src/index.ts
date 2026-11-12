@@ -1,5 +1,5 @@
 import { useDeferredValue, useEffect, useSyncExternalStore } from 'react'
-import type { AppUpdates, ReloadBlocker, UpdateState } from '@app-version/core'
+import type { AppUpdates, RefreshBlocker, UpdateState } from '@app-version/core'
 
 const identity = <T>(state: T) => state
 let warnedUnstableSelector = false
@@ -51,21 +51,21 @@ export function useAppUpdates<T>(
 }
 
 /**
- * Block reloads while this component needs it, like React Router's useBlocker.
- * Pass a boolean, or a function of the reload details.
+ * Block refreshes while this component needs it, like React Router's useBlocker.
+ * Pass a boolean, or a function that returns one when a refresh is requested.
  *
- *   useReloadBlocker(appUpdates, form.isDirty);
+ *   useRefreshBlocker(appUpdates, form.isDirty);
  */
-export function useReloadBlocker(
+export function useRefreshBlocker(
   store: AppUpdates,
-  shouldBlock: boolean | ReloadBlocker,
+  shouldBlock: boolean | RefreshBlocker,
 ): void {
   useEffect(() => {
     if (shouldBlock === false) {
       return undefined
     }
 
-    return store.addReloadBlocker(
+    return store.addRefreshBlocker(
       shouldBlock === true ? () => true : shouldBlock,
     )
   }, [store, shouldBlock])

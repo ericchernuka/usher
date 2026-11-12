@@ -55,16 +55,6 @@ export type UpdateState =
       latest: BuildFacts
     }
 
-/** The destination of an explicit refresh. */
-export interface ReloadDetails {
-  href: string
-}
-
-/** Return or resolve false when the app declines the refresh. */
-export type ReloadFn = (
-  details: ReloadDetails,
-) => void | boolean | Promise<void | boolean>
-
 export interface AppUpdatesOptions {
   /** Build facts of the running build. */
   running: BuildFacts
@@ -89,11 +79,11 @@ export interface AppUpdatesOptions {
   /** How often, in milliseconds, a visible tab checks for a new build. Default 5 minutes, minimum 10 seconds. */
   pollInterval?: number
   /**
-   * Performs an explicit refresh, after reload blockers allow it. Route it
-   * through your router to reuse its blockers, e.g. TanStack
-   * `router.navigate({ href, reloadDocument: true, replace: true })`. See README.
+   * The document load a refresh performs, once refresh blockers allow it.
+   * Return or resolve `false` when the reload did not happen. Default `location.reload()`.
+   * Route it through your router to reuse its blockers; see the README recipe.
    */
-  reload?: ReloadFn
+  reload?: () => void | boolean | Promise<void | boolean>
   /** localStorage key prefix; set one per app if apps share an origin. Default "app-version". */
   storageKey?: string
 }

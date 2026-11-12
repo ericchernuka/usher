@@ -12,7 +12,7 @@ export interface BrowserEnvironment {
     readonly visibilityState: DocumentVisibilityState
   }
   readonly localStorage: StorageLike
-  readonly location: Pick<Location, 'href' | 'reload'>
+  readonly location: Pick<Location, 'reload'>
   readonly fetch: typeof fetch
 }
 

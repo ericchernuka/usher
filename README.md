@@ -9,7 +9,7 @@ See the [glossary](GLOSSARY.md) for domain terms and the [architecture](docs/Ske
 | `@app-version/core`       | `@app-version/core`        | `createAppUpdates({ current, url, ... })`: the update store; `connectPrompt()`: drive any toast/banner UI | —           |
 | `@app-version/vite`       | `@app-version/vite`        | `appVersion()` plugin: writes `version.json`, provides `virtual:app-version`, runs a skew adapter         | Vite        |
 |                           | `@app-version/vite/client` | `createAppUpdates()`: creates the core store using embedded build facts and the version URL               | Vite plugin |
-| `@app-version/react`      | `@app-version/react`       | `useAppUpdates(store, selector?)`, `useReloadBlocker(store, shouldBlock)`                                 | React       |
+| `@app-version/react`      | `@app-version/react`       | `useAppUpdates(store, selector?)`, `useRefreshBlocker(store, shouldBlock)`                                | React       |
 | `@app-version/cloudflare` | `@app-version/cloudflare`  | `cloudflarePages()`, `cloudflareWorkers()`: skew-protection adapters that serve old chunks from R2        | Cloudflare  |
 
 ## Setup
@@ -80,7 +80,7 @@ export const appUpdates = createAppUpdates({
 ```
 
 ```tsx
-import { useAppUpdates, useReloadBlocker } from '@app-version/react'
+import { useAppUpdates, useRefreshBlocker } from '@app-version/react'
 
 function UpdateButton() {
   const attention = useAppUpdates(appUpdates, state => state.attention)
@@ -94,7 +94,7 @@ function UpdateButton() {
 
 function JobForm() {
   const form = useForm()
-  useReloadBlocker(appUpdates, form.formState.isDirty)
+  useRefreshBlocker(appUpdates, form.formState.isDirty)
 }
 ```
 
@@ -123,7 +123,7 @@ A prompt dismissal records its server time in localStorage. It quiets every tab 
 interface AppUpdates {
   getState(): UpdateState
   subscribe(listener: () => void): () => void
-  addReloadBlocker(blocker: (details: { href: string }) => boolean): () => void
+  addRefreshBlocker(blocker: () => boolean): () => void
   refresh(): Promise<boolean>
   dismiss(): boolean
 }
@@ -139,20 +139,24 @@ Snapshots keep the same identity until attention, reason, or any of the latest b
 | `urgentAfter`  | 24 hours                                      | Build age in milliseconds at which it reaches urgent attention. `false` turns the level off. Must be later than `promptAfter`.     |
 | `promptSnooze` | Until urgent                                  | How long, in milliseconds, a prompt dismissal quiets prompt attention.                                                             |
 | `pollInterval` | 5 minutes                                     | Visible-tab polling interval in milliseconds, at least 10 seconds. Focus and visibility can also trigger a check after one minute. |
-| `reload`       | `location.reload()`                           | An explicit refresh. Receives `{ href }`; may return or resolve false to decline.                                                  |
+| `reload`       | `location.reload()`                           | The document load a refresh performs. May return or resolve false to decline.                                                      |
 | `storageKey`   | `app-version`                                 | Set separately for apps on the same origin.                                                                                        |
 
 There are no cancelable attention changes, input-idle delays, navigation reloads, or chunk-error reloads. Apps can subscribe to observe state. R2 fallback keeps old chunks available; the library refreshes only when the app calls `refresh()`.
 
 ### Refresh and unsaved work
 
-Reload blockers decide whether an explicit refresh can proceed. A throwing blocker blocks the refresh. The optional `reload` function decides how to refresh; concurrent refresh calls share one attempt. A failure or a declined attempt does not prevent a later retry.
+Refresh blockers decide whether an explicit refresh can proceed. A throwing blocker blocks the refresh. The optional `reload` function decides how to refresh; concurrent refresh calls share one attempt. A failure or a declined attempt does not prevent a later retry.
 
 To reuse a router's blockers:
 
 ```ts
-reload: async ({ href }) => {
-  await router.navigate({ href, reloadDocument: true, replace: true })
+reload: async () => {
+  await router.navigate({
+    href: window.location.href,
+    reloadDocument: true,
+    replace: true,
+  })
   return false // The page is still here because the router declined the reload.
 }
 ```
@@ -189,7 +193,7 @@ The adapter has a real seam: different UI libraries implement `show` and `hide`.
 
 `update-monitor.ts` owns fetching, browser events, clock correction, and the wake timer. It asks the store to evaluate new observations and time changes. When scheduling, it derives the delay from the next server-time deadline and the current corrected time. `prompt-dismissal.ts` owns persistence and merging of the shared dismissal record.
 
-`browser.ts` defines the browser capabilities used by the store and monitor. Its default implementation reads browser globals on access. `refresh.ts` owns explicit refresh attempts, reload blockers, and sharing of concurrent attempts.
+`browser.ts` defines the browser capabilities used by the store and monitor. Its default implementation reads browser globals on access. `refresh.ts` owns explicit refresh attempts, refresh blockers, and sharing of concurrent attempts.
 
 Build age and dismissals use the response's Date header, anchored to `performance.now()`. Before a Date header has been received, the monitor uses the local clock. Missing Date headers retain the last estimate. Changes smaller than two seconds are ignored as header rounding. Polling uses monotonic time, so changing the user's clock cannot stop it. Cross-origin version responses need `Access-Control-Expose-Headers: Date` for clock correction.
 

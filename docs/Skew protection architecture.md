@@ -94,7 +94,7 @@ Dashboard rollbacks and old-commit redeploys have an older commit time. A revert
 
 Deploy one Workers version at a time. Alternating version responses during a gradual deployment can appear to be a rollback.
 
-The library retains age-based escalation, shared prompt dismissal, sticky urgency, explicit refresh, reload blockers, and prompt adapters. It does not cancel attention changes, delay urgency for typing, reload on navigation, or reload on chunk errors. Server-driven compatibility signals are deferred.
+The library retains age-based escalation, shared prompt dismissal, sticky urgency, explicit refresh, refresh blockers, and prompt adapters. It does not cancel attention changes, delay urgency for typing, reload on navigation, or reload on chunk errors. Server-driven compatibility signals are deferred.
 
 ## Verification
 

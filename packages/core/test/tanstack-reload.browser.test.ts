@@ -28,8 +28,12 @@ function setup() {
   const appUpdates = createAppUpdatesStore({
     running,
     versionUrl: '/version.json',
-    reload: async ({ href }) => {
-      await router.navigate({ href, reloadDocument: true, replace: true })
+    reload: async () => {
+      await router.navigate({
+        href: window.location.href,
+        reloadDocument: true,
+        replace: true,
+      })
 
       return false
     },

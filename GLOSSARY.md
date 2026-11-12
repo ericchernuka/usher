@@ -87,7 +87,12 @@ The app's presentation of attention, such as a toast, banner, or update button.
 _Avoid_: Prompt when the attention level is not meant.
 
 **Refresh**:
-An explicit action that reloads the tab onto the serving deployment.
+The user's explicit action to move the tab onto the serving deployment.
+_Avoid_: Reload for the action.
 
-**Reload blocker**:
-An app decision that prevents an explicit refresh, for example to protect unsaved work.
+**Reload**:
+The document load a refresh performs. It is the mechanism, which an app can replace, for example to route it through its router.
+
+**Refresh blocker**:
+An app decision that prevents a refresh, for example to protect unsaved work.
+_Avoid_: Reload blocker.
