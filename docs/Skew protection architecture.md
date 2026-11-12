@@ -17,7 +17,7 @@ Core does not import Vite or a virtual module. The Vite client helper imports co
 
 ## Build output
 
-The `appVersion()` plugin writes `version.json` and exposes the same build facts through `virtual:app-version`. The facts include a source version, commit time, build time, and an optional forced-update cutoff. A source version can occur in more than one build.
+The `appVersion()` plugin writes `version.json` and embeds the same build facts in the bundle, where `@app-version/vite/client` reads them. The facts include a source version, commit time, build time, and an optional forced-update cutoff. A source version can occur in more than one build.
 
 The version defaults to environment values and then Git. Commit time defaults to an explicit option, `APP_COMMIT_TIME`, and then Git. If no commit time is available, the plugin warns and uses build time, which prevents reliable detection of an old-commit redeploy. Malformed configured timestamps fail the build.
 

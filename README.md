@@ -7,8 +7,8 @@ See the [glossary](GLOSSARY.md) for domain terms and the [architecture](docs/Ske
 | Package                   | Import                     | What                                                                                                             | Needs       |
 | ------------------------- | -------------------------- | ---------------------------------------------------------------------------------------------------------------- | ----------- |
 | `@app-version/core`       | `@app-version/core`        | `createAppUpdates({ current, url, ... })`: the update store; `connectUpdateSurface()`: drive any toast/banner UI | —           |
-| `@app-version/vite`       | `@app-version/vite`        | `appVersion()` plugin: writes `version.json`, provides `virtual:app-version`, runs a skew adapter                | Vite        |
-|                           | `@app-version/vite/client` | `createAppUpdates()`: creates the core store using embedded build facts and the version URL                      | Vite plugin |
+| `@app-version/vite`       | `@app-version/vite`        | `appVersion()` plugin: writes `version.json`, embeds the build facts, runs a skew adapter                        | Vite        |
+|                           | `@app-version/vite/client` | `createAppUpdates()`: the core store with embedded build facts; `runningBuild`                                   | Vite plugin |
 | `@app-version/react`      | `@app-version/react`       | `useUpdateState(updates)`, `useRefreshBlocker(updates, shouldBlock)`                                             | React       |
 | `@app-version/cloudflare` | `@app-version/cloudflare`  | `cloudflarePages()`, `cloudflareWorkers()`: skew-protection adapters that serve old chunks from R2               | Cloudflare  |
 
@@ -22,7 +22,7 @@ import { appVersion } from '@app-version/vite'
 export default defineConfig({ plugins: [react(), appVersion()] })
 ```
 
-The plugin and its browser helper live in `@app-version/vite`. Core takes build facts explicitly and does not import Vite or a virtual module. If you import `virtual:app-version` directly, add `@app-version/vite/virtual` to your TypeScript `types` list.
+The plugin and its browser helper live in `@app-version/vite`. Core takes build facts explicitly and does not import Vite. To read the running build's facts, for example to tag RUM events, import `runningBuild` from `@app-version/vite/client`.
 
 Serve `version.json` uncached (the client also adds a `t` query parameter):
 

@@ -3,7 +3,9 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { build, createLogger } from 'vite'
 import { describe, expect, it, vi } from 'vitest'
-import { appVersion, resolveBuildFacts } from '../src/index'
+import { resolveBuildFacts } from '../src/build-facts'
+import { versionMiddleware } from '../src/dev-server'
+import { appVersion } from '../src/index'
 
 describe('resolveBuildFacts', () => {
   it('prefers env and normalizes dates', () => {
@@ -178,47 +180,27 @@ describe('given a malformed timestamp', () => {
   })
 })
 
-describe('dev server middleware', () => {
-  type Handler = (
-    req: { url?: string },
-    res: { setHeader(k: string, v: string): void; end(b: string): void },
-    next: () => void,
-  ) => void
+function devHandler(base: string) {
+  const handler = versionMiddleware(base, 'version.json', {
+    version: 'sha-dev',
+    commitTime: '2026-11-11T09:00:00.000Z',
+    buildTime: '2026-11-11T09:00:00.000Z',
+  })
 
-  function devHandler(base: string) {
-    const plugin = appVersion({
-      version: 'sha-dev',
-      commitTime: '2026-11-11T09:00:00Z',
-    })
+  return (url?: string) => {
+    let body: string | undefined
+    let passed = false
+    handler(
+      url === undefined ? {} : { url },
+      { setHeader: () => {}, end: b => (body = b) },
+      () => (passed = true),
+    )
 
-    const config = {
-      base,
-      root: '/',
-      build: { assetsDir: 'assets', outDir: 'dist', ssr: false },
-      logger: createLogger('silent'),
-    }
-
-    plugin.configResolved(config)
-
-    let handler: Handler | undefined
-
-    plugin.configureServer({
-      middlewares: { use: (fn: Handler) => (handler = fn) },
-    })
-
-    return (url?: string) => {
-      let body: string | undefined
-      let passed = false
-      handler!(
-        url === undefined ? {} : { url },
-        { setHeader: () => {}, end: b => (body = b) },
-        () => (passed = true),
-      )
-
-      return passed ? 'next' : JSON.parse(body!).version
-    }
+    return passed ? 'next' : JSON.parse(body!).version
   }
+}
 
+describe('dev server middleware', () => {
   it.each([
     ['/', '/version.json', '/assets/version.json'],
     ['/app/', '/app/version.json?t=1', '/version.json'],

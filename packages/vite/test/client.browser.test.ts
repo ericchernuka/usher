@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { createAppUpdates } from '../src/client'
+import * as client from '../src/client'
+import { createAppUpdates, runningBuild as embeddedBuild } from '../src/client'
 import { runningBuild } from './build-info.stub'
 
 const SECOND = 1_000
@@ -19,6 +20,14 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllGlobals()
   vi.useRealTimers()
+})
+
+it('exports the store factory and the running build', () => {
+  expect(Object.keys(client).toSorted()).toEqual([
+    'createAppUpdates',
+    'runningBuild',
+  ])
+  expect(embeddedBuild).toEqual(runningBuild)
 })
 
 it('uses the embedded build and version URL without configuration', async () => {

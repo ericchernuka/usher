@@ -3,5 +3,5 @@
   "compilerOptions": {
     "types": ["node", "vite/client", "@vitest/browser-playwright"]
   },
-  "include": ["src", "test", "virtual.d.ts", "*.config.ts"]
+  "include": ["src", "test", "*.config.ts"]
 }

@@ -7,14 +7,10 @@
   "exports": {
     ".": "./dist/index.js",
     "./client": "./dist/client.js",
-    "./virtual": {
-      "types": "./virtual.d.ts"
-    },
     "./package.json": "./package.json"
   },
   "files": [
-    "dist",
-    "virtual.d.ts"
+    "dist"
   ],
   "scripts": {
     "build": "tsdown",
