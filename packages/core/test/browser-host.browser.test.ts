@@ -43,7 +43,7 @@ describe('the store on the real browser', () => {
     const stop = updates.subscribe(() => {})
     await settle()
     expect(fetch).toHaveBeenCalledWith(
-      expect.stringMatching(/^\/version\.json\?t=\d+$/),
+      expect.stringMatching(/^http.+\/version\.json\?t=\d+$/),
       expect.objectContaining({ cache: 'no-store' }),
     )
     expect(updates.getState().attention).toBe('none')

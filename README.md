@@ -24,7 +24,7 @@ export default defineConfig({ plugins: [react(), appVersion()] })
 
 The plugin and its browser helper live in `@app-version/vite`. Core takes build facts explicitly and does not import Vite or a virtual module. If you import `virtual:app-version` directly, add `@app-version/vite/virtual` to your TypeScript `types` list.
 
-Serve `version.json` uncached (the client also adds `?t=`):
+Serve `version.json` uncached (the client also adds a `t` query parameter):
 
 ```
 /version.json
@@ -219,17 +219,7 @@ function copyFor({ attention, reason }: UpdateNotice) {
 
 ## Internal modules
 
-`app-updates.ts` owns observed build facts, sticky rollback or forced-update knowledge, the published snapshot, and subscribers. It also handles prompt dismissal. `attention.ts` computes attention and the next deadline from those facts, the dismissal record, and an explicit server time. It does not read clocks or store results.
-
-`update-monitor.ts` owns fetching, browser events, clock correction, and the wake timer. It asks the store to evaluate new observations and time changes. When scheduling, it derives the delay from the next server-time deadline and the current corrected time. `prompt-dismissal.ts` owns persistence and merging of the shared dismissal record.
-
-`browser.ts` defines the browser capabilities used by the store and monitor. Its default implementation reads browser globals on access. `refresh.ts` owns explicit refresh attempts, refresh blockers, and sharing of concurrent attempts.
-
-Build age and dismissals use the response's Date header, anchored to `performance.now()`. Before a Date header has been received, the monitor uses the local clock. Missing Date headers retain the last estimate. Changes smaller than two seconds are ignored as header rounding. Polling uses monotonic time, so changing the user's clock cannot stop it. Cross-origin version responses need `Access-Control-Expose-Headers: Date` for clock correction.
-
-The monitor triggers age evaluation even when network checks fail. Hidden tabs have no wake timer; they catch up when visible or subscribed again. A pending fetch retains its own 30-second timeout and is aborted when the final subscriber leaves. External JSON is validated. Blocked storage keeps prompt dismissal in memory for the current tab.
-
-Behaviour tests cover these rules. Model tests also exercise random event sequences with slow responses, outages, clock skew, clock jumps, resubscription, cross-tab dismissal, and rollback followed by a fix.
+The [architecture document](docs/Skew%20protection%20architecture.md) describes the modules inside each package.
 
 ## Rollbacks and deployment
 

@@ -1,97 +1,109 @@
 import * as v from 'valibot'
-import type { BrowserEnvironment, StorageChange } from './browser'
-
-export interface PromptDismissal {
-  dismissedAt?: number
-}
-
-const Finite = v.pipe(v.number(), v.finite())
-
-const lenient = <const T extends v.GenericSchema>(schema: T) =>
-  v.fallback(v.optional(schema), undefined)
+import { listen, type BrowserEnvironment } from './browser'
 
 const StoredDismissal = v.pipe(
+  v.string(),
+  v.parseJson(),
   v.object({
-    dismissedAt: lenient(Finite),
+    dismissedAt: v.fallback(
+      v.optional(v.pipe(v.number(), v.finite())),
+      undefined,
+    ),
   }),
-  v.transform(({ dismissedAt }): PromptDismissal => ({
-    ...(dismissedAt !== undefined && { dismissedAt }),
-  })),
 )
 
-const StoredDismissalJson = v.pipe(v.string(), v.parseJson(), StoredDismissal)
+function parse(raw: string | null): number | undefined {
+  const result = v.safeParse(StoredDismissal, raw)
 
-function parse(raw: string): PromptDismissal | undefined {
-  const result = v.safeParse(StoredDismissalJson, raw)
-
-  return result.success ? result.output : undefined
+  return result.success ? result.output.dismissedAt : undefined
 }
 
-const max = (x?: number, y?: number) =>
-  x === undefined ? y : y === undefined ? x : Math.max(x, y)
+const later = (a: number | undefined, b: number | undefined) =>
+  a === undefined ? b : b === undefined ? a : Math.max(a, b)
 
-function later(a: PromptDismissal, b: PromptDismissal): PromptDismissal {
-  const dismissedAt = max(a.dismissedAt, b.dismissedAt)
+const StorageFields = v.object({
+  key: v.nullable(v.string()),
+  newValue: v.nullable(v.string()),
+})
 
-  return dismissedAt === undefined ? {} : { dismissedAt }
-}
-
-function isOurArea(e: StorageChange, browser: BrowserEnvironment) {
+function readChange(event: Event, browser: BrowserEnvironment) {
   try {
-    return e.storageArea === browser.localStorage
+    if (
+      !('storageArea' in event) ||
+      event.storageArea !== browser.localStorage
+    ) {
+      return undefined
+    }
+
+    const parsed = v.safeParse(StorageFields, event)
+
+    return parsed.success ? parsed.output : undefined
   } catch {
-    return false
+    return undefined
   }
 }
 
+/**
+ * The server time of the latest prompt dismissal, shared by every tab of the app
+ * through localStorage. The latest dismissal wins. When storage is blocked, the
+ * dismissal still holds in this tab.
+ *
+ * The stored record is `{ "dismissedAt": <server time in ms> }` under
+ * `<storageKey>:prompt-dismissal`. Other tabs and older releases read it, so
+ * treat the format as a contract.
+ */
 export function createPromptDismissal(
   storageKey: string,
   browser: BrowserEnvironment,
 ) {
   const key = `${storageKey}:prompt-dismissal`
-  let memory: PromptDismissal = {}
+  let dismissedAt: number | undefined
   let unsynced = false
+  let stopListening: (() => void) | undefined
+
+  function hydrate() {
+    try {
+      const stored = parse(browser.localStorage.getItem(key))
+      dismissedAt = unsynced ? later(dismissedAt, stored) : stored
+    } catch {}
+  }
+
+  function onStorage(event: Event, onChange: () => void) {
+    const change = readChange(event, browser)
+
+    if (!change || (change.key !== null && change.key !== key)) {
+      return
+    }
+
+    dismissedAt =
+      change.key === null || change.newValue === null
+        ? undefined
+        : later(dismissedAt, parse(change.newValue))
+
+    onChange()
+  }
 
   return {
-    get: (): PromptDismissal => memory,
+    get: (): number | undefined => dismissedAt,
 
-    hydrate() {
-      try {
-        const raw = browser.localStorage.getItem(key)
-        const stored = (raw === null ? undefined : parse(raw)) ?? {}
-        memory = unsynced ? later(memory, stored) : stored
-      } catch {}
+    /** Read what other tabs left in storage and follow their changes. */
+    start(onChange: () => void) {
+      hydrate()
+      stopListening = listen(browser.window, 'storage', event =>
+        onStorage(event, onChange),
+      )
     },
 
-    onStorage(e: StorageChange): boolean {
-      if (!isOurArea(e, browser)) {
-        return false
-      }
-
-      if (e.key === null || (e.key === key && e.newValue === null)) {
-        memory = {}
-
-        return true
-      }
-
-      if (e.key !== key || e.newValue === null) {
-        return false
-      }
-
-      const incoming = parse(e.newValue)
-
-      if (incoming) {
-        memory = later(memory, incoming)
-      }
-
-      return true
+    stop() {
+      stopListening?.()
+      stopListening = undefined
     },
 
-    write(next: PromptDismissal) {
-      memory = next
+    record(at: number) {
+      dismissedAt = at
 
       try {
-        browser.localStorage.setItem(key, JSON.stringify(memory))
+        browser.localStorage.setItem(key, JSON.stringify({ dismissedAt }))
         unsynced = false
       } catch {
         unsynced = true

@@ -1,15 +1,10 @@
 export type StorageLike = Pick<Storage, 'getItem' | 'setItem'>
 
-export interface StorageChange {
-  readonly key: string | null
-  readonly newValue: string | null
-  readonly storageArea: StorageLike | null
-}
-
 export interface BrowserEnvironment {
   readonly window: EventTarget
   readonly document: EventTarget & {
     readonly visibilityState: DocumentVisibilityState
+    readonly baseURI: string
   }
   readonly localStorage: StorageLike
   readonly location: Pick<Location, 'reload'>
@@ -32,4 +27,10 @@ export function createBrowserEnvironment(): BrowserEnvironment {
     },
     fetch: (...args) => fetch(...args),
   }
+}
+
+export function listen(target: EventTarget, type: string, fn: EventListener) {
+  target.addEventListener(type, fn)
+
+  return () => target.removeEventListener(type, fn)
 }

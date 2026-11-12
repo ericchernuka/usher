@@ -60,17 +60,30 @@ Generated Workers entries also check the asset prefix before calling the handler
 
 ## Update state
 
-`app-updates.ts` owns observed build facts, sticky rollback or forced-update knowledge, the published snapshot, subscribers, and the dismiss operation. Snapshot identity stays stable while attention, reason, and the latest build facts remain unchanged.
+Inside core, the store composes five sources, and dependencies point one way. No source knows about another source or about the store.
 
-`attention.ts` computes attention and the next deadline from explicit inputs. It reads neither clocks nor storage. It compares source versions for ordinary update detection, commit times for rollback detection, and running-build time against the forced-update cutoff. Rollback and forced-update knowledge remains urgent after later deployments, including a deployment that matches the running version.
+| Module                | Owns                                                                                                                                        |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `app-updates.ts`      | Subscribers, the published snapshot, sticky urgency, and the one deadline timer for the next change of attention.                           |
+| `attention.ts`        | Nothing. A pure function from running facts, latest facts, server time, the dismissal and thresholds to a state and its next deadline.      |
+| `latest-build.ts`     | The last valid build facts observed, the poll schedule, the in-flight request and its 30-second timeout, and focus and visibility rechecks. |
+| `server-clock.ts`     | The offset between server time and monotonic time.                                                                                          |
+| `prompt-dismissal.ts` | The shared dismissal timestamp, in memory and in localStorage, and the storage event subscription.                                          |
+| `refresh.ts`          | Refresh blockers and the one refresh attempt that concurrent callers share.                                                                 |
 
-`update-monitor.ts` owns requests, browser events, clock correction, and one wake timer. It anchors the response's Date header to monotonic time. Before a Date header is available, it uses the local clock. Scheduling derives a delay from the next server-time deadline and corrected current time. Update state stores neither a deadline nor a clock offset.
+Every source calls back into the store's single `evaluate()`. It reads the latest build, the server time and the dismissal, asks `attention.ts` for a decision, keeps sticky urgency, publishes, and sets the deadline timer. Snapshot identity stays stable while attention, reason, and the latest build facts remain unchanged.
 
-Hidden tabs stop their wake timer and catch up when visible. A pending request retains a 30-second timeout and is aborted when the final subscriber leaves. Age evaluation continues on timer deadlines when network checks fail. The clock estimate survives missing Date headers and periods without subscribers.
+`attention.ts` compares source versions for ordinary update detection, commit times for rollback detection, and running-build time against the forced-update cutoff. Rollback and forced-update knowledge remains urgent after later deployments, including a deployment that matches the running version.
 
-`prompt-dismissal.ts` persists and merges the shared prompt-dismissal timestamp. Dismissal quiets tabs whose prompt threshold had already started. It never quiets urgent attention. Without an explicit prompt snooze, dismissal lasts until urgent starts; if urgent is disabled, it has no expiry. Blocked storage retains a successful dismissal for the current tab.
+`server-clock.ts` anchors the response's Date header to monotonic time, so changing the user's clock cannot move build age. Before a Date header is available, it uses the local clock. Missing Date headers keep the last estimate, and changes under two seconds are treated as header rounding. Cross-origin version responses need `Access-Control-Expose-Headers: Date` for clock correction.
 
-`browser.ts` supplies browser capabilities without reading globals until they are used. `refresh.ts` owns explicit refresh attempts, synchronous blockers, and sharing of concurrent attempts. The app can supply a reload function to use its router's confirmation flow. Throwing blockers prevent refresh, and a failed or declined attempt can be retried.
+Hidden tabs keep no poll or deadline timer and catch up when visible. A pending request keeps its 30-second timeout and is aborted when the final subscriber leaves. Age evaluation continues on the deadline timer when network checks fail. The clock estimate, the last observed build and sticky urgency survive periods without subscribers.
+
+The first time a store receives a response that is not OK or not build facts as JSON, it logs one warning naming the version URL. Network errors and timeouts stay silent.
+
+`prompt-dismissal.ts` stores `{ "dismissedAt": <server time in ms> }` under `<storageKey>:prompt-dismissal`. Every tab of the app reads it, across releases, so the format is a contract. The latest dismissal wins. Dismissal quiets tabs whose prompt threshold had already started. It never quiets urgent attention. Without an explicit prompt snooze, dismissal lasts until urgent starts; if urgent is disabled, it has no expiry. Blocked storage keeps a dismissal for the current tab.
+
+`refresh.ts` runs blockers synchronously. A throwing blocker prevents the refresh, and a failed or declined attempt can be retried. The app can supply a reload function to use its router's confirmation flow.
 
 `connectUpdateSurface` connects an imperative update surface to the store. It handles attention thresholds, notices that are no longer shown, and surface callbacks during programmatic closure. Closing an urgent notice shows it again. A passive surface can be closed locally until its attention or reason changes.
 

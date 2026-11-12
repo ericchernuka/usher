@@ -34,7 +34,7 @@ it('uses the embedded build and version URL without configuration', async () => 
       }),
     )
     expect(fetch).toHaveBeenCalledWith(
-      expect.stringMatching(/^\/version\.json\?t=\d+$/),
+      expect.stringMatching(/^http.+\/version\.json\?t=\d+$/),
       expect.objectContaining({ cache: 'no-store' }),
     )
   } finally {

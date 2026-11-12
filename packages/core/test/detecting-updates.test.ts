@@ -2,7 +2,13 @@ import { http, HttpResponse } from 'msw/http'
 import { vi } from 'vitest'
 import { VERSION_URL } from './mocks/handlers'
 import { server } from './mocks/node'
-import { serveBuild, serveError, serveHang, serveRaw } from './mocks/overrides'
+import {
+  serveBuild,
+  serveError,
+  serveHang,
+  serveNetworkError,
+  serveRaw,
+} from './mocks/overrides'
 import { HOUR, MINUTE, describe, expect, newer, older, test } from './fixtures'
 
 describe('checking for a new build', () => {
@@ -54,6 +60,33 @@ describe('checking for a new build', () => {
     expect(listener).toHaveBeenCalled()
   })
 
+  test('given a version URL that already has a query, then the check keeps it and adds the cache buster', async ({
+    app,
+    clock,
+    requests,
+  }) => {
+    const store = app.create({ versionUrl: `${VERSION_URL}?channel=beta` })
+    app.subscribe(store)
+    await clock.waitForResponse()
+
+    const url = new URL(requests[0]?.url ?? '')
+    expect(url.searchParams.get('channel')).toBe('beta')
+    expect(Number(url.searchParams.get('t'))).toBe(Date.now())
+    expect(store.getState().reason).toBe('caught-up')
+  })
+
+  test('given a relative version URL, then the check resolves it against the page', async ({
+    app,
+    clock,
+    requests,
+  }) => {
+    app.subscribe(app.create({ versionUrl: './version.json' }))
+    await clock.waitForResponse()
+
+    const url = new URL(requests[0]?.url ?? '')
+    expect(url.origin + url.pathname).toBe(VERSION_URL)
+  })
+
   test('given the server answers with something that is not a build, then it is ignored', async ({
     app,
     clock,
@@ -71,6 +104,7 @@ describe('checking for a new build', () => {
     app,
     clock,
   }) => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
     server.use(serveBuild(newer, { once: true }))
     const store = app.create()
     app.subscribe(store)
@@ -259,5 +293,57 @@ describe('build age and the server clock', () => {
     await clock.runFor(5 * MINUTE)
 
     expect(store.getState().attention).toBe('prompt')
+  })
+})
+
+describe('a version file that is missing or misrouted', () => {
+  test('given the host answers with its HTML fallback, then the tab warns once across several checks', async ({
+    app,
+    clock,
+  }) => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    server.use(
+      http.get(VERSION_URL, () => HttpResponse.html('<!doctype html>')),
+    )
+    const store = app.create()
+    app.subscribe(store)
+    await clock.waitForResponse()
+    await app.poll()
+    await app.poll()
+
+    expect(store.getState()).toEqual({ attention: 'none', reason: 'unknown' })
+    expect(warn).toHaveBeenCalledTimes(1)
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringMatching(
+        /https:\/\/app\.test\/version\.json .* not JSON \(text\/html/,
+      ),
+    )
+  })
+
+  test('given a 404 and then JSON that is not build facts, then only the first is reported', async ({
+    app,
+    clock,
+  }) => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    server.use(serveError(404, { once: true }), serveRaw({}))
+    app.subscribe(app.create())
+    await clock.waitForResponse()
+    await app.poll()
+
+    expect(warn).toHaveBeenCalledTimes(1)
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('HTTP 404'))
+  })
+
+  test('given the network is down, then the tab does not warn', async ({
+    app,
+    clock,
+  }) => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    server.use(serveNetworkError())
+    app.subscribe(app.create())
+    await clock.waitForResponse()
+    await app.poll()
+
+    expect(warn).not.toHaveBeenCalled()
   })
 })

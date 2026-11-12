@@ -9,7 +9,8 @@ const input = (patch: Partial<AttentionInput> = {}): AttentionInput => ({
   running,
   latest: newer,
   now: at(1),
-  dismissal: {},
+  stickyUrgency: undefined,
+  dismissedAt: undefined,
   thresholds: resolveThresholds(),
   ...patch,
 })
@@ -65,19 +66,19 @@ it('does not apply an old forced cutoff', () => {
 })
 
 it('shares prompt dismissal until urgent, without muting urgent', () => {
-  const dismissal = { dismissedAt: at(13) }
-  expect(resolveAttention(input({ now: at(14), dismissal })).state.reason).toBe(
-    'dismissed',
-  )
+  const dismissedAt = at(13)
   expect(
-    resolveAttention(input({ now: at(24), dismissal })).state.attention,
+    resolveAttention(input({ now: at(14), dismissedAt })).state.reason,
+  ).toBe('dismissed')
+  expect(
+    resolveAttention(input({ now: at(24), dismissedAt })).state.attention,
   ).toBe('urgent')
   expect(
-    resolveAttention(input({ now: at(14), dismissal: { dismissedAt: at(11) } }))
-      .state.attention,
+    resolveAttention(input({ now: at(14), dismissedAt: at(11) })).state
+      .attention,
   ).toBe('prompt')
   expect(
-    resolveAttention(input({ now: at(14), dismissal, latest: older })).state
+    resolveAttention(input({ now: at(14), dismissedAt, latest: older })).state
       .reason,
   ).toBe('rollback')
 })
@@ -90,14 +91,12 @@ it('supports an explicit prompt snooze and disabled age levels', () => {
   })
 
   expect(
-    resolveAttention(
-      input({ now: at(2), thresholds, dismissal: { dismissedAt: at(2) } }),
-    ).nextAt,
+    resolveAttention(input({ now: at(2), thresholds, dismissedAt: at(2) }))
+      .nextAt,
   ).toBe(at(3))
   expect(
-    resolveAttention(
-      input({ now: at(3), thresholds, dismissal: { dismissedAt: at(2) } }),
-    ).state.attention,
+    resolveAttention(input({ now: at(3), thresholds, dismissedAt: at(2) }))
+      .state.attention,
   ).toBe('prompt')
   expect(
     resolveAttention(
@@ -126,7 +125,7 @@ it('with urgent disabled, a default prompt dismissal has no expiry', () => {
       input({
         now: at(40),
         thresholds: resolveThresholds({ urgentAfter: false }),
-        dismissal: { dismissedAt: at(13) },
+        dismissedAt: at(13),
       }),
     ),
   ).toEqual({

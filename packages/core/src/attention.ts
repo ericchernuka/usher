@@ -1,5 +1,4 @@
 import type { Thresholds } from './options'
-import type { PromptDismissal } from './prompt-dismissal'
 import type { BuildFacts, UpdateState } from './types'
 
 export type StickyUrgency = 'rollback' | 'forced'
@@ -8,18 +7,20 @@ export interface AttentionInput {
   running: BuildFacts
   latest: BuildFacts
   now: number
-  stickyUrgency?: StickyUrgency
-  dismissal: PromptDismissal
+  stickyUrgency: StickyUrgency | undefined
+  dismissedAt: number | undefined
   thresholds: Thresholds
 }
 
 export interface Decision {
   state: UpdateState
-  stickyUrgency?: StickyUrgency
-  nextAt?: number
+  /** Rollback or forced-update knowledge to keep until the tab reloads. */
+  stickyUrgency: StickyUrgency | undefined
+  /** Server time at which attention next changes on its own, if it will. */
+  nextAt: number | undefined
 }
 
-function detectBad(i: AttentionInput): StickyUrgency | undefined {
+function detectSticky(i: AttentionInput): StickyUrgency | undefined {
   const cutoff = Date.parse(i.latest.forceUpdateBefore ?? '')
 
   if (cutoff > Date.parse(i.running.buildTime)) {
@@ -34,7 +35,7 @@ function detectBad(i: AttentionInput): StickyUrgency | undefined {
 }
 
 function promptUntil(i: AttentionInput): number | undefined {
-  const at = i.dismissal.dismissedAt
+  const at = i.dismissedAt
   const snooze = i.thresholds.promptSnooze
 
   return at !== undefined && snooze !== undefined ? at + snooze : undefined
@@ -85,7 +86,7 @@ function attention(i: AttentionInput): UpdateState {
     return { attention: 'passive', reason: 'outdated', latest }
   }
 
-  const dismissedAt = i.dismissal.dismissedAt
+  const dismissedAt = i.dismissedAt
   const until = promptUntil(i)
 
   const dismissed =
@@ -99,21 +100,24 @@ function attention(i: AttentionInput): UpdateState {
 }
 
 export function resolveAttention(i: AttentionInput): Decision {
-  const stickyUrgency = detectBad(i)
+  const stickyUrgency = detectSticky(i)
 
   if (stickyUrgency) {
     return {
       state: { attention: 'urgent', reason: stickyUrgency, latest: i.latest },
       stickyUrgency,
+      nextAt: undefined,
     }
   }
 
   const state = attention(i)
 
-  const deadline =
-    state.attention === 'none' || state.attention === 'urgent'
-      ? undefined
-      : nextAt(i)
-
-  return { state, ...(deadline !== undefined && { nextAt: deadline }) }
+  return {
+    state,
+    stickyUrgency: undefined,
+    nextAt:
+      state.attention === 'none' || state.attention === 'urgent'
+        ? undefined
+        : nextAt(i),
+  }
 }

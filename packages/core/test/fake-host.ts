@@ -1,14 +1,10 @@
 import { createAppUpdatesStore, type AppUpdates } from '../src/app-updates'
 import type { AppUpdatesOptions } from '../src/types'
-import type {
-  BrowserEnvironment,
-  StorageChange,
-  StorageLike,
-} from '../src/browser'
+import type { BrowserEnvironment, StorageLike } from '../src/browser'
 import { runningBuild } from './build-info.stub'
 import { VERSION_URL } from './mocks/handlers'
 
-class FakeStorageEvent extends Event implements StorageChange {
+class FakeStorageEvent extends Event {
   readonly key: string | null
   readonly newValue: string | null
   readonly storageArea: StorageLike | null
@@ -40,8 +36,9 @@ class MemoryStorage implements StorageLike {
   }
 }
 
-interface MutableVisibility {
+interface MutableDocument {
   visibilityState: DocumentVisibilityState
+  baseURI: string
 }
 
 export function createFakeHost(options: { fetch?: typeof fetch } = {}) {
@@ -56,8 +53,9 @@ export function createFakeHost(options: { fetch?: typeof fetch } = {}) {
   const windowTarget = new EventTarget()
   const documentTarget = new EventTarget()
 
-  const visibility: MutableVisibility = {
+  const visibility: MutableDocument = {
     visibilityState: 'visible',
+    baseURI: 'https://app.test/now',
   }
 
   const doc = Object.assign(documentTarget, visibility)
@@ -132,7 +130,7 @@ export function createFakeHost(options: { fetch?: typeof fetch } = {}) {
 
 export type FakeHost = ReturnType<typeof createFakeHost>
 
-export type StoreOptions = Omit<AppUpdatesOptions, 'running' | 'versionUrl'>
+export type StoreOptions = Partial<Omit<AppUpdatesOptions, 'running'>>
 
 const stubBuild = runningBuild
 

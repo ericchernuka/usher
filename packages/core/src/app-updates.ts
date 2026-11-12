@@ -3,9 +3,18 @@ import {
   resolveThresholds,
   type Thresholds,
 } from './options'
-import { createUpdateMonitor } from './update-monitor'
-import { createBrowserEnvironment, type BrowserEnvironment } from './browser'
-import { resolveAttention, type StickyUrgency } from './attention'
+import { createLatestBuild } from './latest-build'
+import { createServerClock } from './server-clock'
+import {
+  createBrowserEnvironment,
+  listen,
+  type BrowserEnvironment,
+} from './browser'
+import {
+  resolveAttention,
+  type Decision,
+  type StickyUrgency,
+} from './attention'
 import { isolate } from './callbacks'
 import { createRefresh, type RefreshBlocker } from './refresh'
 import { createPromptDismissal } from './prompt-dismissal'
@@ -60,59 +69,95 @@ function notifyAll(listeners: ReadonlySet<{ listener: () => void }>) {
   }
 }
 
+const MAX_TIMER_MS = 2 ** 31 - 1
+
+interface Active {
+  stopListening: () => void
+  deadline?: ReturnType<typeof setTimeout> | undefined
+}
+
 class AppUpdatesStore implements AppUpdates {
-  readonly options: UpdateStoreOptions
+  readonly running: BuildFacts
   readonly browser: BrowserEnvironment
   readonly thresholds: Thresholds
+  readonly clock: ReturnType<typeof createServerClock>
   readonly dismissal: ReturnType<typeof createPromptDismissal>
   readonly refreshes: ReturnType<typeof createRefresh>
-  readonly monitor: ReturnType<typeof createUpdateMonitor>
+  readonly latestBuild: ReturnType<typeof createLatestBuild>
   readonly listeners = new Set<{ listener: () => void }>()
   state: UpdateState = { attention: 'none', reason: 'unknown' }
-  latest: BuildFacts | undefined
   stickyUrgency: StickyUrgency | undefined
+  active: Active | undefined
 
   constructor(options: UpdateStoreOptions) {
-    this.options = options
-    this.browser = options.browser ?? createBrowserEnvironment()
+    const browser = options.browser ?? createBrowserEnvironment()
+    this.running = options.running
+    this.browser = browser
     this.thresholds = resolveThresholds(options)
+    this.clock = createServerClock()
     this.dismissal = createPromptDismissal(
       options.storageKey ?? 'app-version',
-      this.browser,
+      browser,
     )
     this.refreshes = createRefresh(
-      options.reload ?? (() => this.browser.location.reload()),
+      options.reload ?? (() => browser.location.reload()),
     )
-    this.monitor = createUpdateMonitor({
+    this.latestBuild = createLatestBuild({
       versionUrl: options.versionUrl,
-      pollMs: resolvePollInterval(options.pollInterval),
-      browser: this.browser,
-      dismissal: this.dismissal,
-      evaluate: this.evaluate,
-      nextDeadline: () => this.decision()?.nextAt,
+      pollInterval: resolvePollInterval(options.pollInterval),
+      browser,
+      clock: this.clock,
     })
   }
 
-  decision = (dismissal = this.dismissal.get()) =>
-    this.latest
+  decide = (dismissedAt = this.dismissal.get()): Decision | undefined => {
+    const latest = this.latestBuild.get()
+
+    return latest
       ? resolveAttention({
-          running: this.options.running,
-          latest: this.latest,
-          now: this.monitor.serverNow(),
-          ...(this.stickyUrgency && { stickyUrgency: this.stickyUrgency }),
-          dismissal,
+          running: this.running,
+          latest,
+          now: this.clock.now(),
+          stickyUrgency: this.stickyUrgency,
+          dismissedAt,
           thresholds: this.thresholds,
         })
       : undefined
+  }
 
-  evaluate = (latest = this.latest) => {
-    this.latest = latest
-    const result = this.decision()
+  apply = (decision: Decision) => {
+    this.stickyUrgency = decision.stickyUrgency
+    this.publish(decision.state)
+    this.scheduleDeadline(decision.nextAt)
+  }
 
-    if (result) {
-      this.stickyUrgency = result.stickyUrgency
-      this.publish(result.state)
+  /** Every source calls back here: a new response, a storage change, a deadline, visibility. */
+  evaluate = () => {
+    const decision = this.decide()
+
+    if (decision) {
+      this.apply(decision)
     }
+  }
+
+  /** One timer for the next moment attention changes on its own. Hidden tabs keep none. */
+  scheduleDeadline = (nextAt: number | undefined) => {
+    if (!this.active) {
+      return
+    }
+
+    clearTimeout(this.active.deadline)
+    this.active.deadline = undefined
+
+    if (
+      nextAt === undefined ||
+      this.browser.document.visibilityState !== 'visible'
+    ) {
+      return
+    }
+
+    const delay = Math.min(Math.max(0, nextAt - this.clock.now()), MAX_TIMER_MS)
+    this.active.deadline = setTimeout(this.evaluate, delay)
   }
 
   publish = (next: UpdateState) => {
@@ -124,6 +169,32 @@ class AppUpdatesStore implements AppUpdates {
     notifyAll(this.listeners)
   }
 
+  start = () => {
+    this.active = {
+      stopListening: listen(
+        this.browser.document,
+        'visibilitychange',
+        this.evaluate,
+      ),
+    }
+    this.dismissal.start(this.evaluate)
+    this.latestBuild.start(this.evaluate)
+    this.evaluate()
+  }
+
+  stop = () => {
+    if (!this.active) {
+      return
+    }
+
+    const { stopListening, deadline } = this.active
+    this.active = undefined
+    clearTimeout(deadline)
+    stopListening()
+    this.latestBuild.stop()
+    this.dismissal.stop()
+  }
+
   getState = () => this.state
 
   subscribe = (listener: () => void) => {
@@ -131,16 +202,12 @@ class AppUpdatesStore implements AppUpdates {
     this.listeners.add(entry)
 
     if (this.listeners.size === 1) {
-      this.monitor.start()
+      this.start()
     }
 
     return () => {
-      if (!this.listeners.delete(entry)) {
-        return
-      }
-
-      if (this.listeners.size === 0) {
-        this.monitor.stop()
+      if (this.listeners.delete(entry) && this.listeners.size === 0) {
+        this.stop()
       }
     }
   }
@@ -155,19 +222,18 @@ class AppUpdatesStore implements AppUpdates {
       return false
     }
 
-    const proposed = { dismissedAt: this.monitor.serverNow() }
-    const result = this.decision(proposed)
+    const at = this.clock.now()
+    const decision = this.decide(at)
 
     if (
-      result?.state.attention !== 'passive' ||
-      result.state.reason !== 'dismissed'
+      decision?.state.attention !== 'passive' ||
+      decision.state.reason !== 'dismissed'
     ) {
       return false
     }
 
-    this.dismissal.write(proposed)
-    this.publish(result.state)
-    this.monitor.reschedule()
+    this.dismissal.record(at)
+    this.apply(decision)
 
     return true
   }
