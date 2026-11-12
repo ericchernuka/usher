@@ -69,18 +69,20 @@ export interface AppUpdates {
   addRefreshBlocker: (blocker: RefreshBlocker) => () => void
 }
 
-function sameState(a: UpdateState, b: UpdateState) {
-  if (a.attention !== b.attention || a.reason !== b.reason) {
+function sameState(next: UpdateState, current: UpdateState) {
+  if (next.attention !== current.attention || next.reason !== current.reason) {
     return false
   }
 
-  const [x, y] = [a.latest, b.latest]
+  const [nextLatest, currentLatest] = [next.latest, current.latest]
 
-  if (!x || !y) {
-    return x === y
+  if (!nextLatest || !currentLatest) {
+    return nextLatest === currentLatest
   }
 
-  return BUILD_FACT_NAMES.every(fact => x[fact] === y[fact])
+  return BUILD_FACT_NAMES.every(
+    fact => nextLatest[fact] === currentLatest[fact],
+  )
 }
 
 /** A listener that an earlier one removed during this pass is not called. */

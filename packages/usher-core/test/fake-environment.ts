@@ -3,7 +3,7 @@ import type { Environment, StorageChange } from '../src/environment'
 const turn = () => new Promise<void>(resolve => setImmediate(resolve))
 
 async function turns(count: number) {
-  for (let i = 0; i < count; i++) {
+  for (let index = 0; index < count; index++) {
     await turn()
   }
 }
@@ -24,16 +24,16 @@ class MemoryStorage {
   }
 }
 
-function listeners<T extends unknown[]>() {
-  const all = new Set<(...args: T) => void>()
+function listeners<Event extends unknown[]>() {
+  const all = new Set<(...args: Event) => void>()
 
   return {
-    add: (listener: (...args: T) => void) => {
+    add: (listener: (...args: Event) => void) => {
       all.add(listener)
 
       return () => void all.delete(listener)
     },
-    emit: (...args: T) =>
+    emit: (...args: Event) =>
       Array.from(all).forEach(listener => listener(...args)),
   }
 }

@@ -36,6 +36,7 @@ export default defineConfig({
   ],
   rules: {
     complexity: ['error', { max: 10 }],
+    'id-length': ['error', { min: 2, properties: 'never' }],
     'max-depth': ['error', { max: 3 }],
     'max-params': ['error', { max: 3 }],
     'max-nested-callbacks': ['error', { max: 4 }],

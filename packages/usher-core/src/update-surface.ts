@@ -42,7 +42,7 @@ export interface UpdateSurface {
   hide(): void
 }
 
-const keyOf = (s: UpdateState) => `${s.attention}:${s.reason}`
+const keyOf = (state: UpdateState) => `${state.attention}:${state.reason}`
 
 function safely(label: string, fn: () => void) {
   try {

@@ -1,4 +1,4 @@
-import * as v from 'valibot'
+import * as valibot from 'valibot'
 import {
   parseBuildFacts,
   type AppUpdatesOptions,
@@ -104,18 +104,18 @@ export function resolveRunning(running: BuildFacts): BuildFacts {
   return parsed.success
     ? parsed.output
     : fail(
-        `running must be the running build's build facts: ${v.summarize(parsed.issues)}`,
+        `running must be the running build's build facts: ${valibot.summarize(parsed.issues)}`,
       )
 }
 
 /** A relative URL is fine: the tab resolves it against the page. */
-const VersionUrl = v.pipe(
-  v.string(),
-  v.check(value => URL.canParse(value, 'https://app.invalid')),
+const VersionUrl = valibot.pipe(
+  valibot.string(),
+  valibot.check(value => URL.canParse(value, 'https://app.invalid')),
 )
 
 export function resolveVersionUrl(versionUrl: string): string {
-  const parsed = v.safeParse(VersionUrl, versionUrl)
+  const parsed = valibot.safeParse(VersionUrl, versionUrl)
 
   return parsed.success
     ? parsed.output

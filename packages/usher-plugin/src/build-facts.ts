@@ -1,5 +1,5 @@
 import { execSync } from 'node:child_process'
-import * as v from 'valibot'
+import * as valibot from 'valibot'
 import type { BuildFacts } from '@rndsqr/usher-core'
 
 /** Explicit values that win over the environment and Git. */
@@ -19,19 +19,23 @@ const git = (args: string) => {
   }
 }
 
-const Present = v.pipe(v.string(), v.trim(), v.nonEmpty())
+const Present = valibot.pipe(
+  valibot.string(),
+  valibot.trim(),
+  valibot.nonEmpty(),
+)
 
-const Timestamp = v.pipe(
+const Timestamp = valibot.pipe(
   Present,
-  v.isoTimestamp(),
-  v.transform(value => new Date(value).toISOString()),
+  valibot.isoTimestamp(),
+  valibot.transform(value => new Date(value).toISOString()),
 )
 
 type Source = readonly [name: string, value: string | undefined]
 
 function firstSet(...sources: ReadonlyArray<Source>) {
   for (const [name, value] of sources) {
-    const result = v.safeParse(Present, value)
+    const result = valibot.safeParse(Present, value)
 
     if (result.success) {
       return { name, value: result.output }
@@ -46,7 +50,7 @@ function timestamp(source: { name: string; value: string } | undefined) {
     return undefined
   }
 
-  const result = v.safeParse(Timestamp, source.value)
+  const result = valibot.safeParse(Timestamp, source.value)
 
   if (!result.success) {
     throw new Error(

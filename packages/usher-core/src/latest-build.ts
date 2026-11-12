@@ -1,4 +1,4 @@
-import * as v from 'valibot'
+import * as valibot from 'valibot'
 import type { Environment } from './environment'
 import { parseBuildFacts, type BuildFacts } from './types'
 
@@ -46,7 +46,7 @@ async function readFacts(res: Response): Promise<BuildFacts | Rejected> {
   return parsed.success
     ? parsed.output
     : {
-        problem: `JSON that is not build facts (${v.summarize(parsed.issues)})`,
+        problem: `JSON that is not build facts (${valibot.summarize(parsed.issues)})`,
       }
 }
 

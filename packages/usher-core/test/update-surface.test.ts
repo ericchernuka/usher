@@ -140,9 +140,9 @@ describe('closing the surface', () => {
     const ui = fakeSurface()
     app.track(
       connectUpdateSurface(store, {
-        show: p => {
-          notice = p
-          ui.surface.show(p)
+        show: shown => {
+          notice = shown
+          ui.surface.show(shown)
         },
         hide: () => {
           ui.surface.hide()

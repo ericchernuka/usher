@@ -11,10 +11,10 @@ interface Run {
   promptQuietUntil: number
 }
 
-function dismiss(w: World, r: Run) {
-  const before = w.store.getState()
-  const stored = w.tab.storage.getItem(DISMISSAL_KEY)
-  const dismissed = w.store.dismiss()
+function dismiss(harness: World, run: Run) {
+  const before = harness.store.getState()
+  const stored = harness.tab.storage.getItem(DISMISSAL_KEY)
+  const dismissed = harness.store.dismiss()
 
   if (before.attention !== 'prompt') {
     expect(dismissed).toBe(false)
@@ -22,154 +22,164 @@ function dismiss(w: World, r: Run) {
 
   if (dismissed) {
     expect(before.attention).toBe('prompt')
-    expect(w.store.getState().attention).toBe('passive')
-    r.promptQuietUntil =
-      w.world.config === 'promptSnooze' ? w.serverNow() + HOUR : Infinity
+    expect(harness.store.getState().attention).toBe('passive')
+    run.promptQuietUntil =
+      harness.world.config === 'promptSnooze'
+        ? harness.serverNow() + HOUR
+        : Infinity
   } else {
-    expect(w.store.getState()).toBe(before)
-    expect(w.tab.storage.getItem(DISMISSAL_KEY)).toBe(stored)
+    expect(harness.store.getState()).toBe(before)
+    expect(harness.tab.storage.getItem(DISMISSAL_KEY)).toBe(stored)
   }
 }
 
 async function tabAction(
-  a: Exclude<
+  step: Exclude<
     Action,
     { type: 'advance' | 'serve' | 'focus' | 'visibility' | 'dismissed' }
   >,
-  w: World,
-  r: Run,
+  harness: World,
+  run: Run,
 ) {
-  switch (a.type) {
+  switch (step.type) {
     case 'otherTabClear':
-      w.tab.otherTabClears()
-      r.promptQuietUntil = -Infinity
+      harness.tab.otherTabClears()
+      run.promptQuietUntil = -Infinity
 
       return
     case 'otherTabSet':
-      w.tab.otherTabSets(
+      harness.tab.otherTabSets(
         DISMISSAL_KEY,
-        JSON.stringify({ dismissedAt: w.serverNow() }),
+        JSON.stringify({ dismissedAt: harness.serverNow() }),
       )
 
       return
     case 'refresh':
-      await w.store.refresh()
+      await harness.store.refresh()
 
       return
     case 'resubscribe':
-      await w.tab.advance(a.gap)
-      r.stop = w.store.subscribe(() => {})
+      await harness.tab.advance(step.gap)
+      run.stop = harness.store.subscribe(() => {})
 
       return
     case 'clockJump':
-      w.world.jumped += a.ms
-      w.tab.setSystemTime(w.tab.now() + a.ms)
+      harness.world.jumped += step.ms
+      harness.tab.setSystemTime(harness.tab.now() + step.ms)
 
       return
   }
 }
 
-function action(a: Action, w: World, r: Run) {
-  switch (a.type) {
+function action(step: Action, harness: World, run: Run) {
+  switch (step.type) {
     case 'advance':
-      return w.tab.advance(a.ms)
+      return harness.tab.advance(step.ms)
     case 'serve':
-      w.world.served = a.build
+      harness.world.served = step.build
 
       return
     case 'focus':
-      w.tab.focus()
+      harness.tab.focus()
 
       return
     case 'visibility':
-      w.world.visible = a.visible
-      w.tab.setVisibility(a.visible ? 'visible' : 'hidden')
+      harness.world.visible = step.visible
+      harness.tab.setVisibility(step.visible ? 'visible' : 'hidden')
 
       return
     case 'dismissed':
-      return dismiss(w, r)
+      return dismiss(harness, run)
     default:
-      return tabAction(a, w, r)
+      return tabAction(step, harness, run)
   }
 }
 
-function stickyUrgencyInvariant(w: World, r: Run, accepted: BuildFacts[]) {
-  const state = w.store.getState()
-  r.stickyUrgency ||= accepted.some(
+function stickyUrgencyInvariant(
+  harness: World,
+  run: Run,
+  accepted: BuildFacts[],
+) {
+  const state = harness.store.getState()
+  run.stickyUrgency ||= accepted.some(
     build =>
       Date.parse(build.commitTime) < Date.parse(running.commitTime) ||
       Date.parse(build.forceUpdateBuiltBefore ?? '') >
         Date.parse(running.buildTime),
   )
 
-  if (r.stickyUrgency) {
+  if (run.stickyUrgency) {
     expect(state.attention).toBe('urgent')
     expect(['rollback', 'forced']).toContain(state.reason)
   }
 }
 
-function invariants(w: World, r: Run) {
-  const state = w.store.getState()
+function invariants(harness: World, run: Run) {
+  const state = harness.store.getState()
 
-  const accepted = w.delivered
+  const accepted = harness.delivered
     .splice(0)
     .flatMap(({ build, signal }) => (signal?.aborted ? [] : [build]))
 
-  stickyUrgencyInvariant(w, r, accepted)
+  stickyUrgencyInvariant(harness, run, accepted)
 
   // Catching up ends the outdated episode a dismissal belonged to. The next
   // one counts from a later build, so its prompt is a new one.
   if (accepted.some(build => build.version === running.version)) {
-    r.promptQuietUntil = -Infinity
+    run.promptQuietUntil = -Infinity
   }
 
   if (state.attention !== 'none') {
     expect(state.latest).toBeDefined()
   }
 
-  if (w.serverNow() < r.promptQuietUntil - 3_000) {
+  if (harness.serverNow() < run.promptQuietUntil - 3_000) {
     expect(state.attention).not.toBe('prompt')
   }
 
-  if (!w.world.visible) {
-    const timersPerCheck = w.world.latency > 0 ? 2 : 1
-    expect(w.tab.pendingTimers()).toBe(w.world.inFlight * timersPerCheck)
+  if (!harness.world.visible) {
+    const timersPerCheck = harness.world.latency > 0 ? 2 : 1
+    expect(harness.tab.pendingTimers()).toBe(
+      harness.world.inFlight * timersPerCheck,
+    )
   }
 }
 
-async function run(scenario: Scenario) {
-  const w = createWorld(scenario)
+async function runScenario(scenario: Scenario) {
+  const harness = createWorld(scenario)
 
-  const r: Run = {
-    stop: w.store.subscribe(() => {}),
+  const run: Run = {
+    stop: harness.store.subscribe(() => {}),
     stickyUrgency: false,
     promptQuietUntil: -Infinity,
   }
 
   try {
-    for (const a of scenario.actions) {
-      if (a.type === 'resubscribe') {
-        r.stop()
+    for (const step of scenario.actions) {
+      if (step.type === 'resubscribe') {
+        run.stop()
       }
 
-      await action(a, w, r)
-      await w.tab.flush()
-      invariants(w, r)
+      await action(step, harness, run)
+      await harness.tab.flush()
+      invariants(harness, run)
     }
   } finally {
-    r.stop()
+    run.stop()
     vi.restoreAllMocks()
   }
 }
 
 describe('state invariants under random worlds', () => {
   it('hold for 400 random sequences of up to 60 events', async () => {
-    await fc.assert(fc.asyncProperty(random, run), { numRuns: 400 })
+    await fc.assert(fc.asyncProperty(random, runScenario), { numRuns: 400 })
   }, 180_000)
   it('hold for 200 rollback-then-fix scenarios with random noise', async () => {
-    await fc.assert(fc.asyncProperty(rollbackThenFix, run), { numRuns: 200 })
+    await fc.assert(fc.asyncProperty(rollbackThenFix, runScenario), {
+      numRuns: 200,
+    })
   }, 180_000)
   it('hold for 300 age escalation scenarios with prompt dismissal', async () => {
-    await fc.assert(fc.asyncProperty(aged, run), { numRuns: 300 })
+    await fc.assert(fc.asyncProperty(aged, runScenario), { numRuns: 300 })
   }, 180_000)
 })

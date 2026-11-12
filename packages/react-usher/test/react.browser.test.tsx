@@ -123,7 +123,7 @@ describe('useUpdateState deferral', () => {
 
     const { unmount } = await render(<Probe />)
     await tick()
-    expect(seen.some(([u, d]) => u !== d)).toBe(true)
+    expect(seen.some(([urgent, deferred]) => urgent !== deferred)).toBe(true)
     expect(seen.at(-1)).toEqual(['urgent', 'urgent'])
     await unmount()
   })
@@ -259,15 +259,15 @@ function Toasts() {
   return (
     <>
       {toasts
-        .filter(t => t.transitionStatus !== 'ending')
-        .map(t => (
+        .filter(toast => toast.transitionStatus !== 'ending')
+        .map(toast => (
           <button
             type="button"
-            key={t.id}
-            data-type={t.type}
-            onClick={() => close(t.id)}
+            key={toast.id}
+            data-type={toast.type}
+            onClick={() => close(toast.id)}
           >
-            {t.title}
+            {toast.title}
           </button>
         ))}
     </>

@@ -1,25 +1,29 @@
-import * as v from 'valibot'
+import * as valibot from 'valibot'
 import type { Environment, StorageChange } from './environment'
 
-const StoredDismissal = v.pipe(
-  v.string(),
-  v.parseJson(),
-  v.object({
-    dismissedAt: v.fallback(
-      v.optional(v.pipe(v.number(), v.finite())),
+const StoredDismissal = valibot.pipe(
+  valibot.string(),
+  valibot.parseJson(),
+  valibot.object({
+    dismissedAt: valibot.fallback(
+      valibot.optional(valibot.pipe(valibot.number(), valibot.finite())),
       undefined,
     ),
   }),
 )
 
 function parse(raw: string | null): number | undefined {
-  const result = v.safeParse(StoredDismissal, raw)
+  const result = valibot.safeParse(StoredDismissal, raw)
 
   return result.success ? result.output.dismissedAt : undefined
 }
 
-const later = (a: number | undefined, b: number | undefined) =>
-  a === undefined ? b : b === undefined ? a : Math.max(a, b)
+const later = (first: number | undefined, second: number | undefined) =>
+  first === undefined
+    ? second
+    : second === undefined
+      ? first
+      : Math.max(first, second)
 
 /**
  * The server time of the latest prompt dismissal, shared by every tab of the app

@@ -15,9 +15,9 @@ describe('surfaces that misbehave', () => {
     const store = app.create()
     app.track(
       connectUpdateSurface(store, {
-        show: p => {
-          log.push(`show-start:${p.attention}`)
-          p.close()
+        show: shown => {
+          log.push(`show-start:${shown.attention}`)
+          shown.close()
           log.push('show-end')
         },
         hide: () => log.push('hide'),
@@ -40,12 +40,12 @@ describe('surfaces that misbehave', () => {
     const store = app.create()
     app.track(
       connectUpdateSurface(store, {
-        show: p => {
+        show: shown => {
           if (!ready) {
             throw new Error('toast lib not ready')
           }
 
-          shows.push(p.attention)
+          shows.push(shown.attention)
         },
         hide: () => {},
       }),
@@ -77,12 +77,12 @@ describe('surfaces that misbehave', () => {
     app.track(
       connectUpdateSurface(app.create(), {
         minAttention: 'passive',
-        show: p => {
+        show: shown => {
           if (failNext) {
             throw new Error('toast library not ready')
           }
 
-          log.push(`${p.attention}:${p.reason}`)
+          log.push(`${shown.attention}:${shown.reason}`)
         },
         hide: () => log.push('hide'),
       }),

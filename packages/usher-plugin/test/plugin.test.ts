@@ -320,7 +320,7 @@ function devHandler(base: string) {
     let passed = false
     handler(
       url === undefined ? {} : { url },
-      { setHeader: () => {}, end: b => (body = b) },
+      { setHeader: () => {}, end: sent => (body = sent) },
       () => (passed = true),
     )
 

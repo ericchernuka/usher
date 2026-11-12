@@ -5,7 +5,7 @@ import { createFakeEnvironment } from '../fake-environment'
 import type { BuildFacts } from '../../src/types'
 import { createStore, running, type StoreOptions } from '../fixtures'
 
-const H = 3_600 * 1_000
+const HOUR = 3_600 * 1_000
 
 const builds = {
   running,
@@ -39,9 +39,9 @@ const configs = {
   default: {},
   noPrompt: { promptAfter: false },
   noUrgent: { urgentAfter: false },
-  promptSnooze: { promptSnooze: H },
+  promptSnooze: { promptSnooze: HOUR },
   off: { promptAfter: false, urgentAfter: false },
-  fast: { promptAfter: 2 * H, urgentAfter: 3 * H },
+  fast: { promptAfter: 2 * HOUR, urgentAfter: 3 * HOUR },
 } satisfies Record<string, StoreOptions>
 
 export type ConfigName = keyof typeof configs
@@ -82,44 +82,51 @@ const served: fc.Arbitrary<Served> = fc.oneof(
     weight: 2,
     arbitrary: fc
       .tuple(build, build)
-      .map(([a, b]): Served => ({ flap: [a, b] })),
+      .map(([first, second]): Served => ({ flap: [first, second] })),
   },
 )
 
 const duration = fc.oneof(
   fc.integer({ min: 0, max: 10_000 }),
-  fc.integer({ min: 60_000, max: 2 * H }),
-  fc.integer({ min: 6 * H, max: 14 * H }),
+  fc.integer({ min: 60_000, max: 2 * HOUR }),
+  fc.integer({ min: 6 * HOUR, max: 14 * HOUR }),
 )
 
-const t = <T extends Action['type']>(type: T) => fc.constant(type)
+const actionType = <Type extends Action['type']>(type: Type) =>
+  fc.constant(type)
 
 const visibilityAction = fc.record({
-  type: t('visibility'),
+  type: actionType('visibility'),
   visible: fc.boolean(),
 })
 
 const action: fc.Arbitrary<Action> = fc.oneof(
-  { weight: 5, arbitrary: fc.record({ type: t('advance'), ms: duration }) },
-  { weight: 3, arbitrary: fc.record({ type: t('serve'), build: served }) },
-  { weight: 2, arbitrary: fc.record({ type: t('focus') }) },
+  {
+    weight: 5,
+    arbitrary: fc.record({ type: actionType('advance'), ms: duration }),
+  },
+  {
+    weight: 3,
+    arbitrary: fc.record({ type: actionType('serve'), build: served }),
+  },
+  { weight: 2, arbitrary: fc.record({ type: actionType('focus') }) },
   { weight: 1, arbitrary: visibilityAction },
-  { weight: 3, arbitrary: fc.record({ type: t('dismissed') }) },
-  { weight: 1, arbitrary: fc.record({ type: t('otherTabClear') }) },
-  { weight: 1, arbitrary: fc.record({ type: t('otherTabSet') }) },
-  { weight: 1, arbitrary: fc.record({ type: t('refresh') }) },
+  { weight: 3, arbitrary: fc.record({ type: actionType('dismissed') }) },
+  { weight: 1, arbitrary: fc.record({ type: actionType('otherTabClear') }) },
+  { weight: 1, arbitrary: fc.record({ type: actionType('otherTabSet') }) },
+  { weight: 1, arbitrary: fc.record({ type: actionType('refresh') }) },
   {
     weight: 1,
     arbitrary: fc.record({
-      type: t('resubscribe'),
-      gap: fc.integer({ min: 0, max: 2 * H }),
+      type: actionType('resubscribe'),
+      gap: fc.integer({ min: 0, max: 2 * HOUR }),
     }),
   },
   {
     weight: 1,
     arbitrary: fc.record({
-      type: t('clockJump'),
-      ms: fc.integer({ min: -24 * H, max: 24 * H }),
+      type: actionType('clockJump'),
+      ms: fc.integer({ min: -24 * HOUR, max: 24 * HOUR }),
     }),
   },
 )
@@ -131,7 +138,7 @@ export interface Scenario {
   actions: Action[]
 }
 
-const scenario = (actions: fc.Arbitrary<Action[]>): fc.Arbitrary<Scenario> =>
+const scenarioOf = (actions: fc.Arbitrary<Action[]>): fc.Arbitrary<Scenario> =>
   fc.record({
     config: fc.constantFrom(
       ...([
@@ -143,50 +150,57 @@ const scenario = (actions: fc.Arbitrary<Action[]>): fc.Arbitrary<Scenario> =>
         'fast',
       ] satisfies ConfigName[]),
     ),
-    skew: fc.oneof(fc.constant(0), fc.integer({ min: -3 * H, max: 3 * H })),
+    skew: fc.oneof(
+      fc.constant(0),
+      fc.integer({ min: -3 * HOUR, max: 3 * HOUR }),
+    ),
     latency: fc.constantFrom(0, 0, 300, 5_000, 35_000),
     actions,
   })
 
 const noise = fc.array(action, { maxLength: 10 })
 
-export const random = scenario(fc.array(action, { maxLength: 60 }))
+export const random = scenarioOf(fc.array(action, { maxLength: 60 }))
 
-export const rollbackThenFix = scenario(
+export const rollbackThenFix = scenarioOf(
   fc
     .tuple(noise, noise, fc.constantFrom<Build>('newer', 'newest', 'running'))
-    .map(([a, b, fix]): Action[] =>
+    .map(([beforeFix, afterFix, fix]): Action[] =>
       Array.of<Action>(
         { type: 'serve', build: 'older' },
         { type: 'focus' },
         { type: 'advance', ms: 61_000 },
       ).concat(
-        a,
+        beforeFix,
         [
           { type: 'serve', build: fix },
           { type: 'advance', ms: 61_000 },
           { type: 'focus' },
         ],
-        b,
+        afterFix,
       ),
     ),
 )
 
-export const aged = scenario(
+export const aged = scenarioOf(
   fc
     .tuple(
-      fc.integer({ min: 0, max: 30 * H }),
+      fc.integer({ min: 0, max: 30 * HOUR }),
       noise,
-      fc.integer({ min: 6 * H, max: 14 * H }),
+      fc.integer({ min: 6 * HOUR, max: 14 * HOUR }),
       noise,
     )
-    .map(([first, a, second, b]): Action[] =>
+    .map(([firstWait, noiseBetween, secondWait, noiseAfter]): Action[] =>
       Array.of<Action>(
         { type: 'serve', build: 'newer' },
         { type: 'focus' },
-        { type: 'advance', ms: first },
+        { type: 'advance', ms: firstWait },
         { type: 'dismissed' },
-      ).concat(a, [{ type: 'advance', ms: second }, { type: 'dismissed' }], b),
+      ).concat(
+        noiseBetween,
+        [{ type: 'advance', ms: secondWait }, { type: 'dismissed' }],
+        noiseAfter,
+      ),
     ),
 )
 
@@ -199,20 +213,20 @@ interface DeliveredBuild {
   signal: AbortSignal | null | undefined
 }
 
-export function createWorld(s: Scenario) {
+export function createWorld(scenario: Scenario) {
   const delivered: DeliveredBuild[] = []
 
   const world = {
-    config: s.config,
+    config: scenario.config,
     visible: true,
     jumped: 0,
-    latency: s.latency,
+    latency: scenario.latency,
     inFlight: 0,
     served: initialServed(),
     flips: 0,
   }
 
-  const serverNow = () => tab.now() - world.jumped + s.skew
+  const serverNow = () => tab.now() - world.jumped + scenario.skew
 
   const respond = async (
     _input: RequestInfo | URL,
@@ -221,8 +235,8 @@ export function createWorld(s: Scenario) {
     world.inFlight++
 
     try {
-      if (s.latency > 0) {
-        await answerAfter(s.latency, init?.signal, tab.env)
+      if (scenario.latency > 0) {
+        await answerAfter(scenario.latency, init?.signal, tab.env)
       }
 
       return serve(init?.signal)
@@ -256,7 +270,7 @@ export function createWorld(s: Scenario) {
   vi.spyOn(console, 'warn').mockImplementation(() => {})
 
   const store = createStore(tab, {
-    ...configs[s.config],
+    ...configs[scenario.config],
     reload: async () => false,
   })
 

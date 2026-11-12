@@ -35,7 +35,7 @@ export async function buildEdgeFixture(target: keyof typeof targets) {
     ],
   })
   const dist = join(root, 'dist')
-  const currentAsset = `/assets/${readdirSync(join(dist, 'assets')).find(f => f.endsWith('.js'))}`
+  const currentAsset = `/assets/${readdirSync(join(dist, 'assets')).find(file => file.endsWith('.js'))}`
 
   return { dist, currentAsset, worker: resolve(root, worker) }
 }

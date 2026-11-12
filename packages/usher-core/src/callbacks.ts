@@ -1,7 +1,7 @@
-export function isolate<A extends unknown[]>(
+export function isolate<Args extends unknown[]>(
   label: string,
-  fn: ((...args: A) => void) | undefined,
-  ...args: A
+  fn: ((...args: Args) => void) | undefined,
+  ...args: Args
 ) {
   try {
     fn?.(...args)

@@ -1,5 +1,14 @@
 # Coding standards
 
+## Names
+
+Name every variable, parameter, and import for what it holds. A name is the cheapest place to state intent, so spend it.
+
+- Do not use single-letter names. Write `notice`, `scenario`, or `index`, not `n`, `s`, or `i`. This covers callback parameters, loop counters, destructured values, and namespace imports.
+- When two values of the same kind meet, name the difference between them: `next` and `current`, not `a` and `b`.
+- Prefer a term from the [glossary](GLOSSARY.md) when one fits.
+- The `id-length` lint rule enforces the minimum length. It cannot judge meaning, so a two-letter abbreviation that hides intent is still a defect.
+
 ## Caches
 
 Treat caches as a design smell. Prefer an architecture that does not need them.
