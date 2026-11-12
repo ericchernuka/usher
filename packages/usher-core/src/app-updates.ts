@@ -14,7 +14,11 @@ import {
   type StickyUrgency,
 } from './attention'
 import { isolate } from './callbacks'
-import { createRefresh, type RefreshBlocker } from './refresh'
+import {
+  createRefresh,
+  type RefreshBlocker,
+  type RefreshOutcome,
+} from './refresh'
 import { createPromptDismissal } from './prompt-dismissal'
 import {
   BUILD_FACT_NAMES,
@@ -23,7 +27,7 @@ import {
   type UpdateState,
 } from './types'
 
-export type { RefreshBlocker } from './refresh'
+export type { RefreshBlocker, RefreshOutcome } from './refresh'
 
 /**
  * The update store, one per app at module scope.
@@ -47,11 +51,11 @@ export interface AppUpdates {
   subscribe: (listener: () => void) => () => void
   /**
    * Refresh onto the latest build. Blockers run synchronously in the order they
-   * were added. Resolves `false` when a blocker blocked it, or when `reload`
-   * returned `false` or threw; a later call may try again. Concurrent calls
-   * share one attempt.
+   * were added. Resolves `blocked` when one of them stopped it, `declined` when
+   * `reload` returned `false` or threw, and `reloading` otherwise. Nothing is
+   * remembered: a later call tries again. Concurrent calls share one attempt.
    */
-  refresh: () => Promise<boolean>
+  refresh: () => Promise<RefreshOutcome>
   /**
    * Dismiss the prompt for every tab. Returns `true` only when the state was
    * `prompt` and is now `passive` / `dismissed`. Otherwise it returns `false`

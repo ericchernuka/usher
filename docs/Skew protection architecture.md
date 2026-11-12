@@ -91,7 +91,7 @@ When a store receives a response that is not OK or not build facts as JSON, it l
 
 `prompt-dismissal.ts` stores `{ "dismissedAt": <server time in ms> }` under `<storageKey>:prompt-dismissal`. Every tab of the app reads it, across releases, so the format is a contract. The latest dismissal wins. Dismissal quiets tabs whose prompt threshold had already started. It never quiets urgent attention. Without an explicit prompt snooze, dismissal lasts until urgent starts; if urgent is disabled, it has no expiry. Blocked storage keeps a dismissal for the current tab.
 
-`refresh.ts` runs blockers synchronously. A throwing blocker prevents the refresh, and a failed or declined attempt can be retried. The app can supply a reload function to use its router's confirmation flow.
+`refresh.ts` runs blockers synchronously, and a throwing blocker prevents the refresh. A refresh resolves `reloading`, `blocked` or `declined`, keeps no memory of the outcome, and can always be retried. The app can supply a reload function to send the document load through its router.
 
 `connectUpdateSurface` connects an imperative update surface to the store. It handles attention thresholds, notices that are no longer shown, and surface callbacks during programmatic closure. Closing an urgent notice shows it again. A passive surface can be closed locally until its attention or reason changes.
 
@@ -115,7 +115,7 @@ Dashboard rollbacks and old-commit redeploys have an older commit time. A revert
 
 Deploy one Workers version at a time. Alternating version responses during a gradual deployment can appear to be a rollback.
 
-The library retains age-based escalation, shared prompt dismissal, sticky urgency, explicit refresh, refresh blockers, and update surfaces. It does not cancel attention changes, delay urgency for typing, reload on navigation, or reload on chunk errors. Server-driven compatibility signals are deferred.
+The library retains escalation, shared prompt dismissal, sticky urgency, explicit refresh, refresh blockers, and update surfaces. It does not cancel attention changes, delay urgency for typing, reload on navigation, or reload on chunk errors. Server-driven compatibility signals are deferred.
 
 ## Verification
 

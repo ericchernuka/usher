@@ -110,3 +110,6 @@ The document load a refresh performs. It is the mechanism, which an app can repl
 **Refresh blocker**:
 An app decision that prevents a refresh, for example to protect unsaved work.
 _Avoid_: Reload blocker.
+
+**Refresh outcome**:
+What became of a refresh: reloading, blocked by a refresh blocker, or declined by the reload.

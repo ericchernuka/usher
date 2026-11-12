@@ -14,11 +14,11 @@ describe('refreshing', () => {
     finished.resolve()
 
     expect(reload).toHaveBeenCalledTimes(1)
-    expect(await first).toBe(true)
-    expect(await second).toBe(true)
+    expect(await first).toBe('reloading')
+    expect(await second).toBe('reloading')
   })
 
-  test("given the app supplies its own reload, then refresh delegates to it, and false or a throw means it didn't happen", async ({
+  test('given the app supplies its own reload, then refresh delegates to it, and false or a throw means it was declined', async ({
     app,
     tab,
   }) => {
@@ -26,11 +26,11 @@ describe('refreshing', () => {
     let answer: boolean | undefined = false
     const store = app.create({ reload })
 
-    expect(await store.refresh()).toBe(false)
+    expect(await store.refresh()).toBe('declined')
     expect(reload).toHaveBeenCalledWith()
 
     answer = undefined
-    expect(await store.refresh()).toBe(true)
+    expect(await store.refresh()).toBe('reloading')
     expect(tab.reloads).toBe(0)
 
     vi.spyOn(console, 'error').mockImplementation(() => {})
@@ -41,7 +41,7 @@ describe('refreshing', () => {
       },
     })
 
-    expect(await throwing.refresh()).toBe(false)
+    expect(await throwing.refresh()).toBe('declined')
   })
 
   test('given refresh blockers, then any one that returns true or throws vetoes, and removing it lifts the veto', async ({
@@ -53,7 +53,7 @@ describe('refreshing', () => {
     const removeForm = store.addRefreshBlocker(() => true)
     store.addRefreshBlocker(() => false)
 
-    expect(await store.refresh()).toBe(false)
+    expect(await store.refresh()).toBe('blocked')
 
     removeForm()
 
@@ -61,7 +61,7 @@ describe('refreshing', () => {
       throw new Error('form state unavailable')
     })
 
-    expect(await store.refresh()).toBe(false)
+    expect(await store.refresh()).toBe('blocked')
     expect(error).toHaveBeenCalledWith(
       '[usher] refresh blocker threw',
       expect.any(Error),
@@ -69,7 +69,7 @@ describe('refreshing', () => {
 
     removeBroken()
 
-    expect(await store.refresh()).toBe(true)
+    expect(await store.refresh()).toBe('reloading')
     expect(tab.reloads).toBe(1)
   })
 
@@ -82,7 +82,7 @@ describe('refreshing', () => {
     store.addRefreshBlocker(() => calls.push('second') > 0)
     store.addRefreshBlocker(() => calls.push('third') > 0)
 
-    expect(await store.refresh()).toBe(false)
+    expect(await store.refresh()).toBe('blocked')
     expect(calls).toEqual(['first', 'second'])
   })
 })

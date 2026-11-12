@@ -99,11 +99,11 @@ describe('showing and hiding', () => {
     app.track(connectUpdateSurface(store, ui.surface))
     await tab.waitForResponse()
 
-    await ui.open.refresh()
+    expect(await ui.open.refresh()).toBe('blocked')
     expect(tab.reloads).toBe(0)
 
     removeBlocker()
-    await ui.open.refresh()
+    expect(await ui.open.refresh()).toBe('reloading')
     expect(tab.reloads).toBe(1)
   })
 })

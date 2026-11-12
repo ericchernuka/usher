@@ -1,7 +1,7 @@
 import { createAppUpdatesStore, type AppUpdates } from './app-updates'
 import type { AppUpdatesOptions } from './types'
 
-export type { AppUpdates, RefreshBlocker } from './app-updates'
+export type { AppUpdates, RefreshBlocker, RefreshOutcome } from './app-updates'
 
 export {
   connectUpdateSurface,

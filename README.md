@@ -126,7 +126,7 @@ A prompt dismissal records its server time in localStorage. It quiets every tab 
 interface AppUpdates {
   getState(): UpdateState
   subscribe(listener: () => void): () => void
-  refresh(): Promise<boolean>
+  refresh(): Promise<'reloading' | 'blocked' | 'declined'>
   dismiss(): boolean
   addRefreshBlocker(blocker: () => boolean): () => void
 }
@@ -155,7 +155,7 @@ export const appUpdates = createAppUpdates({
 | `urgentAfter`  | 24 hours                           | Time outdated at which it reaches urgent attention. `false` turns the level off. Must be later than `promptAfter`.     |
 | `promptSnooze` | Until urgent attention starts      | How long a prompt dismissal quiets prompt attention.                                                                   |
 | `pollInterval` | 5 minutes                          | How often a visible tab checks, at least 10 seconds. Focus and visibility also trigger a check, at most once a minute. |
-| `reload`       | `location.reload()`                | The document load a refresh performs. Return or resolve `false` if it did not happen.                                  |
+| `reload`       | `location.reload()`                | The document load a refresh performs. Return or resolve `false` when you know it did not happen.                       |
 | `storageKey`   | `usher`                            | Set one per app when apps share an origin.                                                                             |
 
 Invalid options throw when the store is created, with a message that names the option.
@@ -164,28 +164,41 @@ Usher never reloads on navigation, on a chunk error, or on its own timer. The as
 
 ### Refresh and unsaved work
 
-Refresh blockers decide whether a refresh can proceed. They run synchronously, in the order they were added, and a blocker that returns `true` or throws blocks the refresh. Concurrent `refresh()` calls share one attempt. A blocked, declined or failed attempt resolves `false` and can be retried.
+Refresh blockers decide whether a refresh can proceed. They run synchronously, in the order they were added, and a blocker that returns `true` or throws blocks the refresh. In React, `useRefreshBlocker(appUpdates, isDirty)` registers one for as long as the component is mounted.
 
-To reuse a router's own blockers, route the reload through it:
+`refresh()` resolves with what happened:
+
+| Outcome     | Meaning                                                  |
+| ----------- | -------------------------------------------------------- |
+| `reloading` | `reload` ran and the document is being replaced.         |
+| `blocked`   | A refresh blocker stopped it. `reload` was never called. |
+| `declined`  | `reload` returned `false` or threw. The error is logged. |
+
+Nothing is remembered between calls, so any outcome can be retried, and concurrent calls share one attempt. To let the user override a blocker, confirm on `blocked`, remove the blocker, and call `refresh()` again:
+
+```ts
+if ((await appUpdates.refresh()) === 'blocked' && confirm('Discard changes?')) {
+  discardChanges() // the blocker now returns false
+  await appUpdates.refresh()
+}
+```
+
+To send the reload through a router, replace `reload`:
 
 ```ts
 import { createAppUpdates } from '@rndsqr/usher-plugin/client'
 
 export const appUpdates = createAppUpdates({
-  reload: async () => {
-    await router.navigate({
+  reload: () =>
+    router.navigate({
       href: window.location.href,
       reloadDocument: true,
       replace: true,
-    })
-
-    // Still here, so the router declined the reload.
-    return false
-  },
+    }),
 })
 ```
 
-This recipe is tested against TanStack Router. For a refresh the current and next paths match, so a router blocker must check dirty state, not a pathname change.
+This recipe is tested against TanStack Router, whose own blockers then apply to the reload. The router does not report a blocked navigation, so `refresh()` resolves `reloading` either way; use a refresh blocker when the app needs to know. For a refresh the current and next paths match, so a router blocker must check dirty state, not a pathname change.
 
 ## Update surfaces
 

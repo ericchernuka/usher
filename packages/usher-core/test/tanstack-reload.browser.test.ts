@@ -28,26 +28,23 @@ function setup() {
   const appUpdates = createAppUpdates({
     running,
     versionUrl: '/version.json',
-    reload: async () => {
-      await router.navigate({
+    reload: () =>
+      router.navigate({
         href: window.location.href,
         reloadDocument: true,
         replace: true,
-      })
-
-      return false
-    },
+      }),
   })
 
   return { router, appUpdates }
 }
 
 describe('TanStack Router reload recipe', () => {
-  it('a router blocker (as useBlocker registers) stops the reload', async () => {
+  it('a router blocker (as useBlocker registers) stops the reload, though the router does not report it', async () => {
     const { router, appUpdates } = setup()
     const blockerFn = vi.fn<() => boolean>(() => true)
     const unblock = router.history.block({ blockerFn })
-    expect(await appUpdates.refresh()).toBe(false)
+    expect(await appUpdates.refresh()).toBe('reloading')
     expect(blockerFn).toHaveBeenCalled()
     expect(navigations).toEqual([])
     unblock()
@@ -55,8 +52,16 @@ describe('TanStack Router reload recipe', () => {
 
   it('without a blocker it replaces the document at the same URL', async () => {
     const { appUpdates } = setup()
-    await appUpdates.refresh()
+    expect(await appUpdates.refresh()).toBe('reloading')
     expect(navigations).toEqual([{ type: 'replace', url: location.href }])
+  })
+
+  it('a refresh blocker stops the reload before the router hears of it, and says so', async () => {
+    const { appUpdates } = setup()
+    const unblock = appUpdates.addRefreshBlocker(() => true)
+    expect(await appUpdates.refresh()).toBe('blocked')
+    expect(navigations).toEqual([])
+    unblock()
   })
 
   it("blockers that compare pathnames don't block reloads (current === next)", async () => {

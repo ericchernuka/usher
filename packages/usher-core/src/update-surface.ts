@@ -1,4 +1,4 @@
-import type { AppUpdates } from './app-updates'
+import type { AppUpdates, RefreshOutcome } from './app-updates'
 import type { Attention, UpdateState } from './types'
 
 const rank: Record<Attention, number> = {
@@ -13,8 +13,8 @@ const rank: Record<Attention, number> = {
  * a user can do with it. A new notice is made for every change of attention or reason.
  */
 export type UpdateNotice = Exclude<UpdateState, { attention: 'none' }> & {
-  /** The user wants the update. Resolves false if a blocker or your `reload` declined. */
-  refresh(): Promise<boolean>
+  /** The user wants the update. Same as the store's `refresh()`. */
+  refresh(): Promise<RefreshOutcome>
   /**
    * The user closed the surface. Safe to wire to any onClose, including one your
    * library also fires on programmatic closes or twice: a notice that is no

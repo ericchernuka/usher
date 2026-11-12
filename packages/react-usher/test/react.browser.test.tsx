@@ -141,14 +141,14 @@ describe('useRefreshBlocker', () => {
     }
 
     const view = await render(<Form dirty />)
-    expect(await updates.refresh()).toBe(false)
+    expect(await updates.refresh()).toBe('blocked')
     expect(navigations).toEqual([])
     await view.rerender(<Form dirty={false} />)
-    expect(await updates.refresh()).toBe(true)
+    expect(await updates.refresh()).toBe('reloading')
     expect(navigations).toHaveLength(1)
     await view.rerender(<Form dirty />)
     await view.unmount()
-    expect(await updates.refresh()).toBe(true)
+    expect(await updates.refresh()).toBe('reloading')
     expect(navigations).toHaveLength(2)
   })
 })
@@ -167,12 +167,12 @@ describe('useRefreshBlocker with a function', () => {
     }
 
     const view = await render(<Form />)
-    expect(await updates.refresh()).toBe(false)
+    expect(await updates.refresh()).toBe('blocked')
     expect(navigations).toEqual([])
     expect(blocker).toHaveBeenCalledWith()
 
     blocking = false
-    expect(await updates.refresh()).toBe(true)
+    expect(await updates.refresh()).toBe('reloading')
     expect(navigations).toHaveLength(1)
     await view.unmount()
   })

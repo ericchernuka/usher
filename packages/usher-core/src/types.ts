@@ -82,8 +82,8 @@ export interface AppUpdatesOptions {
   pollInterval?: number
   /**
    * The page load a refresh performs, once refresh blockers allow it.
-   * Return or resolve `false` when the reload did not happen. Default `location.reload()`.
-   * Route it through your router to reuse its blockers; see the README recipe.
+   * Return or resolve `false` when you know the reload did not happen; `refresh()`
+   * then resolves `declined`. Default `location.reload()`.
    */
   reload?: () => void | boolean | Promise<void | boolean>
   /** Storage key prefix; set one per app if apps share an origin. Default "usher". */
