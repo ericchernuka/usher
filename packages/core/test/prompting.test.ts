@@ -13,25 +13,26 @@ import {
 } from './fixtures'
 
 describe('showing and hiding', () => {
-  test('given a rollback, then the prompt is shown once per change under a stable id, and hidden when caught up', async ({
+  test('given a stale build, then the prompt is shown once per change under a stable id, and hidden when caught up', async ({
     app,
     clock,
   }) => {
-    server.use(serveBuild(older))
+    clock.setSystemTime('2026-11-12T04:00:00Z')
+    server.use(serveBuild(newer))
     const ui = fakeAdapter()
     app.track(connectPrompt(app.create(), ui.adapter))
     await clock.settle()
 
-    expect(ui.log).toEqual(['show:urgent'])
+    expect(ui.log).toEqual(['show:prompt'])
     expect(ui.open.id).toBe('app-update')
 
     await app.poll() // nothing changed: no duplicate show
-    expect(ui.log).toEqual(['show:urgent'])
+    expect(ui.log).toEqual(['show:prompt'])
 
     server.use(serveBuild(current))
     await app.poll()
 
-    expect(ui.log).toEqual(['show:urgent', 'hide'])
+    expect(ui.log).toEqual(['show:prompt', 'hide'])
   })
 
   test('given a fix ships for a rollback, when the prompt is already up, then it is not shown again', async ({
@@ -99,7 +100,8 @@ describe('closing the prompt', () => {
     app,
     clock,
   }) => {
-    server.use(serveBuild(older))
+    clock.setSystemTime('2026-11-12T04:00:00Z')
+    server.use(serveBuild(newer))
     const store = app.create()
     const ui = fakeAdapter()
     app.track(connectPrompt(store, ui.adapter))
@@ -109,9 +111,9 @@ describe('closing the prompt', () => {
     handle.dismiss()
 
     expect(store.getState().attention).toBe('passive')
-    expect(ui.log).toEqual(['show:urgent', 'hide'])
+    expect(ui.log).toEqual(['show:prompt', 'hide'])
     handle.dismiss() // libraries often fire onClose twice
-    expect(ui.log).toEqual(['show:urgent', 'hide'])
+    expect(ui.log).toEqual(['show:prompt', 'hide'])
   })
 
   test('given the library fires onClose for our own hide, then the update is not treated as dismissed', async ({
@@ -119,7 +121,8 @@ describe('closing the prompt', () => {
     clock,
     host,
   }) => {
-    server.use(serveBuild(older))
+    clock.setSystemTime('2026-11-12T04:00:00Z')
+    server.use(serveBuild(newer))
     const store = app.create()
     let handle: Prompt | undefined
     const ui = fakeAdapter()
@@ -144,31 +147,7 @@ describe('closing the prompt', () => {
     expect(host.localStorage.getItem(SNOOZE_KEY)).toBeNull()
   })
 
-  test('given the app vetoes the dismissal, when the user closes the toast, then it is shown again', async ({
-    app,
-    clock,
-  }) => {
-    server.use(serveBuild(older))
-
-    const store = app.create({
-      onAttentionChange: (_attention, details) => {
-        if (details.reason === 'dismiss' && details.previous === 'urgent') {
-          details.cancel()
-        }
-      },
-    })
-
-    const ui = fakeAdapter()
-    app.track(connectPrompt(store, ui.adapter))
-    await clock.settle()
-
-    ui.open.dismiss()
-
-    expect(ui.log).toEqual(['show:urgent', 'show:urgent'])
-    expect(store.getState().attention).toBe('urgent')
-  })
-
-  test('given an urgent prompt (25 h old build), when the user closes it, then it hides once and is not re-shown as a prompt', async ({
+  test('given an urgent prompt, when the user tries to close it, then it remains shown', async ({
     app,
     clock,
   }) => {
@@ -181,7 +160,7 @@ describe('closing the prompt', () => {
     ui.open.dismiss()
     await app.poll()
 
-    expect(ui.log).toEqual(['show:urgent', 'hide'])
+    expect(ui.log).toEqual(['show:urgent'])
   })
 
   test('given a passive banner, when the user closes it, then it stays closed until the state changes', async ({

@@ -37,11 +37,6 @@ export const older: VersionInfo = {
 /** The snooze record other tabs share through localStorage. */
 export const SNOOZE_KEY = 'app-version:snooze'
 
-/** What a tab records when its user dismisses a rollback of the running build. */
-export const rollbackAck = (until: number) => ({
-  [current.version]: { evidence: ['rollback'], until },
-})
-
 export const test = base
   // Auto: fake time is always installed, before the host and stores that read it.
   // oxlint-disable-next-line no-empty-pattern -- vitest requires a destructured first argument; this fixture has no dependencies
@@ -67,9 +62,9 @@ export const test = base
     }
 
     return {
-      /** A store that checks as soon as the user is idle (no idle wait unless asked). */
+      /** An update store on the fake host. */
       create: (options: AppUpdatesOptions = {}): AppUpdates =>
-        createStore(host, { idleFor: '0s', ...options }),
+        createStore(host, options),
       /** Subscribe for the rest of the test (or until the returned stop). */
       subscribe: (store: AppUpdates, listener: () => void = () => {}) =>
         track(store.subscribe(listener)),

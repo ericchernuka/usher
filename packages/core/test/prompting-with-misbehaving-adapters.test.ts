@@ -9,7 +9,8 @@ describe('adapters that misbehave', () => {
     app,
     clock,
   }) => {
-    server.use(serveBuild(older))
+    clock.setSystemTime('2026-11-12T04:00:00Z')
+    server.use(serveBuild(newer))
     const log: string[] = []
     const store = app.create()
     app.track(
@@ -24,38 +25,8 @@ describe('adapters that misbehave', () => {
     )
     await clock.settle()
 
-    expect(log).toEqual(['show-start:urgent', 'show-end', 'hide'])
+    expect(log).toEqual(['show-start:prompt', 'show-end', 'hide'])
     expect(store.getState().attention).toBe('passive')
-  })
-
-  test('given an adapter that dismisses in show() against an app that always vetoes, then it stops after a few passes', async ({
-    app,
-    clock,
-  }) => {
-    vi.spyOn(console, 'error').mockImplementation(() => {})
-    server.use(serveBuild(older))
-    let shows = 0
-
-    const store = app.create({
-      onAttentionChange: (_attention, details) => {
-        if (details.reason === 'dismiss') {
-          details.cancel()
-        }
-      },
-    })
-
-    app.track(
-      connectPrompt(store, {
-        show: p => {
-          shows++
-          p.dismiss()
-        },
-        hide: () => {},
-      }),
-    )
-    await clock.settle()
-
-    expect(shows).toBeLessThanOrEqual(5)
   })
 
   test('given show() throws at first, then connecting does not throw and the prompt appears once the library is ready', async ({
@@ -83,8 +54,10 @@ describe('adapters that misbehave', () => {
     expect(shows).toEqual([])
 
     ready = true
-    store.dismiss() // urgent -> passive; the 30 min snooze later expires -> urgent again
-    await clock.runFor(31 * 60_000)
+    server.use(
+      serveBuild({ ...older, forceUpdateBefore: '2026-11-12T00:00:00Z' }),
+    )
+    await app.poll()
 
     expect(shows).toEqual(['urgent']) // not stuck as "shown" from the failed attempt
   })

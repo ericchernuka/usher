@@ -62,7 +62,7 @@ Rollbacks need no new steps for dashboard rollbacks or old-commit redeploys: the
 - **Order in CI.** If deploy runs before the R2 sync, new tabs can briefly miss chunks. CI must sync first.
 - **Retention.** 30 days is a guess. How long do our users keep tabs open?
 - **Preview deploys.** Do previews share the prod bucket or get their own?
-- **Hard reloads.** This keeps old tabs working; it does not force them onto the new build. A version-check prompt is out of scope.
+- **Hard reloads.** This keeps old tabs working and uses the prompts described above to ask users to refresh. It never forces a reload on navigation or a chunk error. Urgent updates cannot be dismissed.
 
 * **API compatibility window.** Without reload-on-navigate, the backend must keep working for clients about a day old. A server-driven signal (`x-min-client-version` or a GraphQL error code that raises urgent) is a possible next step.
 

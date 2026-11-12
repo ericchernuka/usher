@@ -1,17 +1,7 @@
 import { vi } from 'vitest'
 import { server } from './mocks/node'
 import { serveBuild } from './mocks/overrides'
-import {
-  HOUR,
-  MINUTE,
-  SNOOZE_KEY,
-  describe,
-  expect,
-  newer,
-  older,
-  rollbackAck,
-  test,
-} from './fixtures'
+import { HOUR, SNOOZE_KEY, describe, expect, newer, test } from './fixtures'
 
 describe('reading what other tabs left in storage', () => {
   test.for([
@@ -25,87 +15,19 @@ describe('reading what other tabs left in storage', () => {
   ])(
     'given storage holds $name, when the tab starts, then nothing is snoozed',
     async ({ stored }, { app, clock, host }) => {
-      server.use(serveBuild(older))
+      clock.setSystemTime('2026-11-12T04:00:00Z')
+      server.use(serveBuild(newer))
       host.localStorage.setItem(SNOOZE_KEY, stored)
       const store = app.create()
       app.subscribe(store)
       await clock.settle()
 
       expect(store.getState()).toMatchObject({
-        attention: 'urgent',
-        reason: 'rollback',
+        attention: 'prompt',
+        reason: 'stale',
       })
     },
   )
-
-  test('given a record with one unreadable field, when the tab starts, then the readable ones still apply', async ({
-    app,
-    clock,
-    host,
-  }) => {
-    // Build 25 h old: the urgent level is dismissed by `urgentAt`; `promptAt` is garbage.
-    server.use(serveBuild(newer))
-    clock.setSystemTime('2026-11-12T16:00:00Z')
-    host.localStorage.setItem(
-      SNOOZE_KEY,
-      JSON.stringify({ promptAt: 'yesterday', urgentAt: Date.now() }),
-    )
-    const store = app.create()
-    app.subscribe(store)
-    await clock.settle()
-
-    expect(store.getState()).toMatchObject({
-      attention: 'passive',
-      reason: 'dismiss',
-    })
-  })
-
-  test('given a rollback acknowledgement next to a malformed one, when the tab starts, then the good one holds', async ({
-    app,
-    clock,
-    host,
-  }) => {
-    server.use(serveBuild(older))
-    host.localStorage.setItem(
-      SNOOZE_KEY,
-      JSON.stringify({
-        bad: {
-          ...rollbackAck(Date.now() + 30 * MINUTE),
-          other: { evidence: 'rollback', until: Date.now() + HOUR },
-        },
-      }),
-    )
-    const store = app.create()
-    app.subscribe(store)
-    await clock.settle()
-
-    expect(store.getState()).toMatchObject({
-      attention: 'passive',
-      reason: 'dismiss',
-    })
-  })
-
-  test('given only malformed rollback acknowledgements, when the tab starts, then the rollback still raises urgent', async ({
-    app,
-    clock,
-    host,
-  }) => {
-    server.use(serveBuild(older))
-    host.localStorage.setItem(
-      SNOOZE_KEY,
-      JSON.stringify({
-        bad: { aaa: { evidence: ['rollback'], until: 'later' } },
-      }),
-    )
-    const store = app.create()
-    app.subscribe(store)
-    await clock.settle()
-
-    expect(store.getState()).toMatchObject({
-      attention: 'urgent',
-      reason: 'rollback',
-    })
-  })
 })
 
 describe('hearing from other tabs while running', () => {
@@ -114,7 +36,8 @@ describe('hearing from other tabs while running', () => {
     clock,
     host,
   }) => {
-    server.use(serveBuild(older))
+    clock.setSystemTime('2026-11-12T04:00:00Z')
+    server.use(serveBuild(newer))
     const store = app.create()
     app.subscribe(store)
     await clock.settle()
@@ -133,7 +56,8 @@ describe('hearing from other tabs while running', () => {
     clock,
     host,
   }) => {
-    server.use(serveBuild(older))
+    clock.setSystemTime('2026-11-12T04:00:00Z')
+    server.use(serveBuild(newer))
     const store = app.create()
     app.subscribe(store)
     await clock.settle()
@@ -143,26 +67,6 @@ describe('hearing from other tabs while running', () => {
 
     expect(store.getState().attention).toBe('passive')
   })
-
-  test('given this tab dismissed urgent, when another tab dismisses only the prompt, then both dismissals hold', async ({
-    app,
-    clock,
-    host,
-  }) => {
-    server.use(serveBuild(newer))
-    clock.setSystemTime('2026-11-12T16:00:00Z') // build 25 h old: expired
-    const store = app.create()
-    app.subscribe(store)
-    await clock.settle()
-    store.dismiss()
-
-    host.otherTabSets(SNOOZE_KEY, JSON.stringify({ promptAt: Date.now() }))
-
-    expect(store.getState()).toMatchObject({
-      attention: 'passive',
-      reason: 'dismiss',
-    })
-  })
 })
 
 describe('a snooze this tab could not save', () => {
@@ -171,7 +75,8 @@ describe('a snooze this tab could not save', () => {
     clock,
     host,
   }) => {
-    server.use(serveBuild(older))
+    clock.setSystemTime('2026-11-12T04:00:00Z')
+    server.use(serveBuild(newer))
     vi.spyOn(host.localStorage, 'setItem').mockImplementation(() => {
       throw new Error('quota')
     })
@@ -192,52 +97,6 @@ describe('a snooze this tab could not save', () => {
 })
 
 describe('dismissing for every tab', () => {
-  test('given a rollback, when the user dismisses it, then the acknowledgement is stored for this build and its evidence for 30 minutes', async ({
-    app,
-    clock,
-    host,
-  }) => {
-    server.use(serveBuild(older))
-    const store = app.create()
-    app.subscribe(store)
-    await clock.settle()
-    expect(store.getState()).toMatchObject({
-      attention: 'urgent',
-      reason: 'rollback',
-    })
-
-    store.dismiss()
-
-    expect(store.getState().attention).toBe('passive')
-    const stored = JSON.parse(host.localStorage.getItem(SNOOZE_KEY) ?? 'null')
-    expect(stored.bad).toEqual(rollbackAck(Date.now() + 30 * MINUTE))
-  })
-
-  test("given another tab dismissed the rollback, then this tab goes passive and the change is a fact it can't cancel", async ({
-    app,
-    clock,
-    host,
-  }) => {
-    server.use(serveBuild(older))
-    const seen: Array<[string, boolean]> = []
-
-    const store = app.create({
-      onAttentionChange: (attention, details) =>
-        seen.push([`${attention}:${details.source}`, details.cancelable]),
-    })
-
-    app.subscribe(store)
-    await clock.settle()
-
-    host.otherTabSets(
-      SNOOZE_KEY,
-      JSON.stringify({ bad: rollbackAck(Date.now() + 30 * MINUTE) }),
-    )
-
-    expect(store.getState().attention).toBe('passive')
-    expect(seen.at(-1)).toEqual(['passive:other-tab', false])
-  })
-
   test("given another tab dismissed the prompt level, then it holds here until this tab's own urgent level", async ({
     app,
     clock,
@@ -250,7 +109,7 @@ describe('dismissing for every tab', () => {
     await clock.runFor(12 * HOUR)
     expect(store.getState().attention).toBe('prompt')
 
-    host.otherTabSets(SNOOZE_KEY, JSON.stringify({ promptAt: Date.now() })) // an older, already stale tab
+    host.otherTabSets(SNOOZE_KEY, JSON.stringify({ promptAt: Date.now() })) // an already stale tab
 
     expect(store.getState()).toMatchObject({
       attention: 'passive',
@@ -269,7 +128,8 @@ describe('clearing and blocking storage', () => {
     clock,
     host,
   }) => {
-    server.use(serveBuild(older))
+    clock.setSystemTime('2026-11-12T04:00:00Z')
+    server.use(serveBuild(newer))
     const store = app.create()
     app.subscribe(store)
     await clock.settle()
@@ -278,7 +138,7 @@ describe('clearing and blocking storage', () => {
 
     host.storageEvent(null) // localStorage.clear() elsewhere
 
-    expect(store.getState().attention).toBe('urgent')
+    expect(store.getState().attention).toBe('prompt')
   })
 
   test('given storage was cleared while this tab was not subscribed, when it resubscribes, then it is un-snoozed', async ({
@@ -286,7 +146,8 @@ describe('clearing and blocking storage', () => {
     clock,
     host,
   }) => {
-    server.use(serveBuild(older))
+    clock.setSystemTime('2026-11-12T04:00:00Z')
+    server.use(serveBuild(newer))
     const store = app.create()
     const stop = app.subscribe(store)
     await clock.settle()
@@ -298,8 +159,8 @@ describe('clearing and blocking storage', () => {
     await clock.settle()
 
     expect(store.getState()).toMatchObject({
-      attention: 'urgent',
-      reason: 'rollback',
+      attention: 'prompt',
+      reason: 'stale',
     })
   })
 
@@ -308,7 +169,8 @@ describe('clearing and blocking storage', () => {
     clock,
     host,
   }) => {
-    server.use(serveBuild(older))
+    clock.setSystemTime('2026-11-12T04:00:00Z')
+    server.use(serveBuild(newer))
     vi.spyOn(host.localStorage, 'setItem').mockImplementation(() => {
       throw new Error('quota')
     })
@@ -327,10 +189,11 @@ describe('clearing and blocking storage', () => {
     clock,
     host,
   }) => {
-    server.use(serveBuild(older))
+    clock.setSystemTime('2026-11-12T04:00:00Z')
+    server.use(serveBuild(newer))
     host.localStorage.setItem(
       SNOOZE_KEY,
-      JSON.stringify({ urgentAt: Date.now() - MINUTE }),
+      JSON.stringify({ promptAt: Date.now() - 2 * HOUR }),
     )
     vi.spyOn(host.localStorage, 'setItem').mockImplementation(() => {
       throw new Error('quota')

@@ -20,18 +20,12 @@ export {
 export type {
   Attention,
   Behind,
-  DetailsFor,
-  AttentionChangeDetails,
-  AttentionChangeReason,
-  ChangeSource,
   Duration,
   Escalation,
   EscalationLevel,
   ReasonsByAttention,
   ReloadDetails,
   ReloadFn,
-  ReloadReason,
-  SubscribeToNavigation,
   UpdateState,
   VersionInfo,
 } from './types'

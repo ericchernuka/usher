@@ -8,12 +8,9 @@ import { isolate } from './callbacks'
 import { createReloads, type ReloadBlocker } from './reloads'
 import { createSnoozes } from './snoozes'
 import type {
-  Attention,
-  AttentionChangeDetails,
   Duration,
   Escalation,
   ReloadFn,
-  SubscribeToNavigation,
   UpdateState,
   VersionInfo,
 } from './types'
@@ -21,31 +18,16 @@ import type {
 export type { ReloadBlocker } from './reloads'
 
 export interface AppUpdatesOptions {
-  /** When outdated tabs escalate, by build age. Default `{ prompt: { after: "12h" }, urgent: { after: "24h", snooze: "30m" } }`. */
+  /** When outdated tabs escalate, by build age. Default `{ prompt: { after: "12h" }, urgent: { after: "24h" } }`. */
   escalation?: Escalation
   /**
-   * Told about every attention or reason change, with Base UI-style details. Raises and this tab's own
-   * dismiss can be canceled (`details.cancelable`); a canceled raise is offered again after
-   * the next successful check. `details` is a union: narrow on `details.attention`.
-   */
-  onAttentionChange?: (
-    attention: Attention,
-    details: AttentionChangeDetails,
-  ) => void
-  /**
-   * Performs a "refresh" or "navigate" reload, after reload blockers allow it. Route it
+   * Performs an explicit refresh, after reload blockers allow it. Route it
    * through your router to reuse its blockers, e.g. TanStack
    * `router.navigate({ href, reloadDocument: true, replace: true })`. See README.
    */
   reload?: ReloadFn
-  /** Optional, off by default: reload on the next route change when behind. See README. */
-  subscribeToNavigation?: SubscribeToNavigation
-  /** Reload once if a lazy chunk fails to load. Default true. */
-  reloadOnChunkError?: boolean
   /** How often a visible tab checks for a new build. Hidden tabs don't. Default "5m", minimum "10s". */
   pollEvery?: Duration
-  /** Input-idle time before raising to prompt/urgent, so a toast never lands mid-keystroke. Default "5s". */
-  idleFor?: Duration
   /** localStorage key prefix; set one per app if apps share an origin. */
   storageKey?: string
 }
@@ -70,7 +52,7 @@ export interface AppUpdates {
   addReloadBlocker: (blocker: ReloadBlocker) => () => void
   /** Reload onto the latest build. Resolves false if a blocker or your `reload` declined. Concurrent calls share one reload. */
   refresh: () => Promise<boolean>
-  /** Dismiss the current prompt/urgent for every tab. Decides first: true, and effects, only if attention drops. */
+  /** Dismiss the current prompt for every tab. Urgent states cannot be dismissed. */
   dismiss: () => boolean
 }
 
@@ -101,7 +83,6 @@ export function createAppUpdatesCore(o: CoreOptions): AppUpdates {
 
   const reloads = createReloads({
     ...(o.reload && { reload: o.reload }),
-    storageKey,
     host,
   })
 
@@ -109,21 +90,14 @@ export function createAppUpdatesCore(o: CoreOptions): AppUpdates {
     current: o.current,
     escalation: resolveEscalation(o.escalation), // validates eagerly: bad config throws here
     snoozes,
-    ...(o.onAttentionChange && { onAttentionChange: o.onAttentionChange }),
     notify: () => notifyAll(listeners),
   })
 
   const engine = createEngine({
     url: o.url,
     pollMs: pollMs(o.pollEvery),
-    idleMs: ms(o.idleFor ?? '5s', 'idleFor'),
     machine,
     snoozes,
-    reloads,
-    ...(o.subscribeToNavigation && {
-      subscribeToNavigation: o.subscribeToNavigation,
-    }),
-    reloadOnChunkError: o.reloadOnChunkError ?? true,
     host,
   })
 
@@ -131,10 +105,9 @@ export function createAppUpdatesCore(o: CoreOptions): AppUpdates {
     getState: machine.getState,
     subscribe: subscribeTo(listeners, engine),
     addReloadBlocker: reloads.addBlocker,
-    refresh: () =>
-      reloads.request({ reason: 'refresh', href: host.location.href }),
+    refresh: () => reloads.request({ href: host.location.href }),
     dismiss() {
-      const dismissed = machine.dismiss(engine.context('user'))
+      const dismissed = machine.dismiss()
 
       if (dismissed) {
         engine.reschedule()

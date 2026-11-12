@@ -52,271 +52,128 @@ The handler (`packages/cloudflare/src/edge-handler.mjs`, standalone ESM) serves 
 ## Use it in an app
 
 ```ts
-// src/updates.ts: created once, at module scope
-import { createAppUpdates, connectPrompt } from '@app-version/core'
+import { createAppUpdates } from '@app-version/core'
 
 export const appUpdates = createAppUpdates({
-  escalation: { prompt: { after: "12h" }, urgent: { after: "24h", snooze: "30m" } }, // the defaults
-  onAttentionChange: (attention, details) =>
-    datadogRum.addAction("app-update", { attention, reason: details.reason, source: details.source }),
-});
-
-connectPrompt(appUpdates, { show: …, hide: … }); // optional; see "Prompts"
+  escalation: { prompt: { after: '12h' }, urgent: { after: '24h' } },
+})
 ```
 
 ```tsx
 import { useAppUpdates, useReloadBlocker } from '@app-version/react'
 
-function NavUpdateButton() {
-  const attention = useAppUpdates(appUpdates, s => s.attention) // select a field, not a new object
+function UpdateButton() {
+  const attention = useAppUpdates(appUpdates, state => state.attention)
   if (attention === 'none') return null
   return (
-    <IconButton data-attention={attention} onClick={() => appUpdates.refresh()}>
-      Update
-    </IconButton>
+    <button type="button" onClick={() => appUpdates.refresh()}>
+      Refresh
+    </button>
   )
 }
 
 function JobForm() {
   const form = useForm()
-  useReloadBlocker(appUpdates, form.formState.isDirty) // like React Router's useBlocker
+  useReloadBlocker(appUpdates, form.formState.isDirty)
 }
 ```
 
-`useAppUpdates` returns a deferred value (see [Decisions](#decisions)); in development it logs an error if a selector returns a new value each time.
+Create one store at module scope. It starts polling when the first subscriber arrives and stops after the last leaves. Select a stable field with `useAppUpdates`; a selector that creates a new object is not supported. The hook defers the selected value with `useDeferredValue`. Actions read the current store directly.
 
-## How it works: an explicit state machine
+## Update state
 
-```
-Model    published UpdateState · knownBad (sticky, with evidence) · vetoed raise · server clock · snoozes
-Inputs   check result · time (deadlines) · visibility · focus · input · other tab · dismiss
-Policy   decide(facts) → { target, publish, reason, deadlines }   (pure, packages/core/src/policy.ts)
-```
+| Situation                                       | Attention | Reason      |
+| ----------------------------------------------- | --------- | ----------- |
+| No response yet                                 | `none`    | `unknown`   |
+| Running the latest build                        | `none`    | `caught-up` |
+| A newer build exists                            | `passive` | `new-build` |
+| The prompt was dismissed                        | `passive` | `dismiss`   |
+| Running build is at least 12 hours old          | `prompt`  | `stale`     |
+| Running build is at least 24 hours old          | `urgent`  | `expired`   |
+| An older commit was deployed                    | `urgent`  | `rollback`  |
+| Running build predates the forced-update cutoff | `urgent`  | `forced`    |
 
-- **One writer.** Every input becomes `apply()` (facts changed) or `dismiss()` (user intent) in `src/machine.ts`, the only code that changes state. Each asks the pure policy, offers the change to `onAttentionChange` when it's the app's to veto, and publishes one consistent snapshot. Offers are atomic: `dismiss()` called from inside `onAttentionChange` is ignored with a warning (use `details.cancel()`).
-- **The policy owns every reason and every hold.** While the user is busy or the tab is hidden, a raise publishes a truthful hold (`passive:waiting`, or stays at `prompt:stale`) instead of a made-up reason. A raise the app vetoed reads `passive:declined`, never a stuck `waiting`.
-- **Time is an event.** The policy returns its own deadlines (when the build crosses each threshold, when a snooze expires). The engine keeps one timer at the earliest of those, the next poll, and idle release. Every wake re-evaluates first, so escalation happens even while checks fail. Hidden tabs have no wake timer (a fetch already in flight keeps its 30 s timeout until it settles). Polling and idleness run on `performance.now()`, so the user's clock jumping can't stall them.
-- **Known-bad is sticky.** Once this tab learns its build was rolled back or force-updated, it stays `urgent` until it reloads, even after a fix ships or `latest` flaps. It keeps the evidence it has seen (`rollback`, each `forceUpdateBefore` cutoff); only new evidence breaks through a dismissal.
-- **Vetoes are explicit.** A canceled raise is remembered and offered again after the next successful check (or sooner if the target itself changes), not on every input.
-- **Server clock.** Build age and dismissals use the server's `Date` header, anchored to `performance.now()` at the last check. Changes under 2 s (the header's 1 s rounding) are ignored; a missing header keeps the last estimate. Two tabs on the same build agree to within that.
-- **Snoozes record when a level was dismissed** (server clock), not a client end time. A dismissal covers every tab whose level had already started, until that tab's next level: one prompt per level, in every tab. A build that goes stale later prompts afresh. localStorage carries them between tabs; on resubscribe, readable storage wins (a clear while unsubscribed still un-snoozes), unless this tab's last write failed.
+Rollback and forced-update knowledge stays urgent until this tab reloads, even if a later response reports the running version again. A forced cutoff applies even when the version matches. Urgent states cannot be dismissed.
 
-Checked by model-based tests (`test/model.test.ts`, world in `test/model/world.ts`). fast-check generates random worlds (six escalation configs, server clock skew up to ±3 h with 1 s `Date` headers) and event sequences: time, deploys, flapping builds, rollbacks, outages, visibility, typing, other tabs setting and clearing snoozes, dismissals, vetoes, reloads, resubscribes and clock jumps. Three generators: random, rollback-then-fix, and age escalation (wait, dismiss, wait, dismiss). Invariants after every step:
+A prompt dismissal records its server time in localStorage. It quiets every tab whose prompt threshold had started at that time, until each tab reaches urgent. A build that reaches its prompt threshold later can still prompt. An explicit `prompt.snooze` can set a shorter or longer duration; it never suppresses urgent. With urgent disabled and no explicit snooze, a dismissed prompt has no expiry.
 
-- every published change of attention or reason was offered (and accepted, if cancelable);
-- raises only publish while visible and idle;
-- hidden tabs keep no timer;
-- a vetoed tab never rises, and is never stuck at `waiting` while idle and visible;
-- `dismiss() === false` means nothing changed;
-- a known-bad build is never shown as merely new or stale;
-- a dismissed prompt never returns before urgent;
-- an urgent snooze is never cut short (to within 3 s of clock rounding).
-
-Twelve deliberate mutations of the core each fail at least one test; nine fail the model test alone. Examples: removing the gate, the stickiness, the hidden-tab check, the veto, decide-before-effects, the reason reports or `declined`; recording dismissals on the client clock; or anchoring the server clock to `Date.now()`.
-
-## The store
+## Store interface
 
 ```ts
 interface AppUpdates {
-  getState(): UpdateState // immutable; same object until something changes
-  subscribe(listener): () => void // first subscriber starts polling, last one stops it
-  addReloadBlocker(blocker): () => void // synchronous: blocker(details) => true blocks
-  refresh(): Promise<boolean> // false if blocked or declined; concurrent calls share one reload
-  dismiss(): boolean // decides first: true, and effects, only if attention drops
+  getState(): UpdateState
+  subscribe(listener: () => void): () => void
+  addReloadBlocker(blocker: (details: { href: string }) => boolean): () => void
+  refresh(): Promise<boolean>
+  dismiss(): boolean
 }
-
-type UpdateState =
-  | { attention: 'none'; reason: 'unknown' | 'caught-up'; latest?: VersionInfo }
-  | {
-      attention: 'passive'
-      reason: 'new-build' | 'dismiss' | 'waiting' | 'declined'
-      latest: VersionInfo
-    }
-  | { attention: 'prompt'; reason: 'stale'; latest: VersionInfo }
-  | {
-      attention: 'urgent'
-      reason: 'rollback' | 'forced' | 'expired'
-      latest: VersionInfo
-    }
 ```
 
-Creating a store has no side effects; it polls only while something is subscribed (`connectPrompt`, a hook, or your own `subscribe()`).
+Snapshots keep the same identity until attention, reason, or latest version changes. `dismiss()` succeeds only for a prompt that can still be lowered. It returns false without writing storage for urgent, passive, and unknown states.
 
-### Options
+| Option       | Default                          | Meaning                                                                                                       |
+| ------------ | -------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `escalation` | Prompt at `12h`, urgent at `24h` | Typed build-age thresholds. Set either level to `false` to disable it. Only prompt accepts `snooze`.          |
+| `pollEvery`  | `5m`                             | Visible-tab polling interval, at least `10s`. Focus and visibility can also trigger a check after one minute. |
+| `reload`     | `location.reload()`              | An explicit refresh. Receives `{ href }`; may return or resolve false to decline.                             |
+| `storageKey` | `app-version`                    | Set separately for apps on the same origin.                                                                   |
 
-| Option                          | Default                                                                 | Notes                                                                                 |
-| ------------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| `escalation`                    | `{ prompt: { after: "12h" }, urgent: { after: "24h", snooze: "30m" } }` | By build age (server clock). `false` turns a level off. Validated at creation         |
-| `onAttentionChange(a, details)` |                                                                         | Told about every attention or reason change; can veto raises and this tab's dismiss   |
-| `reload(details)`               | `location.reload()` / `location.assign(href)`                           | _How_ a `refresh`/`navigate` reload happens. See [Reloads](#reloads)                  |
-| `subscribeToNavigation`         | unset                                                                   | Opt-in reload on route change; not recommended at a 10–15 min deploy cadence          |
-| `pollEvery`                     | `"5m"`                                                                  | Minimum `"10s"`. Visible tabs only; also checks on focus and on return after a minute |
-| `idleFor`                       | `"5s"`                                                                  | Input-idle time before raising to prompt/urgent                                       |
-| `reloadOnChunkError`            | `true`                                                                  | Reload once on `vite:preloadError`                                                    |
-| `storageKey`                    | `"app-version"`                                                         | Set per app if apps share an origin                                                   |
+There are no cancelable attention changes, input-idle delays, navigation reloads, or chunk-error reloads. Apps can subscribe to observe state. R2 fallback keeps old chunks available; the library refreshes only when the app calls `refresh()`.
 
-Durations are typed: `` `${number}${"s" | "m" | "h" | "d"}` ``, so `"12 hours"` doesn't compile. The type still admits `"-5m"` and `"1e3s"`, so every duration is also parsed at creation and these throw. Also checked then: `urgent.after` > `prompt.after`, positive snoozes, `pollEvery` ≥ 10 s.
+### Refresh and unsaved work
 
-### Attention
+Reload blockers decide whether an explicit refresh can proceed. A throwing blocker blocks the refresh. The optional `reload` function decides how to refresh; concurrent refresh calls share one attempt. A failure or a declined attempt does not prevent a later retry.
 
-| Situation                                           | `attention` (`reason`)  |
-| --------------------------------------------------- | ----------------------- |
-| Not checked yet                                     | `none` (`unknown`)      |
-| Same build                                          | `none` (`caught-up`)    |
-| Newer build                                         | `passive` (`new-build`) |
-| A raise waiting for an idle, visible tab            | `passive` (`waiting`)   |
-| A snooze holding a higher level back                | `passive` (`dismiss`)   |
-| `onAttentionChange` canceled a higher level         | `passive` (`declined`)  |
-| Running build past `escalation.prompt.after` (12 h) | `prompt` (`stale`)      |
-| Running build past `escalation.urgent.after` (24 h) | `urgent` (`expired`)    |
-| Latest commit older than ours (rollback), sticky    | `urgent` (`rollback`)   |
-| Our build ran before `forceUpdateBefore`, sticky    | `urgent` (`forced`)     |
-
-`forceUpdateBefore` applies even when `latest` is our own version, so rebuilding the same commit with a cutoff forces old tabs.
-
-**Dismissing** works out the result with the snooze in place first; only if attention would drop does it ask `onAttentionChange`, write the snooze and publish exactly that.
-
-| Dismissed                  | Quiet until                                                                                                  |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `prompt`                   | `prompt.snooze`, else each tab's own urgent level (one prompt per level), else a day; for tabs already stale |
-| `urgent` (expired)         | `urgent.snooze` (30 min); also quiets prompt; for tabs already expired                                       |
-| `urgent` (rollback/forced) | `urgent.snooze`, for **our build and the evidence seen**: new deploys don't re-raise it, a new cutoff does   |
-
-### `onAttentionChange` details
-
-Base UI `onOpenChange(open, eventDetails)` shape. `details` is a discriminated union: narrow on `details.attention` to narrow `details.reason`.
-
-| Field        | Meaning                                                                                                                                                       |
-| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `reason`     | Why, per level (table above)                                                                                                                                  |
-| `previous`   | Attention before the change                                                                                                                                   |
-| `source`     | `"check"`, `"time"`, `"user"` (this tab's dismiss), `"other-tab"`: count user dismissals once                                                                 |
-| `cancelable` | Only raises and this tab's own dismiss. Lowerings, catching up, reason changes within a level (`previous === attention`) and other tabs' dismissals are facts |
-| `cancel()`   | Keep the current attention (`passive` reads `declined`). A canceled raise is offered again after the next successful check                                    |
-
-### Reloads
-
-- **Blockers decide _whether_**, synchronously: `useReloadBlocker` / `addReloadBlocker`. They're the only veto for `chunk-error`, which must be decided before the event returns.
-- **`reload` decides _how_** for `refresh` and `navigate`, and may be async. At most one reload runs at a time; concurrent requests share it.
-
-Route it through your router to reuse your navigation blockers. TanStack Router's `navigate({ reloadDocument: true })` runs the app's `useBlocker` blockers before touching `window.location` (verified in its source and against the real router in `packages/core/test/tanstack-reload.browser.test.ts`):
+To reuse a router's blockers:
 
 ```ts
 reload: async ({ href }) => {
-  await router.navigate({ href, reloadDocument: true, replace: true });
-  return false; // still here afterwards = a blocker stopped it (otherwise the page is unloading)
-},
+  await router.navigate({ href, reloadDocument: true, replace: true })
+  return false // The page is still here because the router declined the reload.
+}
 ```
 
-For a reload, the router's current and next locations are the same, so block on dirty state (`shouldBlockFn: () => form.isDirty`), not on a pathname change.
+This recipe is tested against TanStack Router. For a refresh, current and next paths match, so a router blocker must check dirty state rather than a pathname change.
 
-### Robustness
+## Prompt adapters
 
-- **Fetches:** one at a time via `AbortController` (newest wins, `stop()` aborts, 30 s timeout); malformed `version.json` is ignored.
-- **Clock skew:** build age uses the response's `Date` header; cross-origin responses need `Access-Control-Expose-Headers: Date`.
-- **Isolation:** throwing listeners, callbacks, blockers and adapters are logged and can't break the store. A throwing blocker counts as blocking.
-- **Timers:** capped below the browser's 2^31 ms limit.
-- **Chunk-error reload:** at most once per 10 s (timestamp in `sessionStorage`); with sessionStorage blocked it doesn't reload, to rule out loops.
-- **Your own `vite:preloadError` handler wins:** if a listener registered before the store subscribes calls `preventDefault()`, the store leaves the event alone. A listener added later can't claim it first; set `reloadOnChunkError: false` to handle chunk errors yourself.
-
-## Prompts: `connectPrompt`
+`connectPrompt` remains available for imperative toast and banner libraries:
 
 ```ts
+import { connectPrompt, defaultCopy } from '@app-version/core'
+
 const disconnect = connectPrompt(appUpdates, {
-  minAttention: 'prompt', // optional
   show(prompt) {
-    /* create or update your UI, keyed by prompt.id */
+    // Upsert by prompt.id. Wire the refresh action to prompt.refresh().
+    // Allow closing only when prompt.attention !== 'urgent'.
+    // Wire a user close to prompt.dismiss().
+    showToast(prompt.id, defaultCopy(prompt), prompt)
   },
   hide() {
-    /* remove it */
+    hideToast('app-update')
   },
 })
 ```
 
-`Prompt` is a union (`attention` + its own `reason`) with `id: "app-update"`, `latest`, `refresh(): Promise<boolean>` and `dismiss()`. `connectPrompt` handles: threshold crossing; one `show` per attention/reason change; stale handles whose `dismiss()` is a no-op (wire it to any `onClose`, even one fired by our own `hide()`); `hide()` after a successful dismiss, on whatever state the store actually published; re-showing a refused dismiss; isolated, re-entrancy-safe adapter calls (capped at 5 passes); and keeping the store polling until `disconnect()`. `defaultCopy(prompt)` words a known-bad build differently from an old one.
+The adapter has a real seam: different UI libraries implement `show` and `hide`. `connectPrompt` handles threshold changes, stable IDs, stale handles, and a library firing onClose during a programmatic hide. The default minimum attention is `prompt`; use `minAttention: 'passive'` for a persistent update banner. A passive banner can be closed locally until its attention or reason changes. Calling an urgent handle's `dismiss()` has no effect; render urgent surfaces without a close action.
 
-**Base UI** (tested against real Base UI in `test/react.test.tsx`)
+`disconnect()` hides the surface and removes its store subscription. An adapter that throws is isolated and can retry on a later state notification. `defaultCopy` supplies suggested text; apps can use their own text.
 
-```ts
-export const toastManager = Toast.createToastManager() // <Toast.Provider toastManager={toastManager}>
+## Internal modules
 
-connectPrompt(appUpdates, {
-  show: p =>
-    toastManager.add({
-      id: p.id,
-      type: 'app-update',
-      timeout: 0,
-      priority: p.attention === 'urgent' ? 'high' : 'low',
-      title: defaultCopy(p).title,
-      description: defaultCopy(p).description,
-      actionProps: {
-        children: defaultCopy(p).action,
-        onClick: () => p.refresh(),
-      },
-      onClose: p.dismiss,
-    }),
-  hide: () => toastManager.close('app-update'),
-})
-```
+The policy computes one state and the next deadline from build facts, prompt dismissal, and time. The machine owns the snapshot, sticky bad-build knowledge, and the server-clock estimate. It computes the policy result once when facts change. The browser engine reads the cached deadline and owns fetching, subscriptions, visibility, and the wake timer.
 
-**Sonner**
+Build age and dismissals use the response's Date header, anchored to `performance.now()`. Missing Date headers retain the last estimate. Changes smaller than two seconds are ignored as header rounding. Polling uses monotonic time, so changing the user's clock cannot stop it. Cross-origin version responses need `Access-Control-Expose-Headers: Date` for clock correction.
 
-```ts
-connectPrompt(appUpdates, {
-  show: p =>
-    toast(defaultCopy(p).title, {
-      id: p.id,
-      description: defaultCopy(p).description,
-      duration: Infinity,
-      action: { label: defaultCopy(p).action, onClick: () => p.refresh() },
-      onDismiss: p.dismiss,
-    }),
-  hide: () => toast.dismiss('app-update'),
-})
-```
+The engine evaluates age deadlines even when network checks fail. Hidden tabs have no wake timer; they catch up when visible or subscribed again. A pending fetch retains its own 30-second timeout and is aborted when the final subscriber leaves. External JSON is validated. Blocked storage keeps prompt dismissal in memory for the current tab.
 
-**Your own banner store** (from `passive` up): `show: (p) => bannerStore.setState(p)`, `hide: () => bannerStore.setState(null)`.
+Behaviour tests cover these rules. Model tests also exercise random event sequences with slow responses, outages, clock skew, clock jumps, resubscription, cross-tab dismissal, and rollback followed by a fix.
 
-## Rollbacks
+## Rollbacks and deployment
 
-- Dashboard rollback, `wrangler rollback`, or redeploying an old commit: older `commitTime` → `urgent:rollback`, sticky for tabs on the bad build. Needs the commit time at build (`.git`, or `APP_COMMIT_TIME`); without it the plugin warns.
-- Revert deployed forward: set `APP_FORCE_UPDATE_BEFORE` to now for that deploy → `urgent:forced`, sticky. Clearing it later doesn't lower tabs that already saw it.
-- Tabs on a bad build keep running it until they refresh (R2 still serves its chunks); `urgent` is what moves them.
-- Workers gradual deployments can make `version.json` alternate between versions and fake a rollback. Deploy 100% at once.
+Dashboard rollbacks and old-commit redeploys are detected through `commitTime`. The build needs `.git` or `APP_COMMIT_TIME`; the plugin warns when neither exists. For a revert deployed as a new commit, set `APP_FORCE_UPDATE_BEFORE` for that deployment. Clearing it later does not lower urgency in tabs that already saw it.
 
-## Possible next step: server-driven updates
-
-Not built. The API could return `x-min-client-version`, or a known GraphQL error code, and the store would mark the build `forced`, tying urgency to real incompatibility instead of a timer.
-
-## Decisions
-
-### Model the store as an explicit state machine (2026-11-11)
-
-Three review rounds kept finding bugs where rules met (the idle/visible gate, vetoes, re-entrancy, time). Instead of more rules, the store became an explicit machine (model, inputs, a pure policy returning target, hold and deadlines) checked by model-based tests. Specific changes: time is an event (deadlines), known-bad is sticky, vetoes are explicit and re-offered after the next check, only raises and own dismissals are cancelable, offers are atomic, one reload at a time, per-build snoozes for known-bad builds.
-
-### Escalate by build age only; typed thresholds (2026-11-11)
-
-Replaced the local-midnight rule with build age on the server clock (Vercel's 12 h / 24 h defaults). Removes client clock, time zones and DST from the policy; two tabs on the same build agree (to within the `Date` header's 1 s). Thresholds are a typed `escalation` option with `Duration` strings, validated at creation. A prompt dismissal now lasts until the next level starts.
-
-### Snoozes on the server clock, keyed by level; known-bad keyed by evidence (2026-11-11)
-
-The fourth review (of the model) found end times baked in client time: `Date`-header rounding could end a prompt dismissal a second before urgent, and one tab's dismissal ended at its own build's urgent time. Dismissals now record when (server clock) a level was dismissed, and each tab works out its own end. A rollback dismissal was keyed by `latest`, so every deploy re-raised it; it's now keyed by our build plus the evidence seen. The server-clock estimate is anchored to `performance.now()`, so the user's clock jumping moves neither snoozes nor polling. Reason-only changes are now reported (non-cancelable), a vetoed raise reads `passive:declined`, `pollEvery` has a 10 s floor, and `none` says `unknown` before the first check.
-
-### Delegate _how_ to reload to the app (2026-11-11)
-
-A `reload` option performs `refresh`/`navigate` reloads; synchronous blockers still decide whether. One predictable path, async confirmation, and reuse of TanStack Router's blockers. Chunk-error reloads stay on blockers only (they must be decided synchronously).
-
-### `useAppUpdates` returns a deferred value (2026-11-11)
-
-`useSyncExternalStore` updates can't be transitions; Ricky Hanlon (React core) recommended wrapping the read in `useDeferredValue` (reply to Mark Erikson on X, 2026-04-21). Store changes render at transition priority. Actions read the store directly, never the deferred value.
-
-### Keep `onAttentionChange` as one observe-and-veto callback (2026-11-11)
-
-Base UI's `(value, details)` shape, with `details.cancelable` making clear which changes are the app's to veto, and `details.source` separating this tab's user from other tabs.
-
-### Reviews (2026-11-11)
-
-Four independent reviews; every finding is pinned by a test, grouped by the behaviour it protects in `packages/core/test/`.
+Deploy one Workers version at a time. Alternating version responses during a gradual deployment can look like a rollback. R2 keeps serving bad-build tabs until their users refresh.
 
 ## Development
 

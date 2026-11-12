@@ -42,14 +42,14 @@ class MemoryStorage implements StorageLike {
   }
 }
 
-/** A navigation the page tried to make: `assign` is a push, `reload` a reload. */
+/** An explicit page refresh. */
 
 interface MutableVisibility {
   visibilityState: DocumentVisibilityState
 }
 
 export function createFakeHost(options: { fetch?: typeof fetch } = {}) {
-  const navigations: Array<{ type: 'push' | 'reload'; url: string }> = []
+  const navigations: Array<{ type: 'reload'; url: string }> = []
 
   const localStorage: StorageLike & Pick<Storage, 'removeItem' | 'clear'> =
     new MemoryStorage()
@@ -69,18 +69,12 @@ export function createFakeHost(options: { fetch?: typeof fetch } = {}) {
   const location = {
     href: 'https://app.test/now',
     reload: () => void navigations.push({ type: 'reload', url: location.href }),
-    assign: (url: string | URL) =>
-      void navigations.push({
-        type: 'push',
-        url: new URL(url, location.href).href,
-      }),
   }
 
   const host: Host = {
     window: windowTarget,
     document: doc,
     localStorage,
-    sessionStorage,
     location,
     fetch: options.fetch ?? ((...args) => fetch(...args)), // MSW answers these
   }

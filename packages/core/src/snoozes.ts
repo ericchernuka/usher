@@ -9,26 +9,6 @@ import type { Snoozes } from './policy'
 
 const Finite = v.pipe(v.number(), v.finite())
 
-const BadSnoozeSchema = v.object({
-  evidence: v.array(v.string()),
-  until: Finite,
-})
-
-/** Per-build acknowledgements: entries that don't parse are dropped, and none left means no record. */
-const StoredBad = v.pipe(
-  v.record(v.string(), v.unknown()),
-  v.transform(entries =>
-    Object.fromEntries(
-      Object.entries(entries).flatMap(([version, entry]) => {
-        const parsed = v.safeParse(BadSnoozeSchema, entry)
-
-        return parsed.success ? [[version, parsed.output]] : []
-      }),
-    ),
-  ),
-  v.transform(valid => (Object.keys(valid).length ? valid : undefined)),
-)
-
 /** A field of the stored record that's unreadable counts as absent; the others still apply. */
 const lenient = <const T extends v.GenericSchema>(schema: T) =>
   v.fallback(v.optional(schema), undefined)
@@ -37,13 +17,9 @@ const lenient = <const T extends v.GenericSchema>(schema: T) =>
 const StoredSnoozes = v.pipe(
   v.object({
     promptAt: lenient(Finite),
-    urgentAt: lenient(Finite),
-    bad: lenient(StoredBad),
   }),
-  v.transform(({ promptAt, urgentAt, bad }): Snoozes => ({
+  v.transform(({ promptAt }): Snoozes => ({
     ...(promptAt !== undefined && { promptAt }),
-    ...(urgentAt !== undefined && { urgentAt }),
-    ...(bad && { bad }),
   })),
 )
 
@@ -61,31 +37,8 @@ const max = (x?: number, y?: number) =>
 /** Dismissals only ever move later (covering more), so merging by the later time is safe. */
 function later(a: Snoozes, b: Snoozes): Snoozes {
   const promptAt = max(a.promptAt, b.promptAt)
-  const urgentAt = max(a.urgentAt, b.urgentAt)
-  const bad = { ...a.bad }
 
-  for (const [version, entry] of Object.entries(b.bad ?? {})) {
-    if (!bad[version] || entry.until > bad[version].until) {
-      bad[version] = entry
-    }
-  }
-
-  return {
-    ...(promptAt !== undefined && { promptAt }),
-    ...(urgentAt !== undefined && { urgentAt }),
-    ...(Object.keys(bad).length && { bad }),
-  }
-}
-
-/** Drop expired known-bad entries; prompt/urgent records are single numbers and stay. */
-function prune(s: Snoozes, serverNow: number): Snoozes {
-  const bad = Object.fromEntries(
-    Object.entries(s.bad ?? {}).filter(([, e]) => e.until > serverNow),
-  )
-
-  const { bad: _expired, ...rest } = s
-
-  return Object.keys(bad).length ? { ...rest, bad } : rest
+  return promptAt === undefined ? {} : { promptAt }
 }
 
 function isOurArea(e: StorageChange, host: Host) {
@@ -140,8 +93,8 @@ export function createSnoozes(storageKey: string, host: Host) {
       return true
     },
 
-    write(next: Snoozes, serverNow: number) {
-      memory = prune(next, serverNow)
+    write(next: Snoozes) {
+      memory = next
 
       try {
         host.localStorage.setItem(key, JSON.stringify(memory))

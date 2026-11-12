@@ -7,7 +7,6 @@ import type { Clock } from '../clock'
 import { createFakeHost, createStore } from '../fake-host'
 
 const H = 3_600_000
-export const IDLE_MS = 5_000
 export const SNOOZE_KEY = 'app-version:snooze'
 
 export const current: VersionInfo = {
@@ -49,25 +48,19 @@ const configs = {
   noUrgent: { urgent: false },
   promptSnooze: { prompt: { after: '12h', snooze: '1h' } },
   off: { prompt: false, urgent: false },
-  fast: { prompt: { after: '2h' }, urgent: { after: '3h', snooze: '10m' } },
+  fast: { prompt: { after: '2h' }, urgent: { after: '3h' } },
 } satisfies Record<string, Escalation>
 
 export type ConfigName = keyof typeof configs
-
-/** Urgent snooze per config (the default is 30 min). */
-export const urgentSnoozeMs = (name: ConfigName) =>
-  (name === 'fast' ? 10 : 30) * 60_000
 
 export type Action =
   | { type: 'advance'; ms: number }
   | { type: 'serve'; build: Served }
   | { type: 'focus' }
   | { type: 'visibility'; visible: boolean }
-  | { type: 'input' }
   | { type: 'dismiss' }
   | { type: 'otherTabClear' }
-  | { type: 'otherTabSet'; kind: 'promptAt' | 'urgentAt' | 'bad'; ms: number }
-  | { type: 'veto'; on: boolean }
+  | { type: 'otherTabSet' }
   | { type: 'refresh' }
   | { type: 'resubscribe'; gap: number }
   | { type: 'clockJump'; ms: number }
@@ -118,18 +111,9 @@ const action: fc.Arbitrary<Action> = fc.oneof(
   { weight: 3, arbitrary: fc.record({ type: t('serve'), build: served }) },
   { weight: 2, arbitrary: fc.record({ type: t('focus') }) },
   { weight: 1, arbitrary: visibilityAction },
-  { weight: 2, arbitrary: fc.record({ type: t('input') }) },
   { weight: 3, arbitrary: fc.record({ type: t('dismiss') }) },
   { weight: 1, arbitrary: fc.record({ type: t('otherTabClear') }) },
-  {
-    weight: 1,
-    arbitrary: fc.record({
-      type: t('otherTabSet'),
-      kind: fc.constantFrom('promptAt', 'urgentAt', 'bad'),
-      ms: fc.integer({ min: 0, max: 2 * H }),
-    }),
-  },
-  { weight: 1, arbitrary: fc.record({ type: t('veto'), on: fc.boolean() }) },
+  { weight: 1, arbitrary: fc.record({ type: t('otherTabSet') }) },
   { weight: 1, arbitrary: fc.record({ type: t('refresh') }) },
   {
     weight: 1,
@@ -227,22 +211,11 @@ export function createWorld(s: Scenario, clock: Clock) {
   const world = {
     config: s.config,
     visible: true,
-    veto: false,
-    lastInput: -Infinity, // performance clock, like the engine
-    jumped: 0, // user clock − true time
-    badSeen: false,
+    jumped: 0,
     latency: s.latency,
     inFlight: 0, // checks the server hasn't answered yet
-    promptAcked: false,
-    urgentQuietUntil: -Infinity, // server clock
     served: initialServed(),
     flips: 0,
-    offers: new Array<{
-      attention: string
-      reason: string
-      accepted: boolean
-    }>(),
-    violations: new Array<string>(),
   }
 
   const serverNow = () => Date.now() - world.jumped + s.skew
@@ -288,20 +261,8 @@ export function createWorld(s: Scenario, clock: Clock) {
   vi.spyOn(console, 'warn').mockImplementation(() => {})
 
   const store = createStore(host, {
-    idleFor: '5s',
     escalation: configs[s.config],
     reload: async () => false, // reloads are "blocked": the page never unloads mid-test
-    onAttentionChange: (attention, d) => {
-      if (world.veto && d.cancelable) {
-        d.cancel()
-      }
-
-      world.offers.push({
-        attention,
-        reason: d.reason,
-        accepted: !(d.cancelable && d.isCanceled),
-      })
-    },
   })
 
   return { world, store, serverNow, host, clock }

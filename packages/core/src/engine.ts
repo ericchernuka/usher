@@ -1,17 +1,13 @@
-// Internal. The DOM side: lifecycle, inputs, the one timer, and fetching version.json.
+// Internal. The DOM side: lifecycle, the one timer, and fetching version.json.
 //
-// Every input calls the machine and then `reschedule()`, which derives the single wake-up
-// from deadlines: next poll, the policy's own deadlines (thresholds, snooze expiry), and
-// idle release while a raise is held. Every wake re-evaluates first, so time-based changes
-// happen even when fetches fail. Hidden tabs have no wake timer (an in-flight fetch keeps
-// its own timeout until it settles).
+// Polling and policy deadlines share one wake timer. Hidden tabs keep no wake timer.
+// A pending fetch has its own timeout until it settles.
 import type { Host, StorageChange } from './host'
 import * as v from 'valibot'
 import { isVersionInfo } from './policy'
-import type { createMachine, Context } from './machine'
-import type { createReloads } from './reloads'
+import type { createMachine } from './machine'
 import type { createSnoozes } from './snoozes'
-import type { ChangeSource, SubscribeToNavigation, VersionInfo } from './types'
+import type { VersionInfo } from './types'
 
 const MIN = 60_000
 const FETCH_TIMEOUT_MS = 30_000
@@ -20,12 +16,8 @@ const MAX_TIMER_MS = 2 ** 31 - 1 // larger delays fire immediately in browsers
 export interface EngineDeps {
   url: string
   pollMs: number
-  idleMs: number
   machine: ReturnType<typeof createMachine>
   snoozes: ReturnType<typeof createSnoozes>
-  reloads: ReturnType<typeof createReloads>
-  subscribeToNavigation?: SubscribeToNavigation
-  reloadOnChunkError: boolean
   host: Host
 }
 
@@ -101,21 +93,10 @@ class Engine {
 
   lastCheck = -Infinity
 
-  lastInput = -Infinity
-
   sinceCheck = () => tick() - this.lastCheck
 
-  context = (source: ChangeSource): Context => ({
-    now: Date.now(),
-    gateOpen: this.visible() && tick() - this.lastInput >= this.deps.idleMs,
-    source,
-  })
-
-  evaluate = (
-    source: ChangeSource,
-    latest: VersionInfo | undefined = this.deps.machine.getState().latest,
-  ) => {
-    this.deps.machine.apply(latest, this.context(source))
+  evaluate = (latest?: VersionInfo) => {
+    this.deps.machine.apply(latest)
     this.reschedule()
   }
 
@@ -131,22 +112,19 @@ class Engine {
       return
     } // hidden: no timer; visibilitychange brings us back
 
-    const ctx = this.context('time')
-    const { deadlines, held } = this.deps.machine.pending(ctx)
-    const t = tick()
+    const deadline = this.deps.machine.nextAt
+    const delays = [this.lastCheck + this.deps.pollMs - tick()]
 
-    const delays = [
-      this.lastCheck + this.deps.pollMs - t,
-      ...deadlines.map(d => d - ctx.now),
-      ...(held ? [this.lastInput + this.deps.idleMs - t] : []),
-    ]
+    if (deadline !== undefined) {
+      delays.push(deadline - Date.now())
+    }
 
     const delay = Math.min(Math.max(0, Math.min(...delays)), MAX_TIMER_MS)
     this.running.wake = setTimeout(this.onWake, delay)
   }
 
   onWake = () => {
-    this.evaluate('time') // thresholds and snooze expiry don't depend on the network
+    this.evaluate() // thresholds and snooze expiry don't depend on the network
 
     if (this.sinceCheck() >= this.deps.pollMs) {
       void this.check()
@@ -185,7 +163,7 @@ class Engine {
       }
 
       this.deps.machine.observeServerTime(result.serverTime, tick())
-      this.evaluate('check', result.latest)
+      this.evaluate(result.latest)
     } catch {
       /* aborted, timed out, offline or mid-deploy: the timer still evaluates */
     } finally {
@@ -197,37 +175,17 @@ class Engine {
     }
   }
 
-  markInput = () => {
-    this.lastInput = tick()
+  listen = (target: EventTarget, type: string, fn: EventListener) => {
+    target.addEventListener(type, fn)
+    this.running?.cleanups.push(() => target.removeEventListener(type, fn))
   }
 
-  listen = (
-    target: EventTarget,
-    [type, opts]: readonly [string, AddEventListenerOptions?],
-    fn: EventListener,
-  ) => {
-    target.addEventListener(type, fn, opts)
-    this.running?.cleanups.push(() =>
-      target.removeEventListener(type, fn, opts),
-    )
-  }
-
-  listenInputs = () => {
-    this.listen(
-      this.deps.host.window,
-      ['keydown', { capture: true, passive: true }],
-      this.markInput,
-    )
-    this.listen(
-      this.deps.host.window,
-      ['pointerdown', { capture: true, passive: true }],
-      this.markInput,
-    )
-    this.listen(this.deps.host.window, ['storage'], e => {
+  listenStorage = () => {
+    this.listen(this.deps.host.window, 'storage', e => {
       const change = readStorageChange(e, this.deps.host)
 
       if (change && this.deps.snoozes.onStorage(change)) {
-        this.evaluate('other-tab')
+        this.evaluate()
       }
     })
   }
@@ -235,48 +193,21 @@ class Engine {
   start = () => {
     this.running = { cleanups: [] }
     this.deps.snoozes.hydrate()
-    this.listen(this.deps.host.document, ['visibilitychange'], () => {
-      this.evaluate('time') // releases a held raise when visible; clears the timer when hidden
+    this.listen(this.deps.host.document, 'visibilitychange', () => {
+      this.evaluate()
 
       if (this.visible() && this.sinceCheck() >= MIN) {
         void this.check()
       }
     })
-    this.listen(this.deps.host.window, ['focus'], () => {
+    this.listen(this.deps.host.window, 'focus', () => {
       if (this.sinceCheck() >= MIN) {
         void this.check()
       }
     })
-    this.listenInputs()
+    this.listenStorage()
 
-    if (this.deps.reloadOnChunkError) {
-      this.listen(
-        this.deps.host.window,
-        ['vite:preloadError'],
-        this.deps.reloads.onChunkError,
-      )
-    }
-
-    const navigate = this.deps.subscribeToNavigation
-
-    if (navigate) {
-      this.running.cleanups.push(
-        navigate(to => {
-          if (!this.deps.machine.isBehind()) {
-            return
-          }
-
-          void this.deps.reloads.request({
-            reason: 'navigate',
-            href: to?.href ?? this.deps.host.location.href,
-          })
-        }),
-      )
-    }
-
-    // Time passed while unsubscribed: release what was held on what we already know,
-    // rather than waiting for the check to land (or a whole poll if it fails).
-    this.evaluate('time')
+    this.evaluate()
     void this.check() // no-op while hidden; visibilitychange triggers the first check
   }
 

@@ -6,13 +6,6 @@ import { createAppUpdates } from '../src/index'
 import type { VersionInfo } from '../src/types'
 import { captureNavigations } from './navigation'
 
-function fail() {
-  const event = new Event('vite:preloadError', { cancelable: true })
-  window.dispatchEvent(event)
-
-  return event.defaultPrevented
-}
-
 const current: VersionInfo = {
   version: 'aaa',
   commitTime: '2026-11-11T15:00:00.000Z',
@@ -25,7 +18,6 @@ const older: VersionInfo = {
   commitTime: '2026-11-10T15:00:00.000Z',
 }
 
-const SNOOZE_KEY = 'app-version:snooze'
 const settle = () => new Promise(resolve => setTimeout(resolve, 20))
 
 // No service worker is registered in these runs, so the version endpoint is a narrow fetch stub.
@@ -50,7 +42,7 @@ afterEach(() => {
 
 describe('the store on the real browser', () => {
   it('given the build baked in by the Vite plugin, when it checks, then it asks /version.json uncached and sees it is up to date', async () => {
-    const updates = createAppUpdates({ idleFor: '0s' })
+    const updates = createAppUpdates({})
     const stop = updates.subscribe(() => {})
     await settle()
     expect(fetch).toHaveBeenCalledWith(
@@ -65,7 +57,6 @@ describe('the store on the real browser', () => {
     const updates = createAppUpdatesCore({
       current,
       url: '/version.json',
-      idleFor: '0s',
     })
 
     const stop = updates.subscribe(() => {})
@@ -81,33 +72,25 @@ describe('the store on the real browser', () => {
     stop()
   })
 
-  it("given a rollback, when another tab dismisses it, then this tab's storage event lowers it too", async () => {
-    served = older
-
-    const updates = createAppUpdatesCore({
-      current,
-      url: '/version.json',
-      idleFor: '0s',
-    })
-
+  it('given a stale build, then a localStorage event dismisses its prompt', async () => {
+    vi.setSystemTime(new Date('2026-11-12T04:00:00Z'))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn<typeof fetch>(async () =>
+        Response.json({
+          ...current,
+          version: 'new',
+          commitTime: '2026-11-12T00:00:00Z',
+        }),
+      ),
+    )
+    const updates = createAppUpdatesCore({ current, url: '/version.json' })
     const stop = updates.subscribe(() => {})
-    await settle()
-    expect(updates.getState().attention).toBe('urgent')
-
-    const snooze = JSON.stringify({
-      bad: {
-        [current.version]: {
-          evidence: ['rollback'],
-          until: Date.now() + 30 * 60_000,
-        },
-      },
-    })
-
-    localStorage.setItem(SNOOZE_KEY, snooze)
+    await vi.waitFor(() => expect(updates.getState().attention).toBe('prompt'))
     window.dispatchEvent(
       new StorageEvent('storage', {
-        key: SNOOZE_KEY,
-        newValue: snooze,
+        key: 'app-version:snooze',
+        newValue: JSON.stringify({ promptAt: Date.now() }),
         storageArea: localStorage,
       }),
     )
@@ -115,16 +98,14 @@ describe('the store on the real browser', () => {
     stop()
   })
 
-  it('given a lazy chunk fails to load, when it fails again within 10 seconds, then the page reloads once and the second failure is left to the app', async () => {
+  it('given a chunk error, then the library does not prevent it or reload', () => {
     const navigations = captureNavigations()
     const updates = createAppUpdatesCore({ current, url: '/version.json' })
     const stop = updates.subscribe(() => {})
-
-    expect(fail()).toBe(true)
-    expect(navigations).toEqual([{ type: 'reload', url: location.href }])
-    expect(fail()).toBe(false)
-    expect(navigations).toHaveLength(1)
-    expect(sessionStorage.getItem('app-version:chunk-reload')).not.toBeNull()
+    const event = new Event('vite:preloadError', { cancelable: true })
+    window.dispatchEvent(event)
+    expect(event.defaultPrevented).toBe(false)
+    expect(navigations).toEqual([])
     stop()
   })
 })

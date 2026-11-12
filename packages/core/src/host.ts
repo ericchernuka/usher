@@ -13,7 +13,7 @@ export interface StorageChange {
 }
 
 export interface Host {
-  /** Receives `focus`, `keydown`, `pointerdown`, `storage` and `vite:preloadError`. */
+  /** Receives `focus` and `storage`. */
   readonly window: EventTarget
   /** Receives `visibilitychange`. */
   readonly document: EventTarget & {
@@ -21,9 +21,7 @@ export interface Host {
   }
   /** Shared between tabs; may throw when blocked. */
   readonly localStorage: StorageLike
-  /** Per tab; may throw when blocked. */
-  readonly sessionStorage: StorageLike
-  readonly location: Pick<Location, 'href' | 'reload' | 'assign'>
+  readonly location: Pick<Location, 'href' | 'reload'>
   /** Fetches `version.json`. */
   readonly fetch: typeof fetch
 }
@@ -39,9 +37,6 @@ export function browserHost(): Host {
     },
     get localStorage() {
       return localStorage
-    },
-    get sessionStorage() {
-      return sessionStorage
     },
     get location() {
       return window.location

@@ -30,35 +30,29 @@ export interface ResolvedLevel {
 
 export interface ResolvedEscalation {
   prompt?: ResolvedLevel
-  urgent?: ResolvedLevel & { snoozeMs: number }
+  urgent?: Pick<ResolvedLevel, 'afterMs'>
 }
 
 const DEFAULTS = {
   prompt: { after: '12h' }, // Vercel Pro default skew-protection max age
-  urgent: { after: '24h', snooze: '30m' }, // Vercel Enterprise default max age
+  urgent: { after: '24h' }, // Vercel Enterprise default max age
 } satisfies Required<Escalation>
 
-const URGENT_SNOOZE_DEFAULT: Duration = '30m'
-
-function level(
-  config: EscalationLevel | false | undefined,
-  fallback: EscalationLevel,
-  name: string,
-) {
+function promptLevel(config: EscalationLevel | false | undefined) {
   if (config === false) {
     return undefined
   }
 
-  const chosen = config ?? fallback
-  const afterMs = ms(chosen.after, `escalation.${name}.after`)
+  const chosen = config ?? DEFAULTS.prompt
+  const afterMs = ms(chosen.after, 'escalation.prompt.after')
 
   const snoozeMs =
-    chosen.snooze === undefined
+    config?.snooze === undefined
       ? undefined
-      : ms(chosen.snooze, `escalation.${name}.snooze`)
+      : ms(config.snooze, 'escalation.prompt.snooze')
 
   if (snoozeMs !== undefined && snoozeMs <= 0) {
-    throw new Error(`[app-version] escalation.${name}.snooze must be positive`)
+    throw new Error('[app-version] escalation.prompt.snooze must be positive')
   }
 
   return { afterMs, snoozeMs }
@@ -66,15 +60,17 @@ function level(
 
 /** Resolve and validate. Urgent must start after prompt; both may be turned off with `false`. */
 export function resolveEscalation(config: Escalation = {}): ResolvedEscalation {
-  const prompt = level(config.prompt, DEFAULTS.prompt, 'prompt')
-  const urgentLevel = level(config.urgent, DEFAULTS.urgent, 'urgent')
+  const prompt = promptLevel(config.prompt)
 
-  const urgent = urgentLevel && {
-    afterMs: urgentLevel.afterMs,
-    snoozeMs:
-      urgentLevel.snoozeMs ??
-      ms(URGENT_SNOOZE_DEFAULT, 'default urgent snooze'),
-  }
+  const urgent =
+    config.urgent === false
+      ? undefined
+      : {
+          afterMs: ms(
+            config.urgent?.after ?? DEFAULTS.urgent.after,
+            'escalation.urgent.after',
+          ),
+        }
 
   if (prompt && urgent && urgent.afterMs <= prompt.afterMs) {
     throw new Error(
@@ -83,12 +79,4 @@ export function resolveEscalation(config: Escalation = {}): ResolvedEscalation {
   }
 
   return { ...(prompt && { prompt }), ...(urgent && { urgent }) }
-}
-
-/** Snooze used for known-bad builds (rollback, forced), which are urgent regardless of escalation. */
-export function badBuildSnoozeMs(escalation: ResolvedEscalation): number {
-  return (
-    escalation.urgent?.snoozeMs ??
-    ms(URGENT_SNOOZE_DEFAULT, 'default urgent snooze')
-  )
 }

@@ -41,7 +41,18 @@ afterEach(() => {
 
 describe('useAppUpdates', () => {
   it('selects a slice and re-renders only when it changes', async () => {
-    const updates = createAppUpdates({ idleFor: '0s' })
+    vi.setSystemTime(new Date('2026-11-12T04:00:00Z'))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn<typeof fetch>(async () =>
+        Response.json({
+          ...older,
+          version: 'new',
+          commitTime: '2026-11-12T00:00:00Z',
+        }),
+      ),
+    )
+    const updates = createAppUpdates()
     let renders = 0
 
     function NavButton() {
@@ -60,7 +71,7 @@ describe('useAppUpdates', () => {
 
     const view = await render(<NavButton />)
     const button = view.getByRole('button')
-    await expect.element(button).toHaveAttribute('data-attention', 'urgent')
+    await expect.element(button).toHaveAttribute('data-attention', 'prompt')
 
     const before = renders
     window.dispatchEvent(new Event('focus')) // a poll that changes nothing
@@ -79,7 +90,7 @@ describe('useAppUpdates', () => {
 
 describe('useAppUpdates without a selector', () => {
   it('returns the whole state', async () => {
-    const updates = createAppUpdates({ idleFor: '0s' })
+    const updates = createAppUpdates()
 
     function Reason() {
       const state = useAppUpdates(updates)
@@ -98,7 +109,7 @@ describe('useAppUpdates without a selector', () => {
 describe('useAppUpdates selector check', () => {
   it('warns once in dev when a selector returns a new object', async () => {
     const error = vi.spyOn(console, 'error').mockImplementation(() => {})
-    const updates = createAppUpdates({ idleFor: '0s' })
+    const updates = createAppUpdates()
 
     function Good() {
       useAppUpdates(updates, s => s.attention)
@@ -135,7 +146,7 @@ describe('useAppUpdates selector check', () => {
 
 describe('useAppUpdates deferral', () => {
   it('renders the new value at low priority: urgent pass keeps the old value, then catches up', async () => {
-    const updates = createAppUpdates({ idleFor: '0s' })
+    const updates = createAppUpdates()
     const seen: Array<[urgent: string, deferred: string]> = []
 
     function Probe() {
@@ -189,7 +200,7 @@ describe('useReloadBlocker with a function', () => {
     const updates = createAppUpdates()
 
     function Form() {
-      useReloadBlocker(updates, d => d.reason === 'navigate')
+      useReloadBlocker(updates, d => d.href.endsWith('/different-page'))
 
       return null
     }
@@ -263,33 +274,24 @@ async function setup(updates: AppUpdates) {
 
 describe('Base UI recipe', () => {
   it('shows the toast outside React and dismisses on close', async () => {
-    const updates = createAppUpdates({ idleFor: '0s' })
+    vi.setSystemTime(new Date('2026-11-12T04:00:00Z'))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn<typeof fetch>(async () =>
+        Response.json({
+          ...older,
+          version: 'new',
+          commitTime: '2026-11-12T00:00:00Z',
+        }),
+      ),
+    )
+    const updates = createAppUpdates()
     const { toast, unmount, disconnect } = await setup(updates)
-    await expect.element(toast).toHaveTextContent('Please refresh')
+    await expect.element(toast).toHaveTextContent('A new version is available')
 
     await toast.click()
     await vi.waitFor(() => expect(updates.getState().attention).toBe('passive'))
     await expect.element(toast).not.toBeInTheDocument()
-    disconnect()
-    await unmount()
-  })
-
-  it('brings the toast back when the app cancels the dismiss', async () => {
-    const updates = createAppUpdates({
-      idleFor: '0s',
-      onAttentionChange: (_a, d) => {
-        if (d.reason === 'dismiss' && d.previous === 'urgent') {
-          d.cancel()
-        }
-      },
-    })
-
-    const { toast, unmount, disconnect } = await setup(updates)
-    await expect.element(toast).toHaveTextContent('Please refresh')
-    await toast.click()
-    await tick()
-    expect(updates.getState().attention).toBe('urgent')
-    await expect.element(toast).toHaveTextContent('Please refresh')
     disconnect()
     await unmount()
   })

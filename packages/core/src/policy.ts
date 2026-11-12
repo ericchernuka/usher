@@ -1,279 +1,126 @@
-// Internal. The pure update policy: given facts, what should attention be, what can be
-// published right now, and when could the answer next change on its own?
 import * as v from 'valibot'
 import type { ResolvedEscalation } from './duration'
-import {
-  VersionInfoSchema,
-  type Attention,
-  type ReasonsByAttention,
-  type VersionInfo,
-} from './types'
+import { VersionInfoSchema, type UpdateState, type VersionInfo } from './types'
 
-/**
- * Dismissals, shared across tabs. All times are on the server clock, so tabs agree and
- * clock-offset jitter can't move them.
- *
- * `promptAt` / `urgentAt` record when a level was dismissed. A dismissal covers every
- * tab whose level had already started by then ("acknowledged"), until that tab's next
- * level, or the level's explicit snooze. A build that goes stale later prompts afresh.
- * `bad` acknowledges known-bad evidence per running build.
- */
+/** The server time at which a prompt was dismissed, shared across tabs. */
 export interface Snoozes {
   promptAt?: number
-  urgentAt?: number
-  bad?: Record<string, BadSnooze>
 }
 
-export interface BadSnooze {
-  /** Evidence acknowledged ("rollback", "forced:<cutoff>"); new evidence breaks through. */
-  evidence: string[]
-  until: number
-}
-
-export type Bad = 'rollback' | 'forced'
-
-/** Sticky knowledge that the running build is bad, with every piece of evidence seen. */
-export interface KnownBad {
-  reason: Bad
-  evidence: string[]
-}
-
-/** A level and its reason; reasons always belong to their level. */
-export type Level = {
-  [A in Attention]: { attention: A; reason: ReasonsByAttention[A] }
-}[Attention]
+export type KnownBad = 'rollback' | 'forced'
 
 export interface PolicyInput {
   current: VersionInfo
   latest: VersionInfo
-  /** Client clock (timers). */
   now: number
-  /** Server clock − client clock; build age and snoozes are on the server clock. */
   clockOffset: number
-  /** Sticky: once this tab learns its build is bad, it stays bad until it reloads. */
   knownBad?: KnownBad
   snoozes: Snoozes
   escalation: ResolvedEscalation
-  /** What's published now, for the raise gate. */
-  published: Attention
-  /** Raises to prompt/urgent may only publish while the tab is visible and the user idle. */
-  gateOpen: boolean
 }
 
 export interface Decision {
-  /** What attention should be, ignoring the gate. */
-  target: Level
-  /** What may be published now: the target, or a truthful hold while the gate is closed. */
-  publish: Level
-  /** Known-bad state including this response's evidence (for the caller to keep). */
-  bad?: KnownBad
-  /** Future client times when the answer could change with no new input. */
-  deadlines: number[]
+  state: UpdateState
+  knownBad?: KnownBad
+  /** Next client-clock deadline, without another network response. */
+  nextAt?: number
 }
 
-export const rank: Record<Attention, number> = {
-  none: 0,
-  passive: 1,
-  prompt: 2,
-  urgent: 3,
-}
-
-const DAY_MS = 86_400_000
-
-/** Evidence in this response that the running build is bad. */
-function evidence(i: PolicyInput): { reason: Bad; key: string } | undefined {
-  const cutoff = i.latest.forceUpdateBefore
-    ? Date.parse(i.latest.forceUpdateBefore)
-    : NaN
+function detectBad(i: PolicyInput): KnownBad | undefined {
+  const cutoff = Date.parse(i.latest.forceUpdateBefore ?? '')
 
   if (cutoff > Date.parse(i.current.builtAt)) {
-    return { reason: 'forced', key: `forced:${cutoff}` }
+    return 'forced'
   }
 
   if (Date.parse(i.latest.commitTime) < Date.parse(i.current.commitTime)) {
-    return { reason: 'rollback', key: 'rollback' }
+    return 'rollback'
   }
 
-  return undefined
+  return i.knownBad
 }
 
-/** Sticky merge: evidence accumulates; new evidence sets the reason. */
-function detectBad(i: PolicyInput): KnownBad | undefined {
-  const fresh = evidence(i)
+function promptUntil(i: PolicyInput): number | undefined {
+  const at = i.snoozes.promptAt
+  const duration = i.escalation.prompt?.snoozeMs
 
-  if (!fresh || i.knownBad?.evidence.includes(fresh.key)) {
-    return i.knownBad
-  }
-
-  return {
-    reason: fresh.reason,
-    evidence: [...(i.knownBad?.evidence ?? []), fresh.key],
-  }
+  return at !== undefined && duration !== undefined ? at + duration : undefined
 }
 
-/** Server-clock times the running build's levels start. */
-function starts(i: PolicyInput) {
+function nextAt(i: PolicyInput): number | undefined {
   const builtAt = Date.parse(i.current.builtAt)
-  const { prompt, urgent } = i.escalation
 
-  return {
-    prompt: prompt && builtAt + prompt.afterMs,
-    urgent: urgent && builtAt + urgent.afterMs,
-  }
-}
-
-/** Explicit prompt snooze, else none (holds until urgent), else a day when urgent is off. */
-function promptSnoozeMs(e: ResolvedEscalation): number | undefined {
-  return e.prompt?.snoozeMs ?? (e.urgent ? undefined : DAY_MS)
-}
-
-/** Server-clock time a dismissal stops muting, if it ever does on its own. */
-function snoozeEnds(i: PolicyInput) {
-  const { promptAt, urgentAt } = i.snoozes
-  const p = promptSnoozeMs(i.escalation)
-
-  return {
-    prompt:
-      promptAt !== undefined && p !== undefined ? promptAt + p : undefined,
-    urgent:
-      urgentAt !== undefined
-        ? urgentAt + (i.escalation.urgent?.snoozeMs ?? DAY_MS)
-        : undefined,
-  }
-}
-
-/** Which dismissals are in force for this tab right now. */
-function mutes(i: PolicyInput, bad: KnownBad | undefined) {
-  const server = i.now + i.clockOffset
-  const start = starts(i)
-  const ends = snoozeEnds(i)
-  const { promptAt, urgentAt } = i.snoozes
-
-  const acked = (
-    at: number | undefined,
-    levelStart: number | undefined,
-    end: number | undefined,
-  ) =>
-    at !== undefined &&
-    levelStart !== undefined &&
-    at >= levelStart &&
-    (end === undefined || server < end)
-
-  const ack = i.snoozes.bad?.[i.current.version]
-
-  const badMuted =
-    !!bad &&
-    !!ack &&
-    ack.until > server &&
-    bad.evidence.every(e => ack.evidence.includes(e))
-
-  const urgent = acked(urgentAt, start.urgent, ends.urgent) || badMuted
-
-  return {
-    bad: badMuted,
-    urgent,
-    prompt: urgent || acked(promptAt, start.prompt, ends.prompt),
-  }
-}
-
-/** Candidate levels, most severe first, before snoozes. */
-function candidates(
-  i: PolicyInput,
-  bad: KnownBad | undefined,
-  ageMs: number,
-): Level[] {
-  const list: Level[] = []
-
-  if (bad) {
-    list.push({ attention: 'urgent', reason: bad.reason })
-  }
-
-  const { prompt, urgent } = i.escalation
-
-  if (urgent && ageMs >= urgent.afterMs) {
-    list.push({ attention: 'urgent', reason: 'expired' })
-  }
-
-  if (prompt && ageMs >= prompt.afterMs) {
-    list.push({ attention: 'prompt', reason: 'stale' })
-  }
-
-  return list
-}
-
-function isMuted(level: Level, m: ReturnType<typeof mutes>): boolean {
-  if (level.reason === 'rollback' || level.reason === 'forced') {
-    return m.bad
-  }
-
-  return level.attention === 'urgent' ? m.urgent : m.prompt
-}
-
-/** While the gate is closed, a raise holds at a level that's still true. */
-function hold(published: Attention): Level {
-  if (published === 'prompt') {
-    return { attention: 'prompt', reason: 'stale' }
-  } // prompt only ever means stale
-
-  return { attention: 'passive', reason: 'waiting' }
-}
-
-function deadlines(i: PolicyInput): number[] {
-  const start = starts(i)
-  const ends = snoozeEnds(i)
-  const badUntil = i.snoozes.bad?.[i.current.version]?.until
-
-  const server = [
-    start.prompt,
-    start.urgent,
-    ends.prompt,
-    ends.urgent,
-    badUntil,
+  const serverTimes = [
+    i.escalation.prompt && builtAt + i.escalation.prompt.afterMs,
+    i.escalation.urgent && builtAt + i.escalation.urgent.afterMs,
+    promptUntil(i),
   ]
 
-  return server.flatMap(t => {
-    if (t === undefined || !Number.isFinite(t)) {
+  const future = serverTimes.flatMap(time => {
+    if (time === undefined || !Number.isFinite(time)) {
       return []
     }
 
-    const clientTime = t - i.clockOffset
+    const client = time - i.clockOffset
 
-    return clientTime > i.now ? [clientTime] : []
+    return client > i.now ? [client] : []
   })
+
+  return future.length ? Math.min(...future) : undefined
+}
+
+function attention(i: PolicyInput): UpdateState {
+  const latest = i.latest
+
+  if (latest.version === i.current.version) {
+    return { attention: 'none', reason: 'caught-up', latest }
+  }
+
+  const serverNow = i.now + i.clockOffset
+  const builtAt = Date.parse(i.current.builtAt)
+  const { prompt, urgent } = i.escalation
+
+  if (urgent && serverNow >= builtAt + urgent.afterMs) {
+    return { attention: 'urgent', reason: 'expired', latest }
+  }
+
+  if (!prompt || serverNow < builtAt + prompt.afterMs) {
+    return { attention: 'passive', reason: 'new-build', latest }
+  }
+
+  const dismissedAt = i.snoozes.promptAt
+  const until = promptUntil(i)
+
+  const dismissed =
+    dismissedAt !== undefined &&
+    dismissedAt >= builtAt + prompt.afterMs &&
+    (until === undefined || serverNow < until)
+
+  return dismissed
+    ? { attention: 'passive', reason: 'dismiss', latest }
+    : { attention: 'prompt', reason: 'stale', latest }
 }
 
 export function decide(i: PolicyInput): Decision {
-  // Same build is caught up, unless this response forces it (a rebuild with a cutoff).
-  if (
-    i.latest.version === i.current.version &&
-    evidence(i)?.reason !== 'forced'
-  ) {
-    const caughtUp: Level = { attention: 'none', reason: 'caught-up' }
+  const knownBad = detectBad(i)
 
-    return { target: caughtUp, publish: caughtUp, deadlines: [] }
+  if (knownBad) {
+    return {
+      state: { attention: 'urgent', reason: knownBad, latest: i.latest },
+      knownBad,
+    }
   }
 
-  const bad = detectBad(i)
-  const ageMs = i.now + i.clockOffset - Date.parse(i.current.builtAt)
-  const all = candidates(i, bad, ageMs)
-  const m = mutes(i, bad)
-  const unmuted = all.find(level => !isMuted(level, m))
+  const state = attention(i)
 
-  const target: Level = unmuted ?? {
-    attention: 'passive',
-    reason: all.length ? 'dismiss' : 'new-build',
-  }
+  const deadline =
+    state.attention === 'none' || state.attention === 'urgent'
+      ? undefined
+      : nextAt(i)
 
-  const raise =
-    rank[target.attention] > rank[i.published] &&
-    rank[target.attention] >= rank.prompt
-
-  const publish = raise && !i.gateOpen ? hold(i.published) : target
-
-  return { target, publish, ...(bad && { bad }), deadlines: deadlines(i) }
+  return { state, ...(deadline !== undefined && { nextAt: deadline }) }
 }
 
-/** Accept only a well-formed version.json; anything else is ignored. */
-export function isVersionInfo(x: unknown): x is VersionInfo {
-  return v.is(VersionInfoSchema, x)
+export function isVersionInfo(value: unknown): value is VersionInfo {
+  return v.is(VersionInfoSchema, value)
 }

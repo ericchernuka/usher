@@ -78,7 +78,8 @@ describe('subscribing', () => {
     app,
     clock,
   }) => {
-    server.use(serveBuild(older))
+    server.use(serveBuild(newer))
+    clock.setSystemTime('2026-11-12T04:00:00Z')
     const store = app.create()
     const stop = app.subscribe(store)
     await clock.settle()
@@ -128,7 +129,7 @@ describe('snapshots', () => {
 
     expect(seen).toEqual([
       ['urgent', 'old'],
-      ['none', 'aaa'],
+      ['urgent', 'aaa'],
     ])
   })
 })

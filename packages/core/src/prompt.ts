@@ -25,7 +25,7 @@ export interface PromptBase {
   /**
    * The user closed the prompt. Safe to wire to any onClose/onDismiss, including ones
    * your library also fires on programmatic closes or twice: stale handles ignore it.
-   * On success your `hide()` is called, so every UI closes the same way.
+   * Urgent handles cannot be dismissed. On success your `hide()` is called.
    */
   dismiss(): void
 }
@@ -53,7 +53,6 @@ export interface PromptAdapter {
  *
  * - threshold crossing and once-per-change `show` calls with a stable id
  * - telling a user's close apart from our own hide (stale handles are no-ops)
- * - re-showing when onAttentionChange cancels a dismiss
  * - keeping the store polling while connected; `disconnect()` hides and unsubscribes
  */
 const keyOf = (s: UpdateState) => `${s.attention}:${s.reason}`
@@ -156,6 +155,10 @@ class PromptConnection {
           return
         } // stale handle
 
+        if (prompt.attention === 'urgent') {
+          return
+        }
+
         if (prompt.attention === 'passive') {
           return this.closeAfterDismiss(key)
         } // nothing to snooze
@@ -174,7 +177,6 @@ class PromptConnection {
           return this.closeAfterDismiss(keyOf(this.updates.getState()))
         }
 
-        this.view = { kind: 'hidden' } // refused or not applicable: show the current state again
         this.sync()
       },
     })

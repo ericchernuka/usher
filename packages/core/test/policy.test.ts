@@ -1,256 +1,134 @@
 import { describe, expect, it } from 'vitest'
-import { resolveEscalation } from '../src/duration'
 import { decide, isVersionInfo, type PolicyInput } from '../src/policy'
-import type { VersionInfo } from '../src/types'
+import { resolveEscalation } from '../src/duration'
+import { current, newer, older, HOUR } from './fixtures'
 
-const at = (s: string) => new Date(s).getTime()
-const H = 3_600_000
+const at = (hours: number) => Date.parse(current.builtAt) + hours * HOUR
 
-const v = (
-  version: string,
-  time: string,
-  extra: Partial<VersionInfo> = {},
-): VersionInfo => ({
-  version,
-  commitTime: new Date(time).toISOString(),
-  builtAt: new Date(time).toISOString(),
-  ...extra,
-})
-
-const current = v('aaa', '2026-11-11T09:00:00Z')
-const newer = v('bbb', '2026-11-11T09:15:00Z')
-const older = v('old', '2026-11-10T09:00:00Z')
-
-const base = (o: Partial<PolicyInput> = {}): PolicyInput => ({
+const input = (patch: Partial<PolicyInput> = {}): PolicyInput => ({
   current,
   latest: newer,
-  now: at('2026-11-11T09:20:00Z'),
+  now: at(1),
   clockOffset: 0,
   snoozes: {},
   escalation: resolveEscalation(),
-  published: 'none',
-  gateOpen: true,
-  ...o,
+  ...patch,
 })
 
-const target = (o: Partial<PolicyInput> = {}) => decide(base(o)).target
+it.each([
+  { hours: 1, attention: 'passive', reason: 'new-build' },
+  { hours: 12, attention: 'prompt', reason: 'stale' },
+  { hours: 24, attention: 'urgent', reason: 'expired' },
+])(
+  'at $hours hours reports $attention:$reason',
+  ({ hours, attention, reason }) => {
+    expect(decide(input({ now: at(hours) })).state).toEqual({
+      attention,
+      reason,
+      latest: newer,
+    })
+  },
+)
 
-describe('decide: levels by build age', () => {
-  it('caught up when versions match', () => {
-    expect(target({ latest: current })).toEqual({
-      attention: 'none',
-      reason: 'caught-up',
-    })
-  })
-  it('passive for a newer build', () => {
-    expect(target()).toEqual({ attention: 'passive', reason: 'new-build' })
-  })
-  it('prompt at 12 h, urgent at 24 h of build age (server clock)', () => {
-    expect(target({ now: at('2026-11-11T20:59:00Z') }).attention).toBe(
-      'passive',
-    )
-    expect(target({ now: at('2026-11-11T21:00:00Z') })).toEqual({
-      attention: 'prompt',
-      reason: 'stale',
-    })
-    expect(target({ now: at('2026-11-12T09:00:00Z') })).toEqual({
-      attention: 'urgent',
-      reason: 'expired',
-    })
-  })
-  it('uses the server clock for age', () => {
-    expect(
-      target({ now: at('2026-11-11T09:20:00Z'), clockOffset: 24 * H }).reason,
-    ).toBe('expired')
-  })
-  it('respects custom and disabled levels', () => {
-    const escalation = resolveEscalation({
-      prompt: false,
-      urgent: { after: '2h' },
-    })
-
-    expect(
-      target({ escalation, now: at('2026-11-11T10:59:00Z') }).attention,
-    ).toBe('passive')
-    expect(target({ escalation, now: at('2026-11-11T11:00:00Z') }).reason).toBe(
-      'expired',
-    )
+it('uses server time and returns the next client deadline', () => {
+  const result = decide(input({ clockOffset: 11 * HOUR }))
+  expect(result.state.attention).toBe('prompt')
+  expect(result.nextAt).toBe(at(13))
+  expect(decide(input({ latest: current }))).toEqual({
+    state: { attention: 'none', reason: 'caught-up', latest: current },
   })
 })
 
-describe('decide: known-bad builds', () => {
-  it('rollback and forced are urgent regardless of age', () => {
-    expect(target({ latest: older })).toEqual({
-      attention: 'urgent',
-      reason: 'rollback',
-    })
+it('keeps rollback and forced urgency even if the latest later matches the running version', () => {
+  expect(decide(input({ latest: older })).knownBad).toBe('rollback')
+  expect(
+    decide(input({ latest: current, knownBad: 'rollback' })).state.reason,
+  ).toBe('rollback')
+  const forced = { ...current, forceUpdateBefore: '2026-11-12T00:00:00Z' }
+  expect(decide(input({ latest: forced })).state.reason).toBe('forced')
+  expect(decide(input({ latest: forced, knownBad: 'rollback' })).knownBad).toBe(
+    'forced',
+  )
+})
 
-    const forced = v('ccc', '2026-11-11T10:00:00Z', {
-      forceUpdateBefore: '2026-11-11T10:00:00Z',
-    })
+it('does not apply an old forced cutoff', () => {
+  expect(
+    decide(
+      input({ latest: { ...current, forceUpdateBefore: current.builtAt } }),
+    ).state.attention,
+  ).toBe('none')
+})
 
-    expect(target({ latest: forced })).toEqual({
-      attention: 'urgent',
-      reason: 'forced',
-    })
+it('shares prompt dismissal until urgent, without muting urgent', () => {
+  const snoozes = { promptAt: at(13) }
+  expect(decide(input({ now: at(14), snoozes })).state.reason).toBe('dismiss')
+  expect(decide(input({ now: at(24), snoozes })).state.reason).toBe('expired')
+  expect(
+    decide(input({ now: at(14), snoozes: { promptAt: at(11) } })).state.reason,
+  ).toBe('stale')
+  expect(
+    decide(input({ now: at(14), snoozes, latest: older })).state.reason,
+  ).toBe('rollback')
+})
+
+it('supports an explicit prompt snooze and disabled age levels', () => {
+  const escalation = resolveEscalation({
+    prompt: { after: '2h', snooze: '1h' },
+    urgent: false,
   })
-  it("knownBad is sticky: a later fix doesn't lower it", () => {
-    expect(
-      target({
-        latest: newer,
-        knownBad: { reason: 'rollback', evidence: ['rollback'] },
+
+  expect(
+    decide(input({ now: at(2), escalation, snoozes: { promptAt: at(2) } }))
+      .nextAt,
+  ).toBe(at(3))
+  expect(
+    decide(input({ now: at(3), escalation, snoozes: { promptAt: at(2) } }))
+      .state.reason,
+  ).toBe('stale')
+  expect(
+    decide(
+      input({
+        now: at(40),
+        escalation: resolveEscalation({ prompt: false, urgent: false }),
       }),
-    ).toEqual({
-      attention: 'urgent',
-      reason: 'rollback',
-    })
-  })
-  it('reports bad for the caller to make sticky', () => {
-    expect(decide(base({ latest: older })).bad).toEqual({
-      reason: 'rollback',
-      evidence: ['rollback'],
-    })
+    ).state.reason,
+  ).toBe('new-build')
+  expect(
+    decide(
+      input({ now: at(1), escalation: resolveEscalation({ prompt: false }) }),
+    ).nextAt,
+  ).toBe(at(24))
+})
+
+it('with urgent disabled, a default prompt dismissal has no expiry', () => {
+  expect(
+    decide(
+      input({
+        now: at(40),
+        escalation: resolveEscalation({ urgent: false }),
+        snoozes: { promptAt: at(13) },
+      }),
+    ),
+  ).toEqual({
+    state: { attention: 'passive', reason: 'dismiss', latest: newer },
   })
 })
 
-describe('decide: snoozes (server-clock dismissals)', () => {
-  const now = at('2026-11-12T09:00:00Z') // 24 h: expired and stale
-  const bad = { reason: 'rollback' as const, evidence: ['rollback'] }
-  it('an urgent dismissal mutes urgent and prompt for its snooze', () => {
-    expect(target({ now, snoozes: { urgentAt: now } })).toEqual({
-      attention: 'passive',
-      reason: 'dismiss',
-    })
-    expect(
-      target({ now: now + 30 * 60_000, snoozes: { urgentAt: now } }).reason,
-    ).toBe('expired')
-  })
-  it('a prompt dismissal mutes stale until urgent, not urgent', () => {
-    const stale = at('2026-11-11T22:00:00Z')
-    expect(target({ now: stale, snoozes: { promptAt: stale } })).toEqual({
-      attention: 'passive',
-      reason: 'dismiss',
-    })
-    expect(target({ now, snoozes: { promptAt: stale } }).reason).toBe('expired')
-  })
-  it('a dismissal only covers builds whose level had started (one prompt per level per build)', () => {
-    const early = at('2026-11-11T20:00:00Z') // before our prompt started at 21:00
-    expect(
-      target({ now: at('2026-11-11T22:00:00Z'), snoozes: { promptAt: early } })
-        .reason,
-    ).toBe('stale')
-  })
-  it("clock offset jitter can't end a prompt dismissal early", () => {
-    const stale = at('2026-11-11T22:00:00Z')
-    const almostUrgent = at('2026-11-12T08:59:59Z')
-    expect(
-      target({
-        now: almostUrgent,
-        clockOffset: -1000,
-        snoozes: { promptAt: stale },
-      }).reason,
-    ).toBe('dismiss')
-  })
-  it('an age dismissal never hides a known-bad build', () => {
-    expect(target({ latest: older, snoozes: { urgentAt: now } }).reason).toBe(
-      'rollback',
-    )
-  })
-  it('a bad dismissal is keyed by our build and evidence, not by latest', () => {
-    const snoozes = {
-      bad: {
-        aaa: { evidence: ['rollback'], until: at('2026-11-11T10:00:00Z') },
+it('validates durations, snooze lengths and threshold order', () => {
+  expect(() =>
+    resolveEscalation({
+      prompt: {
+        // @ts-expect-error Reject invalid runtime strings.
+        after: '12 hours',
       },
-    }
-
-    expect(target({ latest: older, snoozes })).toEqual({
-      attention: 'passive',
-      reason: 'dismiss',
-    })
-    expect(target({ latest: newer, knownBad: bad, snoozes }).reason).toBe(
-      'dismiss',
-    ) // a fix shipping
-
-    const forced = v('ccc', '2026-11-11T09:30:00Z', {
-      forceUpdateBefore: '2026-11-11T09:30:00Z',
-    })
-
-    expect(target({ latest: forced, knownBad: bad, snoozes }).reason).toBe(
-      'forced',
-    ) // new evidence
-  })
-  it('passive says dismiss only while a snooze holds something back', () => {
-    expect(
-      target({ snoozes: { urgentAt: at('2026-11-11T09:10:00Z') } }).reason,
-    ).toBe('new-build')
-  })
-})
-
-describe('decide: forced rebuild of the same version', () => {
-  it('a cutoff after our build forces even when the version matches', () => {
-    const rebuilt = { ...current, forceUpdateBefore: '2026-11-11T10:00:00Z' }
-    expect(target({ latest: rebuilt })).toEqual({
-      attention: 'urgent',
-      reason: 'forced',
-    })
-  })
-})
-
-describe('decide: the raise gate', () => {
-  it('holds a raise from none/passive as passive:waiting', () => {
-    const d = decide(base({ latest: older, gateOpen: false }))
-    expect(d.target.attention).toBe('urgent')
-    expect(d.publish).toEqual({ attention: 'passive', reason: 'waiting' })
-  })
-  it('holds at prompt:stale when prompt is already published', () => {
-    const d = decide(
-      base({ latest: older, gateOpen: false, published: 'prompt' }),
-    )
-
-    expect(d.publish).toEqual({ attention: 'prompt', reason: 'stale' })
-  })
-  it('never holds a lowering', () => {
-    const d = decide(
-      base({ latest: current, gateOpen: false, published: 'urgent' }),
-    )
-
-    expect(d.publish.attention).toBe('none')
-  })
-})
-
-describe('decide: deadlines', () => {
-  it('includes threshold crossings and snooze expiry in the future only', () => {
-    const now = at('2026-11-11T09:20:00Z')
-    const d = decide(base({ now, snoozes: { urgentAt: now } }))
-    expect(d.deadlines).toEqual(
-      expect.arrayContaining([
-        at('2026-11-11T21:00:00Z'),
-        at('2026-11-12T09:00:00Z'),
-        now + 30 * 60_000,
-      ]),
-    )
-    expect(d.deadlines.every(t => t > now)).toBe(true)
-  })
-})
-
-describe('resolveEscalation', () => {
-  it('validates durations and ordering', () => {
-    expect(() =>
-      resolveEscalation({
-        prompt: {
-          // @ts-expect-error Invalid runtime input must be rejected.
-          after: '12 hours',
-        },
-      }),
-    ).toThrow(/not a duration/)
-    expect(() =>
-      resolveEscalation({ prompt: { after: '24h' }, urgent: { after: '12h' } }),
-    ).toThrow(/later than/)
-    expect(() =>
-      resolveEscalation({ urgent: { after: '24h', snooze: '0m' } }),
-    ).toThrow(/positive/)
-    expect(resolveEscalation({ prompt: false, urgent: false })).toEqual({})
-  })
+    }),
+  ).toThrow(/not a duration/)
+  expect(() =>
+    resolveEscalation({ prompt: { after: '24h' }, urgent: { after: '12h' } }),
+  ).toThrow(/later than/)
+  expect(() =>
+    resolveEscalation({ prompt: { after: '12h', snooze: '0m' } }),
+  ).toThrow(/positive/)
 })
 
 describe('isVersionInfo', () => {

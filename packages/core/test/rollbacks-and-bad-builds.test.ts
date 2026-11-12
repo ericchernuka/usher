@@ -1,16 +1,6 @@
-import type { VersionInfo } from '../src/index'
 import { server } from './mocks/node'
 import { serveBuild } from './mocks/overrides'
-import {
-  HOUR,
-  MINUTE,
-  current,
-  describe,
-  expect,
-  newer,
-  older,
-  test,
-} from './fixtures'
+import { HOUR, current, describe, expect, newer, older, test } from './fixtures'
 
 describe('a rollback', () => {
   test('given the server redeploys an older commit, then the tab is urgent at once', async ({
@@ -45,53 +35,6 @@ describe('a rollback', () => {
       attention: 'urgent',
       reason: 'rollback',
       latest: { version: 'bbb' },
-    })
-  })
-
-  test('given the user dismissed the rollback, when the latest build flaps between deploys, then the dismissal holds', async ({
-    app,
-    clock,
-  }) => {
-    server.use(serveBuild(older))
-    const states: string[] = []
-    const store = app.create()
-    app.subscribe(store, () => states.push(store.getState().attention))
-    await clock.settle()
-    expect(store.dismiss()).toBe(true)
-    states.length = 0
-
-    const deploy = async (build: VersionInfo) => {
-      server.use(serveBuild(build))
-      await clock.runFor(5 * MINUTE)
-    }
-
-    await deploy(newer)
-    await deploy(older)
-    await deploy(newer)
-    await deploy(older)
-
-    expect(states).not.toContain('urgent')
-  })
-
-  test('given the user dismissed an expired build, when a rollback appears inside the snooze, then it breaks through', async ({
-    app,
-    clock,
-  }) => {
-    // Acknowledgements are per build and evidence: new evidence is not covered by an old dismissal.
-    server.use(serveBuild(newer))
-    clock.setSystemTime('2026-11-12T16:00:00Z') // 25 h: expired
-    const store = app.create()
-    app.subscribe(store)
-    await clock.settle()
-    expect(store.getState().reason).toBe('expired')
-    store.dismiss()
-
-    server.use(serveBuild(older))
-    await app.poll()
-
-    expect(store.getState()).toMatchObject({
-      attention: 'urgent',
-      reason: 'rollback',
     })
   })
 })
