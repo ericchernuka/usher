@@ -1,5 +1,6 @@
-import { connectPrompt, defaultCopy, type Prompt } from '../src/index'
-import { fakeAdapter } from './fake-adapter'
+import { vi } from 'vitest'
+import { connectUpdateSurface, type UpdateNotice } from '../src/index'
+import { fakeSurface } from './fake-surface'
 import { server } from './mocks/node'
 import { serveBuild } from './mocks/overrides'
 import {
@@ -13,18 +14,17 @@ import {
 } from './fixtures'
 
 describe('showing and hiding', () => {
-  test('given a stale build, then the prompt is shown once per change under a stable id, and hidden when caught up', async ({
+  test('given an outdated build past the prompt threshold, then the surface is shown once per change and hidden when caught up', async ({
     app,
     clock,
   }) => {
     clock.setSystemTime('2026-11-12T04:00:00Z')
     server.use(serveBuild(newer))
-    const ui = fakeAdapter()
-    app.track(connectPrompt(app.create(), ui.adapter))
+    const ui = fakeSurface()
+    app.track(connectUpdateSurface(app.create(), ui.surface))
     await clock.waitForResponse()
 
     expect(ui.log).toEqual(['show:prompt'])
-    expect(ui.open.id).toBe('app-update')
 
     await app.poll()
     expect(ui.log).toEqual(['show:prompt'])
@@ -35,14 +35,14 @@ describe('showing and hiding', () => {
     expect(ui.log).toEqual(['show:prompt', 'hide'])
   })
 
-  test('given a fix ships for a rollback, when the prompt is already up, then it is not shown again', async ({
+  test('given a fix ships for a rollback, when the surface is already up, then it is not shown again', async ({
     app,
     clock,
   }) => {
     server.use(serveBuild(older))
     const shows: string[] = []
     app.track(
-      connectPrompt(app.create(), {
+      connectUpdateSurface(app.create(), {
         show: p => shows.push(`${p.attention}:${p.latest.version}`),
         hide: () => {},
       }),
@@ -55,14 +55,14 @@ describe('showing and hiding', () => {
     expect(shows).toEqual(['urgent:old'])
   })
 
-  test('given the prompt is up, when the app disconnects, then it hides and polling stops', async ({
+  test('given the surface is up, when the app disconnects, then it hides and polling stops', async ({
     app,
     clock,
     requests,
   }) => {
     server.use(serveBuild(older))
-    const ui = fakeAdapter()
-    const disconnect = connectPrompt(app.create(), ui.adapter)
+    const ui = fakeSurface()
+    const disconnect = connectUpdateSurface(app.create(), ui.surface)
     await clock.waitForResponse()
     disconnect()
     const checks = requests.length
@@ -72,7 +72,7 @@ describe('showing and hiding', () => {
     expect(requests).toHaveLength(checks)
   })
 
-  test("given refresh is wired to the toast's action, then it follows the store's reload rules", async ({
+  test("given refresh is wired to the toast's action, then it follows the store's refresh rules", async ({
     app,
     clock,
     host,
@@ -80,8 +80,8 @@ describe('showing and hiding', () => {
     server.use(serveBuild(older))
     const store = app.create()
     const removeBlocker = store.addRefreshBlocker(() => true)
-    const ui = fakeAdapter()
-    app.track(connectPrompt(store, ui.adapter))
+    const ui = fakeSurface()
+    app.track(connectUpdateSurface(store, ui.surface))
     await clock.waitForResponse()
 
     await ui.open.refresh()
@@ -95,24 +95,24 @@ describe('showing and hiding', () => {
   })
 })
 
-describe('closing the prompt', () => {
-  test("given the user closes the toast, then the prompt is dismissed and a stale handle's second close is ignored", async ({
+describe('closing the surface', () => {
+  test('given the user closes the toast, then the prompt is dismissed and a second close of the same notice is ignored', async ({
     app,
     clock,
   }) => {
     clock.setSystemTime('2026-11-12T04:00:00Z')
     server.use(serveBuild(newer))
     const store = app.create()
-    const ui = fakeAdapter()
-    app.track(connectPrompt(store, ui.adapter))
+    const ui = fakeSurface()
+    app.track(connectUpdateSurface(store, ui.surface))
     await clock.waitForResponse()
-    const handle = ui.open
+    const notice = ui.open
 
-    handle.dismiss()
+    notice.close()
 
     expect(store.getState().attention).toBe('passive')
     expect(ui.log).toEqual(['show:prompt', 'hide'])
-    handle.dismiss()
+    notice.close()
     expect(ui.log).toEqual(['show:prompt', 'hide'])
   })
 
@@ -124,17 +124,17 @@ describe('closing the prompt', () => {
     clock.setSystemTime('2026-11-12T04:00:00Z')
     server.use(serveBuild(newer))
     const store = app.create()
-    let handle: Prompt | undefined
-    const ui = fakeAdapter()
+    let notice: UpdateNotice | undefined
+    const ui = fakeSurface()
     app.track(
-      connectPrompt(store, {
+      connectUpdateSurface(store, {
         show: p => {
-          handle = p
-          ui.adapter.show(p)
+          notice = p
+          ui.surface.show(p)
         },
         hide: () => {
-          ui.adapter.hide()
-          handle?.dismiss()
+          ui.surface.hide()
+          notice?.close()
         },
       }),
     )
@@ -147,20 +147,53 @@ describe('closing the prompt', () => {
     expect(host.localStorage.getItem(DISMISSAL_KEY)).toBeNull()
   })
 
-  test('given an urgent prompt, when the user tries to close it, then it remains shown', async ({
+  test('given an urgent notice, when the UI closes it anyway, then it is shown again as a new notice', async ({
     app,
     clock,
   }) => {
     server.use(serveBuild(newer))
     clock.setSystemTime('2026-11-12T16:00:00Z')
-    const ui = fakeAdapter()
-    app.track(connectPrompt(app.create(), ui.adapter))
+    const ui = fakeSurface()
+    app.track(connectUpdateSurface(app.create(), ui.surface))
     await clock.waitForResponse()
+    const first = ui.open
 
-    ui.open.dismiss()
+    first.close()
+
+    expect(ui.log).toEqual(['show:urgent', 'show:urgent'])
+    expect(ui.open).not.toBe(first)
+
+    first.close()
     await app.poll()
 
-    expect(ui.log).toEqual(['show:urgent'])
+    expect(ui.log).toEqual(['show:urgent', 'show:urgent'])
+  })
+
+  test('given a surface that closes every urgent notice inside show(), then the connection stops at the pass limit with one error', async ({
+    app,
+    clock,
+  }) => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    server.use(serveBuild(older))
+    let shows = 0
+    app.track(
+      connectUpdateSurface(app.create(), {
+        show: notice => {
+          shows++
+          notice.close()
+        },
+        hide: () => {},
+      }),
+    )
+
+    await expect(clock.waitForResponse()).resolves.toBeUndefined()
+
+    expect(shows).toBe(5)
+    expect(error).toHaveBeenCalledTimes(1)
+    expect(error).toHaveBeenCalledWith(
+      expect.stringContaining('keeps re-triggering'),
+      5,
+    )
   })
 
   test('given a passive banner, when the user closes it, then it stays closed until the state changes', async ({
@@ -168,12 +201,12 @@ describe('closing the prompt', () => {
     clock,
   }) => {
     server.use(serveBuild(newer))
-    const ui = fakeAdapter('passive')
-    app.track(connectPrompt(app.create(), ui.adapter))
+    const ui = fakeSurface('passive')
+    app.track(connectUpdateSurface(app.create(), ui.surface))
     await clock.waitForResponse()
     expect(ui.log).toEqual(['show:passive'])
 
-    ui.open.dismiss()
+    ui.open.close()
     await app.poll()
     expect(ui.log).toEqual(['show:passive', 'hide'])
 
@@ -189,50 +222,13 @@ describe('closing the prompt', () => {
   }) => {
     server.use(serveBuild(newer))
     clock.setSystemTime('2026-11-12T05:00:00Z')
-    const ui = fakeAdapter('passive')
-    app.track(connectPrompt(app.create(), ui.adapter))
+    const ui = fakeSurface('passive')
+    app.track(connectUpdateSurface(app.create(), ui.surface))
     await clock.waitForResponse()
 
-    ui.open.dismiss()
+    ui.open.close()
     await app.poll()
 
     expect(ui.log).toEqual(['show:prompt', 'hide'])
   })
-})
-
-describe('default copy', () => {
-  test.for([
-    {
-      attention: 'prompt',
-      reason: 'outdated',
-      description: /ready/,
-      action: 'Refresh',
-    },
-    {
-      attention: 'urgent',
-      reason: 'outdated',
-      description: /old version/,
-      action: 'Refresh now',
-    },
-    {
-      attention: 'urgent',
-      reason: 'rollback',
-      description: /known issue/,
-      action: 'Refresh now',
-    },
-    {
-      attention: 'urgent',
-      reason: 'forced',
-      description: /known issue/,
-      action: 'Refresh now',
-    },
-  ] as const)(
-    'given $attention:$reason, then the wording fits',
-    ({ attention, reason, description, action }) => {
-      const copy = defaultCopy({ attention, reason })
-
-      expect(copy.description).toMatch(description)
-      expect(copy.action).toBe(action)
-    },
-  )
 })

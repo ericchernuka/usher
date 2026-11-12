@@ -8,7 +8,7 @@ The repository contains the libraries, two sample app builds, and local browser 
 
 | Package                   | Responsibility                                                                                                                                                             |
 | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `@app-version/core`       | Build-tool-independent update state, polling, prompt dismissal, explicit refresh, and prompt adapters. Its constructor accepts running-build facts and a version URL.      |
+| `@app-version/core`       | Build-tool-independent update state, polling, prompt dismissal, explicit refresh, and update surfaces. Its constructor accepts running-build facts and a version URL.      |
 | `@app-version/vite`       | The build plugin, virtual build facts, and the skew-protection adapter contract. Its `/client` entry creates the core store with embedded build facts and the version URL. |
 | `@app-version/react`      | Hooks that read a core store and register explicit refresh blockers.                                                                                                       |
 | `@app-version/cloudflare` | Build adapters for Pages and Workers, plus the shared asset fallback handler.                                                                                              |
@@ -72,7 +72,7 @@ Hidden tabs stop their wake timer and catch up when visible. A pending request r
 
 `browser.ts` supplies browser capabilities without reading globals until they are used. `refresh.ts` owns explicit refresh attempts, synchronous blockers, and sharing of concurrent attempts. The app can supply a reload function to use its router's confirmation flow. Throwing blockers prevent refresh, and a failed or declined attempt can be retried.
 
-`connectPrompt` connects an imperative update surface to the store. It handles attention thresholds, stable IDs, stale handles, and adapter callbacks during programmatic closure. An urgent handle cannot dismiss urgency. A passive surface can be closed locally until its attention or reason changes.
+`connectUpdateSurface` connects an imperative update surface to the store. It handles attention thresholds, notices that are no longer shown, and surface callbacks during programmatic closure. Closing an urgent notice shows it again. A passive surface can be closed locally until its attention or reason changes.
 
 ## Deployment integration
 
@@ -94,7 +94,7 @@ Dashboard rollbacks and old-commit redeploys have an older commit time. A revert
 
 Deploy one Workers version at a time. Alternating version responses during a gradual deployment can appear to be a rollback.
 
-The library retains age-based escalation, shared prompt dismissal, sticky urgency, explicit refresh, refresh blockers, and prompt adapters. It does not cancel attention changes, delay urgency for typing, reload on navigation, or reload on chunk errors. Server-driven compatibility signals are deferred.
+The library retains age-based escalation, shared prompt dismissal, sticky urgency, explicit refresh, refresh blockers, and update surfaces. It does not cancel attention changes, delay urgency for typing, reload on navigation, or reload on chunk errors. Server-driven compatibility signals are deferred.
 
 ## Verification
 

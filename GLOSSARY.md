@@ -86,6 +86,10 @@ The build-time threshold before which running builds require an urgent update.
 The app's presentation of attention, such as a toast, banner, or update button.
 _Avoid_: Prompt when the attention level is not meant.
 
+**Update notice**:
+What an update surface is asked to show: the update state together with its refresh and close actions.
+_Avoid_: Prompt handle.
+
 **Refresh**:
 The user's explicit action to move the tab onto the serving deployment.
 _Avoid_: Reload for the action.

@@ -1,11 +1,11 @@
 import { vi } from 'vitest'
-import { connectPrompt } from '../src/index'
+import { connectUpdateSurface } from '../src/index'
 import { server } from './mocks/node'
 import { serveBuild } from './mocks/overrides'
 import { describe, expect, newer, older, test } from './fixtures'
 
-describe('adapters that misbehave', () => {
-  test('given show() dismisses synchronously, then hide() waits for show() to return', async ({
+describe('surfaces that misbehave', () => {
+  test('given show() closes synchronously, then hide() waits for show() to return', async ({
     app,
     clock,
   }) => {
@@ -14,10 +14,10 @@ describe('adapters that misbehave', () => {
     const log: string[] = []
     const store = app.create()
     app.track(
-      connectPrompt(store, {
+      connectUpdateSurface(store, {
         show: p => {
           log.push(`show-start:${p.attention}`)
-          p.dismiss()
+          p.close()
           log.push('show-end')
         },
         hide: () => log.push('hide'),
@@ -29,7 +29,7 @@ describe('adapters that misbehave', () => {
     expect(store.getState().attention).toBe('passive')
   })
 
-  test('given show() throws at first, then connecting does not throw and the prompt appears once the library is ready', async ({
+  test('given show() throws at first, then connecting does not throw and the surface appears once the library is ready', async ({
     app,
     clock,
   }) => {
@@ -39,7 +39,7 @@ describe('adapters that misbehave', () => {
     let ready = false
     const store = app.create()
     app.track(
-      connectPrompt(store, {
+      connectUpdateSurface(store, {
         show: p => {
           if (!ready) {
             throw new Error('toast lib not ready')
@@ -62,7 +62,7 @@ describe('adapters that misbehave', () => {
     expect(shows).toEqual(['urgent'])
   })
 
-  test('given show() throws on an update, when the next change arrives, then the prompt is retried', async ({
+  test('given show() throws on an update, when the next change arrives, then the surface is retried', async ({
     app,
     clock,
   }) => {
@@ -71,7 +71,7 @@ describe('adapters that misbehave', () => {
     const shows: string[] = []
     let failNext = false
     app.track(
-      connectPrompt(app.create(), {
+      connectUpdateSurface(app.create(), {
         minAttention: 'passive',
         show: p => {
           if (failNext) {

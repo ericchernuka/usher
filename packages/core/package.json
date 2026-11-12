@@ -1,7 +1,7 @@
 {
   "name": "@app-version/core",
   "version": "0.1.0",
-  "description": "Keep open tabs on the current build with version polling, update state, and prompt adapters.",
+  "description": "Keep open tabs on the current build with version polling, update state, and update surfaces.",
   "type": "module",
   "sideEffects": false,
   "exports": {

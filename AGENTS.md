@@ -4,7 +4,7 @@ Before designing, changing, or reviewing code, read [CODING_STANDARDS.md](CODING
 
 ## Repo map
 
-- `packages/core/`: build-tool-independent update state, polling, refresh, and prompt adapters.
+- `packages/core/`: build-tool-independent update state, polling, refresh, and update surfaces.
 - `packages/vite/`: the Vite plugin, virtual build metadata, client setup, and the skew-protection adapter contract.
 - `packages/react/`: React hooks for reading update state and blocking explicit refreshes.
 - `packages/cloudflare/`: Pages and Workers adapters, the asset fallback handler, and workerd tests.

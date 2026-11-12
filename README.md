@@ -4,13 +4,13 @@ Keeps open tabs on a current build with as little disruption as possible. Pairs 
 
 See the [glossary](GLOSSARY.md) for domain terms and the [architecture](docs/Skew%20protection%20architecture.md) for package ownership, request handling, and deployment steps.
 
-| Package                   | Import                     | What                                                                                                      | Needs       |
-| ------------------------- | -------------------------- | --------------------------------------------------------------------------------------------------------- | ----------- |
-| `@app-version/core`       | `@app-version/core`        | `createAppUpdates({ current, url, ... })`: the update store; `connectPrompt()`: drive any toast/banner UI | —           |
-| `@app-version/vite`       | `@app-version/vite`        | `appVersion()` plugin: writes `version.json`, provides `virtual:app-version`, runs a skew adapter         | Vite        |
-|                           | `@app-version/vite/client` | `createAppUpdates()`: creates the core store using embedded build facts and the version URL               | Vite plugin |
-| `@app-version/react`      | `@app-version/react`       | `useAppUpdates(store, selector?)`, `useRefreshBlocker(store, shouldBlock)`                                | React       |
-| `@app-version/cloudflare` | `@app-version/cloudflare`  | `cloudflarePages()`, `cloudflareWorkers()`: skew-protection adapters that serve old chunks from R2        | Cloudflare  |
+| Package                   | Import                     | What                                                                                                             | Needs       |
+| ------------------------- | -------------------------- | ---------------------------------------------------------------------------------------------------------------- | ----------- |
+| `@app-version/core`       | `@app-version/core`        | `createAppUpdates({ current, url, ... })`: the update store; `connectUpdateSurface()`: drive any toast/banner UI | —           |
+| `@app-version/vite`       | `@app-version/vite`        | `appVersion()` plugin: writes `version.json`, provides `virtual:app-version`, runs a skew adapter                | Vite        |
+|                           | `@app-version/vite/client` | `createAppUpdates()`: creates the core store using embedded build facts and the version URL                      | Vite plugin |
+| `@app-version/react`      | `@app-version/react`       | `useAppUpdates(store, selector?)`, `useRefreshBlocker(store, shouldBlock)`                                       | React       |
+| `@app-version/cloudflare` | `@app-version/cloudflare`  | `cloudflarePages()`, `cloudflareWorkers()`: skew-protection adapters that serve old chunks from R2               | Cloudflare  |
 
 ## Setup
 
@@ -163,29 +163,59 @@ reload: async () => {
 
 This recipe is tested against TanStack Router. For a refresh, current and next paths match, so a router blocker must check dirty state rather than a pathname change.
 
-## Prompt adapters
+## Update surfaces
 
-`connectPrompt` remains available for imperative toast and banner libraries:
+`connectUpdateSurface` drives an imperative toast or banner library from the store:
 
 ```ts
-import { connectPrompt, defaultCopy } from '@app-version/core'
+import { connectUpdateSurface, type UpdateNotice } from '@app-version/core'
 
-const disconnect = connectPrompt(appUpdates, {
-  show(prompt) {
-    // Upsert by prompt.id. Wire the refresh action to prompt.refresh().
-    // Allow closing only when prompt.attention !== 'urgent'.
-    // Wire a user close to prompt.dismiss().
-    showToast(prompt.id, defaultCopy(prompt), prompt)
+const TOAST_ID = 'app-update'
+
+const disconnect = connectUpdateSurface(appUpdates, {
+  show(notice) {
+    showToast(TOAST_ID, {
+      ...copyFor(notice),
+      onAction: () => notice.refresh(),
+      // Render urgent notices without a close control.
+      onClose: notice.attention === 'urgent' ? undefined : () => notice.close(),
+    })
   },
   hide() {
-    hideToast('app-update')
+    hideToast(TOAST_ID)
   },
 })
+
+function copyFor({ attention, reason }: UpdateNotice) {
+  if (reason === 'rollback' || reason === 'forced') {
+    return {
+      title: 'Please refresh',
+      description: 'This version has a known issue. Refresh to get the fix.',
+      action: 'Refresh now',
+    }
+  }
+
+  if (attention === 'urgent') {
+    return {
+      title: 'Please refresh',
+      description: "You're on an old version of the app. Refresh to update.",
+      action: 'Refresh now',
+    }
+  }
+
+  return {
+    title: 'A new version is available',
+    description: "Refresh when you're ready.",
+    action: 'Refresh',
+  }
+}
 ```
 
-The adapter has a real seam: different UI libraries implement `show` and `hide`. `connectPrompt` handles threshold changes, stable IDs, stale handles, and a library firing onClose during a programmatic hide. The default minimum attention is `prompt`; use `minAttention: 'passive'` for a persistent update banner. A passive banner can be closed locally until its attention or reason changes. Calling an urgent handle's `dismiss()` has no effect; render urgent surfaces without a close action.
+`show` is called once per change of attention or reason, with a new notice each time. The surface owns its toast id and its wording. The default minimum attention is `prompt`; use `minAttention: 'passive'` for a persistent update banner.
 
-`disconnect()` hides the surface and removes its store subscription. An adapter that throws is isolated and can retry on a later state notification. `defaultCopy` supplies suggested text; apps can use their own text.
+`notice.close()` means the user closed the surface. For a prompt it dismisses the prompt for every tab and then calls `hide()`. For a passive notice it calls `hide()` and stays hidden until attention or reason changes. For an urgent notice it calls `show()` again with a new notice, because urgent attention cannot be closed and some libraries remove a toast regardless. A notice that is no longer the one shown ignores `close()`, so a library that fires `onClose` during a programmatic hide is safe.
+
+`disconnect()` hides the surface and removes its store subscription. A surface that throws is isolated and retried on the next state change.
 
 ## Internal modules
 

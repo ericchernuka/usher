@@ -4,25 +4,23 @@ import type { AppUpdatesOptions } from './types'
 export type { AppUpdates, RefreshBlocker } from './app-updates'
 
 export {
-  connectPrompt,
-  defaultCopy,
-  PROMPT_ID,
-  type Prompt,
-  type PromptBase,
-  type PromptAdapter,
-  type PromptCopy,
-} from './prompt'
+  connectUpdateSurface,
+  type UpdateNotice,
+  type UpdateSurface,
+} from './update-surface'
 
 export type {
   AppUpdatesOptions,
   Attention,
-  UpdateState,
   BuildFacts,
+  UpdateState,
 } from './types'
 
 /**
- * Create the app's update store with the running build and version URL.
- * No side effects until the first subscribe(); polls while subscribed.
+ * Create the app's update store, one per app at module scope.
+ *
+ * Creating it has no side effects. Polling, timers and listeners exist only while
+ * there is at least one subscriber. Invalid options throw here, naming the option.
  */
 export function createAppUpdates(options: AppUpdatesOptions): AppUpdates {
   return createAppUpdatesStore(options)

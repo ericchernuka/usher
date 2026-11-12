@@ -4,12 +4,11 @@ import { render } from 'vitest-browser-react'
 import { configure } from 'vitest-browser-react/pure'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
-  connectPrompt,
-  PROMPT_ID,
+  connectUpdateSurface,
   createAppUpdates as createCoreUpdates,
-  defaultCopy,
   type AppUpdates,
   type RefreshBlocker,
+  type UpdateNotice,
 } from '@app-version/core'
 import { useAppUpdates, useRefreshBlocker } from '../src/index'
 import { captureNavigations } from '../../core/test/navigation'
@@ -228,26 +227,54 @@ describe('useRefreshBlocker with a function', () => {
   })
 })
 
+const TOAST_ID = 'app-update'
+
+function copyFor({ attention, reason }: UpdateNotice) {
+  if (reason === 'rollback' || reason === 'forced') {
+    return {
+      title: 'Please refresh',
+      description: 'This version has a known issue. Refresh to get the fix.',
+      action: 'Refresh now',
+    }
+  }
+
+  if (attention === 'urgent') {
+    return {
+      title: 'Please refresh',
+      description: "You're on an old version of the app. Refresh to update.",
+      action: 'Refresh now',
+    }
+  }
+
+  return {
+    title: 'A new version is available',
+    description: "Refresh when you're ready.",
+    action: 'Refresh',
+  }
+}
+
 function connectBaseUIToast(
   appUpdates: AppUpdates,
   toastManager: ReturnType<typeof Toast.createToastManager>,
 ) {
-  return connectPrompt(appUpdates, {
-    show: p =>
+  return connectUpdateSurface(appUpdates, {
+    show(notice) {
+      const copy = copyFor(notice)
       toastManager.add({
-        id: p.id,
+        id: TOAST_ID,
         type: 'app-update',
         timeout: 0,
-        priority: p.attention === 'urgent' ? 'high' : 'low',
-        title: defaultCopy(p).title,
-        description: defaultCopy(p).description,
+        priority: notice.attention === 'urgent' ? 'high' : 'low',
+        title: copy.title,
+        description: copy.description,
         actionProps: {
-          children: defaultCopy(p).action,
-          onClick: () => p.refresh(),
+          children: copy.action,
+          onClick: () => notice.refresh(),
         },
-        onClose: () => p.dismiss(),
-      }),
-    hide: () => toastManager.close(PROMPT_ID),
+        onClose: () => notice.close(),
+      })
+    },
+    hide: () => toastManager.close(TOAST_ID),
   })
 }
 
