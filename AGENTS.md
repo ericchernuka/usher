@@ -4,13 +4,13 @@ Before designing, changing, or reviewing code, read [CODING_STANDARDS.md](CODING
 
 ## Repo map
 
-- `packages/core/`: build-tool-independent update state, polling, refresh, and update surfaces.
-- `packages/vite/`: the Vite plugin, virtual build metadata, client setup, and the skew-protection adapter contract.
-- `packages/react/`: React hooks for reading update state and blocking explicit refreshes.
-- `packages/cloudflare/`: Pages and Workers adapters, the asset fallback handler, and workerd tests.
-- `apps/pages-react/` and `apps/workers-react/`: sample Vite apps for the two hosting targets.
+- `packages/usher-core/`: build-tool-independent update state, polling, refresh, and update surfaces.
+- `packages/usher-plugin/`: the Vite plugin, virtual build metadata, client setup, and the skew-protection adapter contract.
+- `packages/react-usher/`: React hooks for reading update state and blocking explicit refreshes.
+- `packages/usher-cloudflare/`: Pages and Workers adapters, the asset fallback handler, and workerd tests.
+- `examples/react/cloudflare-pages/` and `examples/react/cloudflare-workers/`: sample Vite apps for the two hosting targets.
 - `docs/`: the [SPA one-pager](docs/Skew%20protection%20for%20the%20SPA%20one-pager.md) defines the product goals; the architecture document describes the implementation.
-- `tools/`: vendored lint rules and coverage tooling.
+- `tools/`: vendored lint rules, coverage tooling, and the installed-package smoke test.
 
 Package scripts and workspace configuration are the source of truth for commands and build tasks. Read [README.md](README.md) for setup and library usage.
 

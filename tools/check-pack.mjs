@@ -17,8 +17,15 @@ import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 const repo = resolve(import.meta.dirname, '..')
-const packages = ['core', 'react', 'vite', 'cloudflare']
-const work = mkdtempSync(join(tmpdir(), 'app-version-pack-'))
+
+const packages = [
+  'usher-core',
+  'react-usher',
+  'usher-plugin',
+  'usher-cloudflare',
+]
+
+const work = mkdtempSync(join(tmpdir(), 'usher-pack-'))
 const app = join(work, 'app')
 
 const run = (command, args, cwd) =>
@@ -84,20 +91,20 @@ const appFiles = {
     },
     include: ['src', 'vite.config.ts'],
   }),
-  'vite.config.ts': `import { cloudflarePages } from '@app-version/cloudflare'
-import { appVersion } from '@app-version/vite'
+  'vite.config.ts': `import { cloudflarePages } from '@rndsqr/usher-cloudflare'
+import { usher } from '@rndsqr/usher-plugin/vite'
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 
 export default defineConfig({
-  plugins: [react(), appVersion({ version: 'pack-smoke', skewProtection: cloudflarePages() })],
+  plugins: [react(), usher({ version: 'pack-smoke', adapter: cloudflarePages() })],
 })
 `,
   'index.html':
     '<!doctype html><div id="root"></div><script type="module" src="/src/main.tsx"></script>',
-  'src/main.tsx': `import { connectUpdateSurface, type UpdateState } from '@app-version/core'
-import { useRefreshBlocker, useUpdateState } from '@app-version/react'
-import { createAppUpdates, runningBuild } from '@app-version/vite/client'
+  'src/main.tsx': `import { connectUpdateSurface, type UpdateState } from '@rndsqr/usher-core'
+import { useRefreshBlocker, useUpdateState } from '@rndsqr/react-usher'
+import { createAppUpdates, runningBuild } from '@rndsqr/usher-plugin/client'
 import { createRoot } from 'react-dom/client'
 
 const appUpdates = createAppUpdates({ pollInterval: 60_000 })
@@ -113,7 +120,7 @@ function App() {
 
 createRoot(document.getElementById('root')!).render(<App />)
 `,
-  'src/worker.ts': `import { createAssetFallback, type AssetFallbackEnv } from '@app-version/cloudflare/worker'
+  'src/worker.ts': `import { createAssetFallback, type AssetFallbackEnv } from '@rndsqr/usher-cloudflare/worker'
 
 const assets = createAssetFallback({ r2Binding: 'CHUNKS' })
 
@@ -129,7 +136,7 @@ function writeApp(packed) {
   )
 
   const versions = JSON.parse(
-    readFileSync(join(repo, 'apps/pages-react/package.json')),
+    readFileSync(join(repo, 'examples/react/cloudflare-pages/package.json')),
   )
 
   const version = name =>
@@ -220,7 +227,7 @@ try {
 
   const entry = await get('/src/main.tsx')
   const imports = [...entry.matchAll(/from "([^"]+)"/g)].map(match => match[1])
-  const client = imports.find(path => path.includes('app-version_vite_client') || path.includes('@app-version/vite'))
+  const client = imports.find(path => path.includes('usher-plugin'))
   if (!client) throw new Error('entry does not import the client helper: ' + imports.join(', '))
 
   for (const path of imports) {
@@ -229,7 +236,7 @@ try {
   }
 
   const helper = await get(client)
-  const facts = helper.match(/from "([^"]*virtual:app-version[^"]*)"/)?.[1]
+  const facts = helper.match(/from "([^"]*virtual:usher[^"]*)"/)?.[1]
   if (!facts?.startsWith('/')) throw new Error('the client helper does not import the build facts from the dev server')
   if (!(await get(facts)).includes('pack-smoke')) throw new Error('the embedded build facts are missing')
 } finally {

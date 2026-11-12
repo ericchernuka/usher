@@ -45,7 +45,7 @@ We already build in GitHub Actions and push with `wrangler`, so we lose little b
 
 ## Keeping users current and rollbacks
 
-Skew protection keeps old tabs alive while the update library asks users to move forward. `@app-version/vite` writes `version.json` and supplies build facts to its browser helper. The build-tool-independent `@app-version/core` polls the supplied URL and publishes update state. React hooks live in `@app-version/react`, and hosting adapters live in `@app-version/cloudflare`.
+Skew protection keeps old tabs alive while the update library asks users to move forward. `@rndsqr/usher-plugin/vite` writes `version.json` and supplies build facts to its browser helper. The build-tool-independent `@rndsqr/usher-core` polls the supplied URL and publishes update state. React hooks live in `@rndsqr/react-usher`, and hosting adapters live in `@rndsqr/usher-cloudflare`.
 
 Users catch up through prompts or their own refreshes. Each app picks its update surface, such as a toast or navigation button. Age-based escalation defaults to prompt attention at 12 hours and urgent attention at 24 hours. A rollback or forced update is urgent immediately and stays urgent until reload. A prompt dismissal quiets tabs whose prompt threshold had already started, until each reaches urgent. An explicit prompt snooze can set a duration but cannot quiet urgent attention.
 

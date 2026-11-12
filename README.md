@@ -1,16 +1,16 @@
-# app-version
+# usher
 
 Keeps open tabs on a current build with as little disruption as possible. Pairs with R2 skew protection: old tabs keep working, so users are moved forward with prompts, not forced reloads.
 
 See the [glossary](GLOSSARY.md) for domain terms and the [architecture](docs/Skew%20protection%20architecture.md) for package ownership, request handling, and deployment steps.
 
-| Package                   | Import                     | What                                                                                                             | Needs       |
-| ------------------------- | -------------------------- | ---------------------------------------------------------------------------------------------------------------- | ----------- |
-| `@app-version/core`       | `@app-version/core`        | `createAppUpdates({ current, url, ... })`: the update store; `connectUpdateSurface()`: drive any toast/banner UI | —           |
-| `@app-version/vite`       | `@app-version/vite`        | `appVersion()` plugin: writes `version.json`, embeds the build facts, runs a skew adapter                        | Vite        |
-|                           | `@app-version/vite/client` | `createAppUpdates()`: the core store with embedded build facts; `runningBuild`                                   | Vite plugin |
-| `@app-version/react`      | `@app-version/react`       | `useUpdateState(updates)`, `useRefreshBlocker(updates, shouldBlock)`                                             | React       |
-| `@app-version/cloudflare` | `@app-version/cloudflare`  | `cloudflarePages()`, `cloudflareWorkers()`: skew-protection adapters that serve old chunks from R2               | Cloudflare  |
+| Package                     | Import                        | What                                                                                                             | Needs       |
+| --------------------------- | ----------------------------- | ---------------------------------------------------------------------------------------------------------------- | ----------- |
+| `@rndsqr/usher-core`        | `@rndsqr/usher-core`          | `createAppUpdates({ current, url, ... })`: the update store; `connectUpdateSurface()`: drive any toast/banner UI | —           |
+| `@rndsqr/usher-plugin/vite` | `@rndsqr/usher-plugin/vite`   | `usher()` plugin: writes `version.json`, embeds the build facts, runs a skew adapter                             | Vite        |
+|                             | `@rndsqr/usher-plugin/client` | `createAppUpdates()`: the core store with embedded build facts; `runningBuild`                                   | Vite plugin |
+| `@rndsqr/react-usher`       | `@rndsqr/react-usher`         | `useUpdateState(updates)`, `useRefreshBlocker(updates, shouldBlock)`                                             | React       |
+| `@rndsqr/usher-cloudflare`  | `@rndsqr/usher-cloudflare`    | `cloudflarePages()`, `cloudflareWorkers()`: skew-protection adapters that serve old chunks from R2               | Cloudflare  |
 
 ## Setup
 
@@ -18,11 +18,11 @@ See the [glossary](GLOSSARY.md) for domain terms and the [architecture](docs/Ske
 // vite.config.ts
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
-import { appVersion } from '@app-version/vite'
-export default defineConfig({ plugins: [react(), appVersion()] })
+import { usher } from '@rndsqr/usher-plugin/vite'
+export default defineConfig({ plugins: [react(), usher()] })
 ```
 
-The plugin and its browser helper live in `@app-version/vite`. Core takes build facts explicitly and does not import Vite. To read the running build's facts, for example to tag RUM events, import `runningBuild` from `@app-version/vite/client`.
+The plugin and its browser helper live in `@rndsqr/usher-plugin/vite`. Core takes build facts explicitly and does not import Vite. To read the running build's facts, for example to tag RUM events, import `runningBuild` from `@rndsqr/usher-plugin/client`.
 
 Serve `version.json` uncached (the client also adds a `t` query parameter):
 
@@ -36,11 +36,11 @@ Serve `version.json` uncached (the client also adds a `t` query parameter):
 Pass an adapter from a provider package. Each factory returns a `SkewProtectionAdapter`: a `name` and a `files(build)` function that describes the files the host needs. The plugin writes them.
 
 ```ts
-import { cloudflarePages, cloudflareWorkers } from '@app-version/cloudflare'
+import { cloudflarePages, cloudflareWorkers } from '@rndsqr/usher-cloudflare'
 
-appVersion({ skewProtection: cloudflarePages() }) // { r2Binding? }
-appVersion({
-  skewProtection: cloudflareWorkers({ workerFile: 'dist-worker/index.mjs' }),
+usher({ adapter: cloudflarePages() }) // { r2Binding? }
+usher({
+  adapter: cloudflareWorkers({ workerFile: 'dist-worker/index.mjs' }),
 }) // { r2Binding?, workerFile? }
 ```
 
@@ -72,7 +72,7 @@ For Workers, point wrangler at the generated entry:
 If the app owns its Worker or Pages Functions, pass no adapter to the plugin and call the handler for the requests the app does not answer itself:
 
 ```ts
-import { createAssetFallback } from '@app-version/cloudflare/worker'
+import { createAssetFallback } from '@rndsqr/usher-cloudflare/worker'
 
 const assets = createAssetFallback() // { base?, assetsDir?, r2Binding? }
 
@@ -92,7 +92,7 @@ The app then owns its routing: `_routes.json` on Pages, or `assets.run_worker_fi
 ## Use it in an app
 
 ```ts
-import { createAppUpdates } from '@app-version/vite/client'
+import { createAppUpdates } from '@rndsqr/usher-plugin/client'
 
 const HOUR = 60 * 60 * 1000
 
@@ -105,7 +105,7 @@ export const appUpdates = createAppUpdates({
 For a different build tool, pass the running build and version URL to core:
 
 ```ts
-import { createAppUpdates } from '@app-version/core'
+import { createAppUpdates } from '@rndsqr/usher-core'
 
 export const appUpdates = createAppUpdates({
   current: {
@@ -118,7 +118,7 @@ export const appUpdates = createAppUpdates({
 ```
 
 ```tsx
-import { useUpdateState, useRefreshBlocker } from '@app-version/react'
+import { useUpdateState, useRefreshBlocker } from '@rndsqr/react-usher'
 
 function UpdateButton() {
   const { attention } = useUpdateState(appUpdates)
@@ -178,7 +178,7 @@ Snapshots keep the same identity until attention, reason, or any of the latest b
 | `promptSnooze` | Until urgent                                  | How long, in milliseconds, a prompt dismissal quiets prompt attention.                                                             |
 | `pollInterval` | 5 minutes                                     | Visible-tab polling interval in milliseconds, at least 10 seconds. Focus and visibility can also trigger a check after one minute. |
 | `reload`       | `location.reload()`                           | The document load a refresh performs. May return or resolve false to decline.                                                      |
-| `storageKey`   | `app-version`                                 | Set separately for apps on the same origin.                                                                                        |
+| `storageKey`   | `usher`                                       | Set separately for apps on the same origin.                                                                                        |
 
 There are no cancelable attention changes, input-idle delays, navigation reloads, or chunk-error reloads. Apps can subscribe to observe state. R2 fallback keeps old chunks available; the library refreshes only when the app calls `refresh()`.
 
@@ -206,7 +206,7 @@ This recipe is tested against TanStack Router. For a refresh, current and next p
 `connectUpdateSurface` drives an imperative toast or banner library from the store:
 
 ```ts
-import { connectUpdateSurface, type UpdateNotice } from '@app-version/core'
+import { connectUpdateSurface, type UpdateNotice } from '@rndsqr/usher-core'
 
 const TOAST_ID = 'app-update'
 

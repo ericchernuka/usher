@@ -1,0 +1,39 @@
+{
+  "name": "@rndsqr/usher-plugin",
+  "version": "0.1.0",
+  "description": "Build plugin and browser entry for Usher: build facts, version.json, and skew-protection adapters. Vite is supported.",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    "./vite": "./dist/vite.js",
+    "./client": "./dist/client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "dev": "tsdown --watch",
+    "typecheck": "tsc",
+    "test": "vitest run",
+    "coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "@rndsqr/usher-core": "workspace:*",
+    "valibot": "^1.5.0"
+  },
+  "peerDependencies": {
+    "vite": "^5.0.0 || ^6.0.0 || ^7.0.0 || ^8.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "@vitest/browser-playwright": "^5.1.0",
+    "@vitest/coverage-v8": "^5.1.0",
+    "playwright": "^1.65.0",
+    "tsdown": "^0.23.7",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.0",
+    "vite": "^8.3.6"
+  }
+}

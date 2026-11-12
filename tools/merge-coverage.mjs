@@ -1,6 +1,11 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 
-const packages = ['core', 'react', 'cloudflare', 'vite']
+const packages = [
+  'usher-core',
+  'react-usher',
+  'usher-cloudflare',
+  'usher-plugin',
+]
 
 const reports = await Promise.all(
   packages.map(async name =>

@@ -131,7 +131,7 @@ export default defineConfig({
   },
   overrides: [
     {
-      files: ['packages/core/test/fixtures.ts'],
+      files: ['packages/usher-core/test/fixtures.ts'],
       rules: {
         'no-empty-pattern': [
           'error',
@@ -141,8 +141,8 @@ export default defineConfig({
     },
     {
       files: [
-        'packages/core/test/fake-environment.ts',
-        'packages/core/test/model.test.ts',
+        'packages/usher-core/test/fake-environment.ts',
+        'packages/usher-core/test/model.test.ts',
       ],
       rules: { 'no-await-in-loop': 'off' },
     },

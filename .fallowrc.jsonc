@@ -2,7 +2,7 @@
   "$schema": "./node_modules/fallow/schema.json",
   "supportEntry": [
     "packages/*/test/setup.node.ts",
-    "packages/cloudflare/test/edge/composed-worker.ts",
+    "packages/usher-cloudflare/test/edge/composed-worker.ts",
   ],
   "ignorePatterns": ["tools/**", "**/.edge-fixture/**", "**/dist-worker/**"],
   "ignoreDependencies": ["@oxlint/plugins"],
@@ -11,10 +11,10 @@
     "enabled": true,
     "projects": [
       "tsconfig.json",
-      "packages/core/tsconfig.json",
-      "packages/vite/tsconfig.json",
-      "packages/react/tsconfig.json",
-      "packages/cloudflare/tsconfig.json",
+      "packages/usher-core/tsconfig.json",
+      "packages/usher-plugin/tsconfig.json",
+      "packages/react-usher/tsconfig.json",
+      "packages/usher-cloudflare/tsconfig.json",
     ],
   },
   "duplicates": { "mode": "semantic", "minOccurrences": 2 },
