@@ -2,25 +2,27 @@
 
 Keeps open tabs on a current build with as little disruption as possible. Pairs with R2 skew protection: old tabs keep working, so users are moved forward with prompts, not forced reloads.
 
-| Package                   | Import                    | What                                                                                                   | Needs      |
-| ------------------------- | ------------------------- | ------------------------------------------------------------------------------------------------------ | ---------- |
-| `@app-version/core`       | `@app-version/core/vite`  | `appVersion()` plugin: writes `version.json`, provides `virtual:app-version`, runs a skew adapter      | Vite       |
-|                           | `@app-version/core`       | `createAppUpdates()`: the update store (a state machine); `connectPrompt()`: drive any toast/banner UI | —          |
-| `@app-version/react`      | `@app-version/react`      | `useAppUpdates(store, selector?)`, `useReloadBlocker(store, shouldBlock)`                              | React      |
-| `@app-version/cloudflare` | `@app-version/cloudflare` | `cloudflarePages()`, `cloudflareWorkers()`: skew-protection adapters that serve old chunks from R2     | Cloudflare |
+See the [glossary](GLOSSARY.md) for domain terms and the [architecture](docs/Skew%20protection%20architecture.md) for package ownership, request handling, and deployment steps.
+
+| Package                   | Import                     | What                                                                                                      | Needs       |
+| ------------------------- | -------------------------- | --------------------------------------------------------------------------------------------------------- | ----------- |
+| `@app-version/core`       | `@app-version/core`        | `createAppUpdates({ current, url, ... })`: the update store; `connectPrompt()`: drive any toast/banner UI | —           |
+| `@app-version/vite`       | `@app-version/vite`        | `appVersion()` plugin: writes `version.json`, provides `virtual:app-version`, runs a skew adapter         | Vite        |
+|                           | `@app-version/vite/client` | `createAppUpdates()`: creates the core store using embedded build facts and the version URL               | Vite plugin |
+| `@app-version/react`      | `@app-version/react`       | `useAppUpdates(store, selector?)`, `useReloadBlocker(store, shouldBlock)`                                 | React       |
+| `@app-version/cloudflare` | `@app-version/cloudflare`  | `cloudflarePages()`, `cloudflareWorkers()`: skew-protection adapters that serve old chunks from R2        | Cloudflare  |
 
 ## Setup
 
 ```ts
 // vite.config.ts
-import { appVersion } from '@app-version/core/vite'
+import react from '@vitejs/plugin-react'
+import { defineConfig } from 'vite'
+import { appVersion } from '@app-version/vite'
 export default defineConfig({ plugins: [react(), appVersion()] })
 ```
 
-```jsonc
-// tsconfig.json
-{ "compilerOptions": { "types": ["vite/client", "@app-version/core/client"] } }
-```
+The plugin and its browser helper live in `@app-version/vite`. Core takes build facts explicitly and does not import Vite or a virtual module. If you import `virtual:app-version` directly, add `@app-version/vite/virtual` to your TypeScript `types` list.
 
 Serve `version.json` uncached (the client also adds `?t=`):
 
@@ -52,10 +54,25 @@ The handler (`packages/cloudflare/src/edge-handler.mjs`, standalone ESM) serves 
 ## Use it in an app
 
 ```ts
-import { createAppUpdates } from '@app-version/core'
+import { createAppUpdates } from '@app-version/vite/client'
 
 export const appUpdates = createAppUpdates({
   escalation: { prompt: { after: '12h' }, urgent: { after: '24h' } },
+})
+```
+
+For a different build tool, pass the running build and version URL to core:
+
+```ts
+import { createAppUpdates } from '@app-version/core'
+
+export const appUpdates = createAppUpdates({
+  current: {
+    version: 'commit-sha',
+    commitTime: '2026-11-11T15:00:00Z',
+    builtAt: '2026-11-11T16:00:00Z',
+  },
+  url: '/version.json',
 })
 ```
 
@@ -111,12 +128,14 @@ interface AppUpdates {
 
 Snapshots keep the same identity until attention, reason, or latest version changes. `dismiss()` succeeds only for a prompt that can still be lowered. It returns false without writing storage for urgent, passive, and unknown states.
 
-| Option       | Default                          | Meaning                                                                                                       |
-| ------------ | -------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `escalation` | Prompt at `12h`, urgent at `24h` | Typed build-age thresholds. Set either level to `false` to disable it. Only prompt accepts `snooze`.          |
-| `pollEvery`  | `5m`                             | Visible-tab polling interval, at least `10s`. Focus and visibility can also trigger a check after one minute. |
-| `reload`     | `location.reload()`              | An explicit refresh. Receives `{ href }`; may return or resolve false to decline.                             |
-| `storageKey` | `app-version`                    | Set separately for apps on the same origin.                                                                   |
+| Option       | Default                                       | Meaning                                                                                                       |
+| ------------ | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `current`    | Required by core; embedded by the Vite helper | Build facts for the running application.                                                                      |
+| `url`        | Required by core; supplied by the Vite helper | The serving deployment's `version.json` URL.                                                                  |
+| `escalation` | Prompt at `12h`, urgent at `24h`              | Typed build-age thresholds. Set either level to `false` to disable it. Only prompt accepts `snooze`.          |
+| `pollEvery`  | `5m`                                          | Visible-tab polling interval, at least `10s`. Focus and visibility can also trigger a check after one minute. |
+| `reload`     | `location.reload()`                           | An explicit refresh. Receives `{ href }`; may return or resolve false to decline.                             |
+| `storageKey` | `app-version`                                 | Set separately for apps on the same origin.                                                                   |
 
 There are no cancelable attention changes, input-idle delays, navigation reloads, or chunk-error reloads. Apps can subscribe to observe state. R2 fallback keeps old chunks available; the library refreshes only when the app calls `refresh()`.
 
@@ -161,11 +180,15 @@ The adapter has a real seam: different UI libraries implement `show` and `hide`.
 
 ## Internal modules
 
-The policy computes one state and the next deadline from build facts, prompt dismissal, and time. The machine owns the snapshot, sticky bad-build knowledge, and the server-clock estimate. It computes the policy result once when facts change. The browser engine reads the cached deadline and owns fetching, subscriptions, visibility, and the wake timer.
+`app-updates.ts` owns observed build facts, sticky rollback or forced-update knowledge, the published snapshot, and subscribers. It also handles prompt dismissal. `attention.ts` computes attention and the next deadline from those facts, the dismissal record, and an explicit server time. It does not read clocks or store results.
 
-Build age and dismissals use the response's Date header, anchored to `performance.now()`. Missing Date headers retain the last estimate. Changes smaller than two seconds are ignored as header rounding. Polling uses monotonic time, so changing the user's clock cannot stop it. Cross-origin version responses need `Access-Control-Expose-Headers: Date` for clock correction.
+`update-monitor.ts` owns fetching, browser events, clock correction, and the wake timer. It asks the store to evaluate new observations and time changes. When scheduling, it derives the delay from the next server-time deadline and the current corrected time. `prompt-dismissal.ts` owns persistence and merging of the shared dismissal record.
 
-The engine evaluates age deadlines even when network checks fail. Hidden tabs have no wake timer; they catch up when visible or subscribed again. A pending fetch retains its own 30-second timeout and is aborted when the final subscriber leaves. External JSON is validated. Blocked storage keeps prompt dismissal in memory for the current tab.
+`browser.ts` defines the browser capabilities used by the store and monitor. Its default implementation reads browser globals on access. `refresh.ts` owns explicit refresh attempts, reload blockers, and sharing of concurrent attempts.
+
+Build age and dismissals use the response's Date header, anchored to `performance.now()`. Before a Date header has been received, the monitor uses the local clock. Missing Date headers retain the last estimate. Changes smaller than two seconds are ignored as header rounding. Polling uses monotonic time, so changing the user's clock cannot stop it. Cross-origin version responses need `Access-Control-Expose-Headers: Date` for clock correction.
+
+The monitor triggers age evaluation even when network checks fail. Hidden tabs have no wake timer; they catch up when visible or subscribed again. A pending fetch retains its own 30-second timeout and is aborted when the final subscriber leaves. External JSON is validated. Blocked storage keeps prompt dismissal in memory for the current tab.
 
 Behaviour tests cover these rules. Model tests also exercise random event sequences with slow responses, outages, clock skew, clock jumps, resubscription, cross-tab dismissal, and rollback followed by a fix.
 

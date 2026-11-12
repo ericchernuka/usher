@@ -1,200 +1,105 @@
 # Skew protection: architecture
 
-Nov 11, 2026 · @Eric Chernuka
+The library keeps old chunks available across deployments and asks users to refresh an outdated tab. The product goals are in the [SPA one-pager](Skew%20protection%20for%20the%20SPA%20one-pager.md), domain terms are in the [glossary](../GLOSSARY.md), and setup and interface examples are in the [README](../README.md).
 
-Every hashed chunk we ship goes into an R2 bucket. A small handler on `/assets/*` serves the current deploy's file first and falls back to R2, so tabs on an older build keep loading their own chunks. The design works on Cloudflare Pages today and moves to Workers with a few lines changed.
+The repository contains the libraries, two sample app builds, and local browser and workerd tests. It does not contain a production CI deployment job, a provisioned R2 bucket, or deployment credentials. The deployment sequence below describes the remaining integration work.
 
-## Components
+## Package ownership
 
-| Piece                    | Lives in                      | Job                                                                                         |
-| ------------------------ | ----------------------------- | ------------------------------------------------------------------------------------------- |
-| Vite build               | GitHub Actions                | Emits `dist/` with content-hashed chunks in `/assets/` and hidden sourcemaps                |
-| Datadog sourcemap upload | GitHub Actions                | Sends `.map` files to Datadog, tagged with the commit SHA as `release-version`              |
-| R2 sync                  | GitHub Actions                | `aws s3 sync dist/assets` to the bucket, append-only, before deploy                         |
-| `BUILD_CACHE` bucket     | Cloudflare R2                 | Holds every chunk from recent builds; lifecycle rule expires objects after about 30 days    |
-| Static assets            | Pages deploy or Worker assets | The current build only; serves `index.html` and chunks                                      |
-| `/assets/*` handler      | Pages Function or Worker      | Tries the current build, falls back to R2, sets `immutable` caching                         |
-| Browser cache            | Browser                       | `immutable` headers mean each tab fetches a chunk once, so the handler runs rarely per user |
+| Package                   | Responsibility                                                                                                                                                             |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@app-version/core`       | Build-tool-independent update state, polling, prompt dismissal, explicit refresh, and prompt adapters. Its constructor accepts running-build facts and a version URL.      |
+| `@app-version/vite`       | The build plugin, virtual build facts, and the skew-protection adapter contract. Its `/client` entry creates the core store with embedded build facts and the version URL. |
+| `@app-version/react`      | Hooks that read a core store and register explicit refresh blockers.                                                                                                       |
+| `@app-version/cloudflare` | Build adapters for Pages and Workers, plus the shared asset fallback handler.                                                                                              |
 
-## Deploy flow
+Core does not import Vite or a virtual module. The Vite client helper imports core. React uses the core store interface. Cloudflare implements the adapter contract exported by the Vite package. The sample apps assemble these pieces.
 
-&#91;embedded content: GitHub Actions deploy job · 5 steps, 3 destinations\]
+## Build output
 
-Step 4 must finish before step 5, so R2 already holds the new chunks when the new build goes live. Only the R2 sync is new; the other steps exist today.
+The `appVersion()` plugin writes `version.json` and exposes the same build facts through `virtual:app-version`. The facts include a source version, commit time, build time, and an optional forced-update cutoff. A source version can occur in more than one build.
 
-## Request flow
+The version defaults to environment values and then Git. Commit time defaults to an explicit option, `APP_COMMIT_TIME`, and then Git. If no commit time is available, the plugin warns and uses build time, which prevents reliable detection of an old-commit redeploy. Malformed configured timestamps fail the build.
 
-&#91;embedded content: /assets/\* request path · 3 checks, 4 outcomes\]
+The plugin serves the version file during development and emits it only for client builds. A hosting adapter can add output during bundle generation or after files have been written. An adapter can fail the build through its context.
 
-Only `/assets/*` reaches the handler; every other path is served as static files with the SPA fallback. Because chunks carry `immutable` headers, each tab fetches a given chunk at most once.
+## Generated hosting adapters
 
-## On Pages today
-
-A Pages Function at `functions/assets/[[path]].ts`. Pages builds `_routes.json` from the `functions/` folder, so only `/assets/*` invokes it. All other paths, including the SPA fallback, stay static and free.
+Apps configure an adapter rather than copy the handler:
 
 ```ts
-interface Env {
-  BUILD_CACHE: R2Bucket
-}
+import { appVersion } from '@app-version/vite'
+import { cloudflarePages, cloudflareWorkers } from '@app-version/cloudflare'
 
-export const onRequestGet: PagesFunction<Env> = async ({
-  request,
-  env,
-  next,
-}) => {
-  const res = await next() // current deploy's static file
-  const isHtml = res.headers.get('content-type')?.includes('text/html')
-  if (res.status !== 404 && !isHtml) return res
-
-  const key = new URL(request.url).pathname.slice(1)
-  const old = await env.BUILD_CACHE.get(key)
-  if (!old) return new Response('Not found', { status: 404 })
-
-  const headers = new Headers()
-  old.writeHttpMetadata(headers)
-  headers.set('ETag', old.httpEtag)
-  headers.set('Cache-Control', 'public, max-age=31536000, immutable')
-  return new Response(old.body, { headers })
-}
+appVersion({ skewProtection: cloudflarePages() })
+appVersion({ skewProtection: cloudflareWorkers() })
 ```
 
-```toml
-# wrangler.toml
-name = "my-app"
-pages_build_output_dir = "dist"
+These are alternatives for the two hosting targets.
 
-[[r2_buckets]]
-binding = "BUILD_CACHE"
-bucket_name = "spa-build-cache"
-```
+| Target  | Generated output                                                                                          | Deployment configuration                                                                                                                                              |
+| ------- | --------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Pages   | `_worker.js` and `_routes.json` inside the client output directory. Routes include only the asset prefix. | Set the R2 binding on the Pages project. Advanced mode takes precedence over `functions/`; the adapter warns if that directory exists.                                |
+| Workers | A Worker entry outside the client output directory, by default `dist-worker/index.js`.                    | Point Wrangler `main` to that entry. Configure the static asset binding as `ASSETS`, enable SPA fallback, and restrict `assets.run_worker_first` to the asset prefix. |
 
-Gotchas:
+Both adapters default to the `BUILD_CACHE` R2 binding. The binding name can be configured. The asset prefix includes Vite's base path and asset directory. The Workers output must stay outside the public client output directory; the adapter rejects an output path inside it.
 
-- With no `404.html`, Pages answers a missing `/assets/x.js` with `index.html` and a 200. The `isHtml` check catches that. Adding `public/assets/404.html` also works, since Pages uses the closest `404.html`.
-- A `304` has no content-type and passes straight through, which is what we want.
+The sample apps demonstrate the Vite configuration and update UI. Deployment configuration and account resources must be supplied for the target environment.
 
-## On Workers
+## Asset requests
 
-The same logic, in a Worker. `run_worker_first` limits the Worker to `/assets/*`. Assets handle every other path, and SPA mode serves `index.html` for deep links. No catch-all route is needed.
+1. Ask the current deployment's `ASSETS` binding for the request.
+2. Pass non-GET and non-HEAD requests through unchanged.
+3. Return the current asset if the response is neither a 404 nor HTML. HTML is treated as a miss because SPA fallback can return an index page for a missing chunk.
+4. Look up the old asset in R2, using the request path relative to the configured base.
+5. Return the stored asset with its HTTP metadata, ETag, and immutable cache header. Return a real 404 when no copy exists.
 
-```ts
-// src/index.ts
-interface Env {
-  ASSETS: Fetcher
-  BUILD_CACHE: R2Bucket
-}
+HEAD requests use R2 metadata without opening an object body. The handler releases an unused current-deployment response before returning a fallback. If the R2 binding is missing, it warns and returns a 404 for a missing asset rather than an HTML success response.
 
-export default {
-  async fetch(request: Request, env: Env) {
-    const res = await env.ASSETS.fetch(request)
-    const isHtml = res.headers.get('content-type')?.includes('text/html')
-    if (res.status !== 404 && !isHtml) return res
+Generated Workers entries also check the asset prefix before calling the handler. Other paths go to static assets and SPA routing.
 
-    const key = new URL(request.url).pathname.slice(1)
-    const old = await env.BUILD_CACHE.get(key)
-    if (!old) return new Response('Not found', { status: 404 })
+## Update state
 
-    const headers = new Headers()
-    old.writeHttpMetadata(headers)
-    headers.set('ETag', old.httpEtag)
-    headers.set('Cache-Control', 'public, max-age=31536000, immutable')
-    return new Response(old.body, { headers })
-  },
-} satisfies ExportedHandler<Env>
-```
+`app-updates.ts` owns observed build facts, sticky rollback or forced-update knowledge, the published snapshot, subscribers, and the dismiss operation. Snapshot identity stays stable while attention, reason, and latest version remain unchanged.
 
-```jsonc
-// wrangler.jsonc
-{
-  "name": "my-app",
-  "main": "src/index.ts",
-  "assets": {
-    "directory": "dist",
-    "binding": "ASSETS",
-    "not_found_handling": "single-page-application",
-    "run_worker_first": ["/assets/*"],
-  },
-  "r2_buckets": [
-    { "binding": "BUILD_CACHE", "bucket_name": "spa-build-cache" },
-  ],
-}
-```
+`attention.ts` computes attention and the next deadline from explicit inputs. It reads neither clocks nor storage. It compares source versions for ordinary update detection, commit times for rollback detection, and running-build time against the forced-update cutoff. Rollback and forced-update knowledge remains urgent after later deployments, including a deployment that matches the running version.
 
-What changes from Pages: `next()` becomes `env.ASSETS.fetch(request)`, `wrangler pages deploy` becomes `wrangler deploy`, and the custom domain moves to the Worker. CI and the R2 bucket stay the same.
+`update-monitor.ts` owns requests, browser events, clock correction, and one wake timer. It anchors the response's Date header to monotonic time. Before a Date header is available, it uses the local clock. Scheduling derives a delay from the next server-time deadline and corrected current time. Update state stores neither a deadline nor a clock offset.
 
-### Generated by the Vite plugin
+Hidden tabs stop their wake timer and catch up when visible. A pending request retains a 30-second timeout and is aborted when the final subscriber leaves. Age evaluation continues on timer deadlines when network checks fail. The clock estimate survives missing Date headers and periods without subscribers.
 
-Apps don't copy the handler by hand: `appVersion({ skewProtection: { target } })` emits it at build time from one shared source.
+`prompt-dismissal.ts` persists and merges the shared prompt-dismissal timestamp. Dismissal quiets tabs whose prompt threshold had already started. It never quiets urgent attention. Without an explicit prompt snooze, dismissal lasts until urgent starts; if urgent is disabled, it has no expiry. Blocked storage retains a successful dismissal for the current tab.
 
-| Target    | Writes                                                                                      | App configures                                                                       |
-| --------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| `pages`   | `dist/_worker.js` (Pages advanced mode) and `dist/_routes.json` limited to `<base>assets/*` | R2 binding on the Pages project. Pages ignores `functions/` once `_worker.js` exists |
-| `workers` | `dist-worker/index.js`, outside `dist` so it's never served publicly                        | `wrangler.jsonc` `main`, `assets.run_worker_first`, R2 binding                       |
+`browser.ts` supplies browser capabilities without reading globals until they are used. `refresh.ts` owns explicit refresh attempts, synchronous blockers, and sharing of concurrent attempts. The app can supply a reload function to use its router's confirmation flow. Throwing blockers prevent refresh, and a failed or declined attempt can be retried.
 
-Switching from Pages to Workers is then a one-word config change plus the wrangler settings.
+`connectPrompt` connects an imperative update surface to the store. It handles attention thresholds, stable IDs, stale handles, and adapter callbacks during programmatic closure. An urgent handle cannot dismiss urgency. A passive surface can be closed locally until its attention or reason changes.
 
-The emitted worker is tested inside workerd with `@cloudflare/vitest-plugin`: one suite runs against both targets, using Pages' own `ASSETS` binding and Workers static assets in SPA mode, with a simulated R2 bucket. Removing the SPA-fallback HTML check fails 4 of those tests, and workerd caught an unread R2 body on HEAD requests, now fixed with `bucket.head()`.
+## Deployment integration
 
-## Why move to Workers
+The proposed deployment order is:
 
-- **Where new features land.** Cloudflare recommends Workers static assets for new projects and focuses new work there. Pages keeps working.
-- **Same cost.** Static requests are free on both; Pages Functions are billed at Workers rates.
-- **Better observability.** Workers Logs and Logpush are available; Pages has neither.
-- **One config.** Assets, R2, routing and any future cron or KV live in one `wrangler.jsonc`.
-- **Tighter routing control.** `run_worker_first` takes a list of path patterns, so we can add more Worker routes later without moving files around.
-- **Little lost for us.** We already build in GitHub Actions and deploy with `wrangler`, so Pages' Git integration buys us nothing.
+1. Build the app with content-hashed assets. If sourcemaps are required for Datadog, configure and upload them before removing them from public output.
+2. Remove `.map` files from the output that will be published.
+3. Sync assets to R2 without deleting previously shipped objects. For the default paths, sync `dist/assets` to the bucket's `assets` prefix.
+4. Deploy the app and generated hosting output only after the asset sync succeeds.
+5. Serve `version.json` with `Cache-Control: no-store`. Cross-origin version responses must expose their Date header if clock correction is required.
 
-Costs to check: preview URLs work differently, `_headers`/`_redirects` support differs (see the compatibility matrix), and the custom domain must move.
+The proposed R2 retention is about 30 days. Bucket lifecycle rules, credentials, preview isolation, and production deployment remain operator decisions. No live deployment or Datadog outcome is claimed by the local tests.
 
-## Migration steps
+A Pages-to-Workers migration reuses the R2 asset pool. Change the adapter factory, supply Workers deployment configuration, verify routing and bindings, and then move the domain. Existing tabs must retain access to the same chunk URLs throughout the change.
 
-1. Ship skew protection on Pages; confirm chunk-load errors drop in Datadog.
-2. Add `src/index.ts` and `wrangler.jsonc` beside the Pages config. Deploy to a `workers.dev` URL from a branch.
-3. Check `_headers`/`_redirects`, preview flow and any Pages-only settings against the compatibility matrix.
-4. Switch the GitHub Actions deploy step from `wrangler pages deploy` to `wrangler deploy`. Keep the R2 sync before it.
-5. Move the custom domain from the Pages project to the Worker.
-6. Delete `functions/assets/` and retire the Pages project after a week of clean traffic.
+## Rollbacks and scope
 
-The R2 bucket carries over as is, so tabs open during the cutover keep working.
+Dashboard rollbacks and old-commit redeploys have an older commit time. A revert deployed as a new commit needs `APP_FORCE_UPDATE_BEFORE` when existing tabs must become urgent. R2 continues serving their chunks until users refresh.
 
-## Keeping tabs current
+Deploy one Workers version at a time. Alternating version responses during a gradual deployment can appear to be a rollback.
 
-The update library is separate from the edge handler. See the [library README](../README.md) for its current interface, examples, and validation commands.
+The library retains age-based escalation, shared prompt dismissal, sticky urgency, explicit refresh, reload blockers, and prompt adapters. It does not cancel attention changes, delay urgency for typing, reload on navigation, or reload on chunk errors. Server-driven compatibility signals are deferred.
 
-The Vite plugin writes `version.json` and embeds the same build facts in the client. `@app-version/core` polls that file and exposes an external store. `@app-version/react` reads the store and registers explicit refresh blockers. Each app chooses its update surface; `connectPrompt` supports imperative UI adapters.
+## Verification
 
-Attention is passive for a newer build, prompt at 12 hours of running-build age, and urgent at 24 hours. Rollback and forced updates are urgent immediately and stay urgent until reload. The forced cutoff applies even to a rebuild of the same version.
+Behaviour and model tests cover lifecycle, network failure, cancellation, clock changes, storage failures, shared dismissal, rollback persistence, and explicit refresh. Chromium tests cover the browser environment, the Vite client helper, React hooks, and both sample update surfaces.
 
-Only prompts can be dismissed. A shared server-clock timestamp quiets tabs whose prompt threshold had already started, until each tab reaches urgent. An optional prompt snooze can set an expiry. Urgent states have no snooze, evidence record, or dismissal path.
+Vite tests build real output and check version metadata, emitted adapter assets, warnings, and build failure from adapter hooks. Workerd tests run the generated Pages and Workers handlers with static asset bindings and an R2 bucket. Local proof covers current chunks, R2 fallback, HEAD responses, missing chunks, and SPA routes.
 
-The library never reloads on navigation or on a chunk-load error. R2 fallback protects old chunks. Explicit refresh remains available and can use app reload blockers or a router's own confirmation flow. Attention changes are facts; subscribers observe them but cannot veto them. Typing and clicking do not delay urgency.
-
-### Internal modules
-
-The pure policy returns one state and its next deadline. The machine keeps the published snapshot, sticky rollback or forced knowledge, and the server-clock estimate. The browser engine owns requests, visibility, storage events, and one wake timer. Scheduling reads the cached policy deadline and does not change the model.
-
-Age deadlines are evaluated even if network checks fail. Hidden tabs stop their wake timer and catch up when visible. A pending fetch retains a 30-second timeout. Polling and the server-clock anchor use monotonic time, so wall-clock changes do not stall polling or shorten prompt dismissal.
-
-Behaviour and model tests cover lifecycle, network failure and cancellation, prompt dismissal across tabs, storage failures, clock correction, rollback persistence, and explicit refresh. Chromium tests cover the real browser host and React integration; workerd tests cover the emitted Pages and Workers handlers.
-
-### Rollbacks
-
-A dashboard rollback or old-commit redeploy has an older `commitTime`, so no extra version signal is needed. A forward revert needs `APP_FORCE_UPDATE_BEFORE` for that deploy. R2 continues serving chunks to tabs on bad builds; the urgent surface asks users to refresh without forcing a reload.
-
-Deploy one Workers version at a time. Gradual deployment can alternate `version.json` between commits and appear to be a rollback.
-
-### Scope decisions
-
-The core retains build-age escalation, cross-tab prompt dismissal, sticky urgency, explicit refresh, reload blockers, and prompt adapters. Cancelable attention changes, urgent dismissal, automatic navigation and chunk-error reloads, and typing/idle gates were removed to keep the interface small.
-
-Server-driven compatibility signals are deferred. They are not part of the current library.
-
-## Sources
-
-- [Migrate from Pages to Workers (Cloudflare docs)](https://developers.cloudflare.com/workers/static-assets/migrate-from-pages/)
-- [Workers vs. Pages compatibility matrix (Cloudflare docs)](https://developers.cloudflare.com/workers/static-assets/compatibility-matrix)
-- [Cloudflare Pages vs Workers (Flavio Copes)](https://flaviocopes.com/cloudflare-pages-vs-workers/)
-- Original pattern: Pontus Abrahamsson (@pontusab), "skew protection in 20 lines using Hono and R2"
-
-* [Skew Protection (Vercel docs)](https://vercel.com/docs/skew-protection)
-* [Deployment Retention (Vercel docs)](https://vercel.com/docs/deployment-retention)
+Package scripts and workspace configuration define the current verification commands. See the README for usage.
