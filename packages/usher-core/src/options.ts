@@ -56,7 +56,7 @@ export function resolveThresholds(
   options: Pick<
     AppUpdatesOptions,
     'promptAfter' | 'urgentAfter' | 'promptSnooze'
-  > = {},
+  >,
 ): Thresholds {
   const promptAfter = level(
     'promptAfter',

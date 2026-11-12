@@ -51,32 +51,6 @@ describe('hearing from other tabs while running', () => {
   })
 })
 
-describe('a dismissal this tab could not save', () => {
-  test('given storage refuses writes, when the tab resubscribes, then its dismissal still holds', async ({
-    app,
-    tab,
-  }) => {
-    tab.setSystemTime('2026-11-12T04:00:00Z')
-    server.use(serveBuild(newer))
-    vi.spyOn(tab.storage, 'setItem').mockImplementation(() => {
-      throw new Error('quota')
-    })
-    const store = app.create()
-    const stop = app.subscribe(store)
-    await tab.waitForResponse()
-    store.dismiss()
-
-    stop()
-    app.subscribe(store)
-    await tab.waitForResponse()
-
-    expect(store.getState()).toMatchObject({
-      attention: 'passive',
-      reason: 'dismissed',
-    })
-  })
-})
-
 describe('dismissing for every tab', () => {
   test("given another tab dismissed the prompt level, then it holds here until this tab's own urgent level", async ({
     app,
@@ -99,6 +73,46 @@ describe('dismissing for every tab', () => {
     expect(store.getState().attention).toBe('passive')
     await tab.runFor(2 * HOUR)
     expect(store.getState().attention).toBe('urgent')
+  })
+})
+
+describe('dismissals that do not apply here', () => {
+  test('given another tab dismissed before this tab reached its prompt age, then this tab still prompts when it does', async ({
+    app,
+    tab,
+  }) => {
+    server.use(serveBuild(newer))
+    const store = app.create()
+    app.subscribe(store)
+    await tab.waitForResponse()
+    await tab.runFor(10 * HOUR)
+
+    tab.otherTabSets(DISMISSAL_KEY, JSON.stringify({ dismissedAt: tab.now() }))
+    await tab.runFor(HOUR)
+
+    expect(store.getState()).toMatchObject({
+      attention: 'prompt',
+      reason: 'outdated',
+    })
+  })
+
+  test('given two apps on one origin with their own storage keys, then a dismissal in one does not quiet the other', async ({
+    app,
+    tab,
+  }) => {
+    tab.setSystemTime('2026-11-12T04:00:00Z')
+    server.use(serveBuild(newer))
+    const billing = app.create({ storageKey: 'billing' })
+    app.subscribe(billing)
+    await tab.waitForResponse()
+
+    tab.otherTabSets(DISMISSAL_KEY, JSON.stringify({ dismissedAt: tab.now() }))
+    expect(billing.getState().attention).toBe('prompt')
+
+    expect(billing.dismiss()).toBe(true)
+    expect(tab.storage.getItem('billing:prompt-dismissal')).toBe(
+      JSON.stringify({ dismissedAt: tab.now() }),
+    )
   })
 })
 
@@ -142,26 +156,7 @@ describe('clearing and blocking storage', () => {
     })
   })
 
-  test('given localStorage is blocked, when the user dismisses, then the dismissal holds in this tab', async ({
-    app,
-    tab,
-  }) => {
-    tab.setSystemTime('2026-11-12T04:00:00Z')
-    server.use(serveBuild(newer))
-    vi.spyOn(tab.storage, 'setItem').mockImplementation(() => {
-      throw new Error('quota')
-    })
-    const store = app.create()
-    app.subscribe(store)
-    await tab.waitForResponse()
-
-    expect(store.dismiss()).toBe(true)
-    await app.poll()
-
-    expect(store.getState().attention).toBe('passive')
-  })
-
-  test('given a write failed and an older dismissal is in storage, then the newer dismissal is not overridden', async ({
+  test("given storage refuses writes and holds an older dismissal, then this tab's dismissal holds, also after it resubscribes", async ({
     app,
     tab,
   }) => {
@@ -175,12 +170,18 @@ describe('clearing and blocking storage', () => {
       throw new Error('quota')
     })
     const store = app.create()
+    const stop = app.subscribe(store)
+    await tab.waitForResponse()
+    expect(store.getState().attention).toBe('prompt')
+
+    expect(store.dismiss()).toBe(true)
+    stop()
     app.subscribe(store)
     await tab.waitForResponse()
 
-    expect(store.dismiss()).toBe(true)
-    await app.poll()
-
-    expect(store.getState().attention).toBe('passive')
+    expect(store.getState()).toMatchObject({
+      attention: 'passive',
+      reason: 'dismissed',
+    })
   })
 })

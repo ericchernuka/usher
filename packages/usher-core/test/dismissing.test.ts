@@ -128,6 +128,25 @@ test('given a custom prompt snooze, then its expiry wakes without another poll',
   expect(store.getState().attention).toBe('prompt')
 })
 
+test('given the urgent level is off, then a prompt dismissal never expires', async ({
+  app,
+  tab,
+}) => {
+  tab.setSystemTime('2026-11-12T04:00:00Z')
+  server.use(serveBuild(newer))
+  const store = app.create({ urgentAfter: false, pollInterval: HOUR })
+  app.subscribe(store)
+  await tab.waitForResponse()
+  expect(store.dismiss()).toBe(true)
+
+  await tab.runFor(48 * HOUR)
+
+  expect(store.getState()).toMatchObject({
+    attention: 'passive',
+    reason: 'dismissed',
+  })
+})
+
 test('given no prompt, then dismiss has no effect', ({ app, tab }) => {
   const store = app.create()
   expect(store.dismiss()).toBe(false)

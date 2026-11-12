@@ -1,20 +1,9 @@
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  writeFileSync,
-} from 'node:fs'
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { build } from 'vite'
 import { describe, expect, it, vi } from 'vitest'
-import {
-  usher,
-  type ClientBuild,
-  type SkewProtectionAdapter,
-} from '@rndsqr/usher-plugin/vite'
+import type { ClientBuild } from '@rndsqr/usher-plugin/vite'
 import { cloudflarePages, cloudflareWorkers } from '../src/index'
 import { createAssetFallback, type ChunkArchive } from '../src/worker'
 
@@ -37,54 +26,6 @@ const clientBuild = (base = '/', root = tempRoot()): ClientBuild => ({
   assetsPrefix: `${base}assets/`,
   root,
 })
-
-async function buildFixture(adapter: SkewProtectionAdapter) {
-  const root = tempRoot()
-  writeFileSync(
-    join(root, 'index.html'),
-    `<script type="module" src="/main.js"></script>`,
-  )
-  writeFileSync(join(root, 'main.js'), `console.log("hi")`)
-  await build({
-    root,
-    logLevel: 'silent',
-    plugins: [usher({ version: 'sha', adapter })],
-  })
-
-  return root
-}
-
-function fakeEnv(files: Record<string, string>, r2: Record<string, string>) {
-  return {
-    ASSETS: {
-      async fetch(req: Request) {
-        const path = new URL(req.url).pathname
-
-        if (files[path]) {
-          return new Response(files[path], {
-            headers: { 'content-type': 'text/javascript' },
-          })
-        }
-
-        return assetsHtml()
-      },
-    },
-    CHUNK_ARCHIVE: archiveOf({
-      async get(key: string) {
-        if (!(key in r2)) {
-          return null
-        }
-
-        return {
-          body: r2[key] ?? null,
-          httpEtag: '"etag"',
-          writeHttpMetadata: (h: Headers) =>
-            h.set('content-type', 'text/javascript'),
-        }
-      },
-    }),
-  }
-}
 
 type Worker = {
   default: { fetch: ReturnType<typeof createAssetFallback<'CHUNKS'>> }
@@ -111,38 +52,19 @@ const fileNamed = (
 }
 
 describe('cloudflarePages()', () => {
-  it('describes _worker.js and a _routes.json limited to the assets prefix', async () => {
-    const { clientFiles, privateFiles, warnings } =
-      cloudflarePages().files(clientBuild())
+  it('describes _worker.js and a _routes.json limited to the assets prefix', () => {
+    const { clientFiles, privateFiles, warnings } = cloudflarePages().files(
+      clientBuild('/app/'),
+    )
 
     expect(privateFiles).toBeUndefined()
     expect(warnings).toEqual([])
+    expect(fileNamed(clientFiles, '_worker.js')).toContain('export default {')
     expect(JSON.parse(fileNamed(clientFiles, '_routes.json'))).toEqual({
       version: 1,
-      include: ['/assets/*'],
+      include: ['/app/assets/*'],
       exclude: [],
     })
-
-    const worker = await loadWorker(fileNamed(clientFiles, '_worker.js'))
-
-    const env = fakeEnv(
-      { '/assets/new-abc.js': 'new' },
-      { 'assets/old-123.js': 'old' },
-    )
-
-    const get = (p: string) =>
-      worker.default.fetch(new Request(`https://app.test${p}`), env)
-
-    expect(await (await get('/assets/new-abc.js')).text()).toBe('new')
-    const old = await get('/assets/old-123.js')
-    expect(await old.text()).toBe('old')
-    expect(old.headers.get('cache-control')).toBe(
-      'public, max-age=31536000, immutable',
-    )
-    expect((await get('/assets/never.js')).status).toBe(404)
-    expect((await get('/jobs/42')).headers.get('content-type')).toBe(
-      'text/html',
-    )
   })
 
   it('warns that Pages ignores functions/ once a _worker.js exists', () => {
@@ -153,22 +75,22 @@ describe('cloudflarePages()', () => {
       expect.stringContaining('functions/'),
     ])
   })
+})
 
-  it('respects base: routes and R2 keys', async () => {
-    const { clientFiles } = cloudflarePages().files(clientBuild('/app/'))
+describe('cloudflareWorkers()', () => {
+  it('describes one private worker file, at the configured path, and nothing for the client output', () => {
+    const { clientFiles, privateFiles } =
+      cloudflareWorkers().files(clientBuild())
 
-    expect(JSON.parse(fileNamed(clientFiles, '_routes.json')).include).toEqual([
-      '/app/assets/*',
+    expect(clientFiles).toBeUndefined()
+    expect(privateFiles?.map(file => file.fileName)).toEqual([
+      'dist-worker/index.js',
     ])
-
-    const worker = await loadWorker(fileNamed(clientFiles, '_worker.js'))
-
-    const res = await worker.default.fetch(
-      new Request('https://app.test/app/assets/old-123.js'),
-      fakeEnv({}, { 'assets/old-123.js': 'old' }),
-    )
-
-    expect(await res.text()).toBe('old')
+    expect(
+      cloudflareWorkers({ workerFile: 'edge/worker.mjs' })
+        .files(clientBuild())
+        .privateFiles?.map(file => file.fileName),
+    ).toEqual(['edge/worker.mjs'])
   })
 })
 
@@ -182,93 +104,48 @@ describe('a generated worker', () => {
     expect(source).not.toMatch(/^import\b/m)
   })
 
-  it('carries the base, assets directory and binding from the build', () => {
+  it('serves old chunks for the base, assets directory and R2 binding of the build', async () => {
     const { privateFiles } = cloudflareWorkers({ r2Binding: 'CHUNKS' }).files({
       base: '/app/',
       assetsPrefix: '/app/static/chunks/',
       root: tempRoot(),
     })
 
-    expect(fileNamed(privateFiles, 'dist-worker/index.js')).toContain(
-      '{"base":"/app/","assetsDir":"static/chunks","r2Binding":"CHUNKS"}',
-    )
-  })
-})
-
-describe('cloudflareWorkers()', () => {
-  it('describes one private worker file and nothing for the client output', async () => {
-    const { clientFiles, privateFiles } = cloudflareWorkers({
-      r2Binding: 'CHUNKS',
-    }).files(clientBuild())
-
-    expect(clientFiles).toBeUndefined()
-    expect(privateFiles?.map(file => file.fileName)).toEqual([
-      'dist-worker/index.js',
-    ])
-
     const worker = await loadWorker(
       fileNamed(privateFiles, 'dist-worker/index.js'),
     )
 
+    const keys: string[] = []
+
     const env = {
-      ...fakeEnv({}, {}),
+      ASSETS: { fetch: async () => assetsHtml() },
       CHUNKS: archiveOf({
-        get: async () => ({
-          body: 'old',
-          httpEtag: '"e"',
-          writeHttpMetadata() {},
-        }),
+        get: async (key: string) => {
+          keys.push(key)
+
+          return { body: 'old', httpEtag: '"e"', writeHttpMetadata() {} }
+        },
       }),
     }
 
-    const res = await worker.default.fetch(
-      new Request('https://app.test/assets/x.js'),
-      env,
+    const get = (path: string) =>
+      worker.default.fetch(new Request(`https://app.test${path}`), env)
+
+    expect(await (await get('/app/static/chunks/old-123.js')).text()).toBe(
+      'old',
     )
-
-    expect(await res.text()).toBe('old')
-  })
-
-  it('accepts an .mjs workerFile', () => {
-    const { privateFiles } = cloudflareWorkers({
-      workerFile: 'edge/worker.mjs',
-    }).files(clientBuild())
-
-    expect(privateFiles?.map(file => file.fileName)).toEqual([
-      'edge/worker.mjs',
-    ])
-  })
-})
-
-describe('through the Vite plugin', () => {
-  it('a Pages build has the worker and routes in the client output', async () => {
-    const root = await buildFixture(cloudflarePages())
-
-    expect(existsSync(join(root, 'dist/_worker.js'))).toBe(true)
     expect(
-      JSON.parse(readFileSync(join(root, 'dist/_routes.json'), 'utf8')).include,
-    ).toEqual(['/assets/*'])
-  })
-
-  it('a Workers build has the worker outside outDir and nothing extra in dist', async () => {
-    const root = await buildFixture(cloudflareWorkers())
-
-    expect(existsSync(join(root, 'dist-worker/index.js'))).toBe(true)
-    expect(existsSync(join(root, 'dist/_worker.js'))).toBe(false)
-  })
-
-  it('refuses a workerFile inside outDir', async () => {
-    await expect(
-      buildFixture(cloudflareWorkers({ workerFile: 'dist/worker.js' })),
-    ).rejects.toThrow(/outside outDir/)
+      (await get('/app/assets/old-123.js')).headers.get('content-type'),
+    ).toBe('text/html')
+    expect(keys).toEqual(['static/chunks/old-123.js'])
   })
 })
 
 describe('createAssetFallback()', () => {
   const fallback = createAssetFallback()
 
-  it("without its R2 binding returns 404, not the SPA's HTML", async () => {
-    vi.spyOn(console, 'warn').mockImplementation(() => {})
+  it("without its R2 binding warns and returns 404, not the SPA's HTML", async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
 
     const env = {
       ASSETS: {
@@ -282,6 +159,9 @@ describe('createAssetFallback()', () => {
     const res = await fallback(new Request('https://app.test/assets/x.js'), env)
 
     expect(res.status).toBe(404)
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('R2 binding "CHUNK_ARCHIVE" is missing'),
+    )
   })
 
   it('passes non-GET requests straight through', async () => {

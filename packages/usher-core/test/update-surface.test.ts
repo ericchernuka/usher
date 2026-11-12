@@ -40,19 +40,19 @@ describe('showing and hiding', () => {
     tab,
   }) => {
     server.use(serveBuild(older))
-    const shows: string[] = []
-    app.track(
-      connectUpdateSurface(app.create(), {
-        show: p => shows.push(`${p.attention}:${p.latest.version}`),
-        hide: () => {},
-      }),
-    )
+    const store = app.create()
+    const ui = fakeSurface()
+    app.track(connectUpdateSurface(store, ui.surface))
     await tab.waitForResponse()
 
-    server.use(serveBuild({ ...older, version: 'older-still' }))
+    server.use(serveBuild(newer))
     await app.poll()
 
-    expect(shows).toEqual(['urgent:old'])
+    expect(store.getState()).toMatchObject({
+      reason: 'rollback',
+      latest: { version: 'bbb' },
+    })
+    expect(ui.log).toEqual(['show:urgent'])
   })
 
   test('given the surface is up, when the app disconnects, then it hides and polling stops', async ({

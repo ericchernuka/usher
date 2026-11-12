@@ -68,7 +68,10 @@ describe('usher plugin', () => {
       readFileSync(join(root, 'dist/version.json'), 'utf8'),
     )
 
-    expect(json.version).toBe('sha-test')
+    expect(json).toMatchObject({
+      version: 'sha-test',
+      commitTime: '2026-11-11T09:00:00.000Z',
+    })
 
     const html = readFileSync(join(root, 'dist/index.html'), 'utf8')
     const js = html.match(/src="\/app\/(assets\/[^"]+\.js)"/)?.[1]
@@ -78,7 +81,11 @@ describe('usher plugin', () => {
     }
 
     const bundle = readFileSync(join(root, 'dist', js), 'utf8')
-    expect(bundle).toContain('sha-test')
+
+    for (const fact of Object.values(json)) {
+      expect(bundle).toContain(fact)
+    }
+
     expect(bundle).toContain('/app/version.json')
   })
 })
@@ -224,7 +231,7 @@ describe('given a skew-protection adapter', () => {
     expect(warn).toHaveBeenCalledWith('[usher] stub-host: check your routes')
   })
 
-  it('when the app is built for SSR, then nothing from the adapter is written', async () => {
+  it('when the app is built for SSR, then neither version.json nor anything from the adapter is written', async () => {
     const root = await buildWith(
       stub({
         privateFiles: [{ fileName: 'edge/worker.js', source: 'worker' }],
@@ -232,8 +239,11 @@ describe('given a skew-protection adapter', () => {
       { build: { ssr: 'server.js' } },
     )
 
+    const emitted = readdirSync(join(root, 'dist'))
+    expect(emitted).not.toHaveLength(0)
+    expect(emitted).not.toContain('version.json')
+    expect(emitted).not.toContain('build.json')
     expect(existsSync(join(root, 'edge/worker.js'))).toBe(false)
-    expect(readdirSync(join(root, 'dist'))).not.toContain('build.json')
   })
 })
 
@@ -340,26 +350,6 @@ describe('given no git and no environment', () => {
     })
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('no commit time'))
     vi.unstubAllEnvs()
-  })
-})
-
-describe('given a server-side build', () => {
-  it('when the app is built for SSR, then no version.json is written', async () => {
-    const root = mkdtempSync(join(tmpdir(), 'usher-ssr-'))
-    writeFileSync(join(root, 'server.js'), 'export default 1\n')
-
-    await build({
-      root,
-      logLevel: 'silent',
-      build: { ssr: 'server.js' },
-      plugins: [
-        usher({ version: 'sha-test', commitTime: '2026-11-11T09:00:00Z' }),
-      ],
-    })
-
-    const emitted = readdirSync(join(root, 'dist'))
-    expect(emitted).not.toHaveLength(0)
-    expect(emitted).not.toContain('version.json')
   })
 })
 

@@ -1,8 +1,62 @@
+import type { Attention } from '../src/types'
 import { server } from './mocks/node'
 import { serveBuild, serveNetworkError } from './mocks/overrides'
-import { HOUR, MINUTE, describe, expect, newer, test } from './fixtures'
+import {
+  HOUR,
+  MINUTE,
+  describe,
+  expect,
+  newer,
+  running,
+  test,
+  type StoreOptions,
+} from './fixtures'
 
 describe('escalating as the running build ages', () => {
+  test.for<{
+    name: string
+    options: StoreOptions
+    hours: number
+    attention: Attention
+  }>([
+    {
+      name: 'the prompt level is off',
+      options: { promptAfter: false },
+      hours: 23,
+      attention: 'passive',
+    },
+    {
+      name: 'the prompt level is off',
+      options: { promptAfter: false },
+      hours: 24,
+      attention: 'urgent',
+    },
+    {
+      name: 'the urgent level is off',
+      options: { urgentAfter: false },
+      hours: 48,
+      attention: 'prompt',
+    },
+    {
+      name: 'both levels are off',
+      options: { promptAfter: false, urgentAfter: false },
+      hours: 48,
+      attention: 'passive',
+    },
+  ])(
+    'given $name, then a $hours h old build is $attention',
+    async ({ options, hours, attention }, { app, tab }) => {
+      server.use(serveBuild(newer))
+      const store = app.create({ pollInterval: HOUR, ...options })
+      app.subscribe(store)
+      await tab.waitForResponse()
+
+      await tab.runFor(Date.parse(running.buildTime) + hours * HOUR - tab.now())
+
+      expect(store.getState().attention).toBe(attention)
+    },
+  )
+
   test('given a backward clock change and a failed focus check, then urgency still starts on time', async ({
     app,
     tab,

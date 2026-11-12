@@ -9,7 +9,16 @@ import {
   serveNetworkError,
   serveRaw,
 } from './mocks/overrides'
-import { HOUR, MINUTE, describe, expect, newer, older, test } from './fixtures'
+import {
+  HOUR,
+  MINUTE,
+  SECOND,
+  describe,
+  expect,
+  newer,
+  older,
+  test,
+} from './fixtures'
 
 describe('checking for a new build', () => {
   test('given a subscriber, then the check is a cache-busting, uncacheable GET', async ({
@@ -199,6 +208,26 @@ describe('polling schedule', () => {
 
     await tab.runFor(MINUTE)
     expect(requests).toHaveLength(afterFocus + 1)
+  })
+
+  test('given focus or visibility returns within a minute of a check, then the tab does not check again', async ({
+    app,
+    tab,
+    requests,
+  }) => {
+    app.subscribe(app.create())
+    await tab.waitForResponse()
+    await tab.runFor(MINUTE - SECOND)
+
+    tab.focus()
+    tab.setVisibility('visible')
+    await tab.waitForResponse()
+    expect(requests).toHaveLength(1)
+
+    await tab.runFor(SECOND)
+    tab.focus()
+    await tab.waitForResponse()
+    expect(requests).toHaveLength(2)
   })
 
   test("given the user's clock jumps back a day, then polling carries on", async ({

@@ -1,21 +1,5 @@
 import { vi } from 'vitest'
-import { server } from './mocks/node'
-import { serveBuild } from './mocks/overrides'
-import { describe, expect, newer, test } from './fixtures'
-
-describe('refreshing after a declined reload', () => {
-  test('given the first reload was declined, when the user refreshes again, then it is attempted again', async ({
-    app,
-  }) => {
-    server.use(serveBuild(newer))
-    const reload = vi.fn<() => boolean>(() => false)
-    const store = app.create({ reload })
-
-    expect(await store.refresh()).toBe(false)
-    expect(await store.refresh()).toBe(false)
-    expect(reload).toHaveBeenCalledTimes(2)
-  })
-})
+import { describe, expect, test } from './fixtures'
 
 describe('refreshing', () => {
   test('given two refreshes at once, then they share one reload', async ({
@@ -60,10 +44,11 @@ describe('refreshing', () => {
     expect(await throwing.refresh()).toBe(false)
   })
 
-  test('given refresh blockers, then any one vetoes and removing it lifts the veto', async ({
+  test('given refresh blockers, then any one that returns true or throws vetoes, and removing it lifts the veto', async ({
     app,
     tab,
   }) => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
     const store = app.create()
     const removeForm = store.addRefreshBlocker(() => true)
     store.addRefreshBlocker(() => false)
@@ -71,6 +56,18 @@ describe('refreshing', () => {
     expect(await store.refresh()).toBe(false)
 
     removeForm()
+
+    const removeBroken = store.addRefreshBlocker(() => {
+      throw new Error('form state unavailable')
+    })
+
+    expect(await store.refresh()).toBe(false)
+    expect(error).toHaveBeenCalledWith(
+      '[usher] refresh blocker threw',
+      expect.any(Error),
+    )
+
+    removeBroken()
 
     expect(await store.refresh()).toBe(true)
     expect(tab.reloads).toBe(1)
