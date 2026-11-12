@@ -92,6 +92,6 @@ describe('adapters that misbehave', () => {
     server.use(serveBuild({ ...older, version: 'older-still' }))
     await app.poll()
 
-    expect(shows).toEqual(['passive:new-build', 'urgent:rollback'])
+    expect(shows).toEqual(['passive:outdated', 'urgent:rollback'])
   })
 })

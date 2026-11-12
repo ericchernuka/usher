@@ -8,7 +8,7 @@ import workersHtml from '../../../apps/workers-react/index.html?raw'
 const latest = {
   version: 'sample-deploy',
   commitTime: '2099-01-01T00:00:00.000Z',
-  builtAt: '2099-01-01T00:00:00.000Z',
+  buildTime: '2099-01-01T00:00:00.000Z',
 }
 
 afterEach(() => {

@@ -3,7 +3,7 @@ import { server } from './mocks/node'
 import { serveBuild } from './mocks/overrides'
 import {
   MINUTE,
-  current,
+  running,
   describe,
   expect,
   newer,
@@ -119,17 +119,46 @@ describe('snapshots', () => {
     server.use(serveBuild(older))
     const store = app.create()
     const seen: Array<[string, string | undefined]> = []
-    app.subscribe(store, () =>
-      seen.push([store.getState().attention, store.getState().latest?.version]),
-    )
+    app.subscribe(store, () => {
+      const state = store.getState()
+      seen.push([
+        state.attention,
+        'latest' in state ? state.latest.version : undefined,
+      ])
+    })
     await clock.waitForResponse()
 
-    server.use(serveBuild(current))
+    server.use(serveBuild(running))
     await app.poll()
 
     expect(seen).toEqual([
       ['urgent', 'old'],
       ['urgent', 'aaa'],
     ])
+  })
+
+  test('given the same version is rebuilt, when the check lands, then the snapshot carries the new build facts', async ({
+    app,
+    clock,
+  }) => {
+    server.use(serveBuild(newer))
+    const store = app.create()
+    const listener = vi.fn<() => void>()
+    app.subscribe(store, listener)
+    await clock.waitForResponse()
+    const first = store.getState()
+    listener.mockClear()
+
+    const rebuilt = { ...newer, buildTime: '2026-11-11T15:45:00.000Z' }
+    server.use(serveBuild(rebuilt))
+    await app.poll()
+
+    expect(store.getState()).not.toBe(first)
+    expect(store.getState()).toEqual({
+      attention: 'passive',
+      reason: 'outdated',
+      latest: rebuilt,
+    })
+    expect(listener).toHaveBeenCalledTimes(1)
   })
 })

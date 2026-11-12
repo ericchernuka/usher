@@ -4,22 +4,22 @@ import { installPlainClock } from './clock'
 import {
   aged,
   createWorld,
-  current,
+  running,
   random,
   rollbackThenFix,
-  SNOOZE_KEY,
+  DISMISSAL_KEY,
 } from './model/world'
 import type { Action, Scenario, World } from './model/world'
 
 interface Run {
   stop: () => void
-  knownBad: boolean
+  stickyUrgency: boolean
   promptQuietUntil: number
 }
 
 function dismiss(w: World, r: Run) {
   const before = w.store.getState()
-  const stored = w.host.localStorage.getItem(SNOOZE_KEY)
+  const stored = w.host.localStorage.getItem(DISMISSAL_KEY)
   const dismissed = w.store.dismiss()
 
   if (before.attention !== 'prompt') {
@@ -33,29 +33,29 @@ function dismiss(w: World, r: Run) {
       w.world.config === 'promptSnooze' ? w.serverNow() + 3_600_000 : Infinity
   } else {
     expect(w.store.getState()).toBe(before)
-    expect(w.host.localStorage.getItem(SNOOZE_KEY)).toBe(stored)
+    expect(w.host.localStorage.getItem(DISMISSAL_KEY)).toBe(stored)
   }
 }
 
 async function tabAction(
   a: Exclude<
     Action,
-    { type: 'advance' | 'serve' | 'focus' | 'visibility' | 'dismiss' }
+    { type: 'advance' | 'serve' | 'focus' | 'visibility' | 'dismissed' }
   >,
   w: World,
   r: Run,
 ) {
   switch (a.type) {
     case 'otherTabClear':
-      w.host.localStorage.removeItem(SNOOZE_KEY)
+      w.host.localStorage.removeItem(DISMISSAL_KEY)
       w.host.storageEvent(null)
       r.promptQuietUntil = -Infinity
 
       return
     case 'otherTabSet':
       w.host.otherTabSets(
-        SNOOZE_KEY,
-        JSON.stringify({ promptAt: w.serverNow() }),
+        DISMISSAL_KEY,
+        JSON.stringify({ dismissedAt: w.serverNow() }),
       )
 
       return
@@ -93,25 +93,25 @@ function action(a: Action, w: World, r: Run) {
       w.host.setVisibility(a.visible ? 'visible' : 'hidden')
 
       return
-    case 'dismiss':
+    case 'dismissed':
       return dismiss(w, r)
     default:
       return tabAction(a, w, r)
   }
 }
 
-function knownBadInvariant(w: World, r: Run) {
+function stickyUrgencyInvariant(w: World, r: Run) {
   const state = w.store.getState()
   const delivered = w.delivered.splice(0)
-  r.knownBad ||= delivered.some(
+  r.stickyUrgency ||= delivered.some(
     ({ build, signal }) =>
       !signal?.aborted &&
-      (Date.parse(build.commitTime) < Date.parse(current.commitTime) ||
+      (Date.parse(build.commitTime) < Date.parse(running.commitTime) ||
         Date.parse(build.forceUpdateBefore ?? '') >
-          Date.parse(current.builtAt)),
+          Date.parse(running.buildTime)),
   )
 
-  if (r.knownBad) {
+  if (r.stickyUrgency) {
     expect(state.attention).toBe('urgent')
     expect(['rollback', 'forced']).toContain(state.reason)
   }
@@ -119,7 +119,7 @@ function knownBadInvariant(w: World, r: Run) {
 
 function invariants(w: World, r: Run) {
   const state = w.store.getState()
-  knownBadInvariant(w, r)
+  stickyUrgencyInvariant(w, r)
 
   if (state.attention !== 'none') {
     expect(state.latest).toBeDefined()
@@ -141,7 +141,7 @@ async function run(scenario: Scenario) {
 
   const r: Run = {
     stop: w.store.subscribe(() => {}),
-    knownBad: false,
+    stickyUrgency: false,
     promptQuietUntil: -Infinity,
   }
 

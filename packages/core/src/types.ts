@@ -5,20 +5,24 @@ const Timestamp = v.pipe(
   v.check(value => !Number.isNaN(Date.parse(value))),
 )
 
-/** The runtime check for `version.json`; `VersionInfo` is derived from it, so they can't drift. */
-export const VersionInfoSchema = v.object({
-  /** Commit SHA the build came from. Equality = same build. */
+/** The runtime check for `version.json`; `BuildFacts` is derived from it, so they can't drift. */
+const BuildFactsSchema = v.object({
+  /** Source version the build came from, usually a commit SHA. Separate builds can share one. */
   version: v.pipe(v.string(), v.nonEmpty()),
   /** Commit time (ISO). Orders builds: lower than the running tab's = rollback. */
   commitTime: Timestamp,
   /** When the build ran (ISO). Build age, the basis of escalation, counts from here. */
-  builtAt: Timestamp,
+  buildTime: Timestamp,
   /** Tabs whose build ran before this time (ISO) must update. Set via APP_FORCE_UPDATE_BEFORE. */
   forceUpdateBefore: v.exactOptional(Timestamp),
 })
 
-/** Build facts shared by the running application and the serving deployment. */
-export type VersionInfo = v.InferOutput<typeof VersionInfoSchema>
+/** Build facts shared by the running build and the serving deployment. */
+export type BuildFacts = v.InferOutput<typeof BuildFactsSchema>
+
+export function isBuildFacts(value: unknown): value is BuildFacts {
+  return v.is(BuildFactsSchema, value)
+}
 
 /** A duration such as "30s", "5m", "12h" or "2d". Checked at runtime too ("-5m", "1e3s" throw). */
 export type Duration = `${number}${'s' | 'm' | 'h' | 'd'}`
@@ -49,34 +53,30 @@ export interface Escalation {
  */
 export type Attention = 'none' | 'passive' | 'prompt' | 'urgent'
 
-/** Why attention is what it is, per level. */
-export interface ReasonsByAttention {
-  /** unknown: not checked yet. caught-up: running the latest build. */
-  none: 'unknown' | 'caught-up'
-  /** A newer build is available, or a prompt was dismissed. */
-  passive: 'new-build' | 'dismiss'
-  /** The running build passed `escalation.prompt.after`. */
-  prompt: 'stale'
-  /** rollback / forced: the running build is known bad (sticky until reload). expired: passed `escalation.urgent.after`. */
-  urgent: 'rollback' | 'forced' | 'expired'
-}
-
-export type Behind = Exclude<Attention, 'none'>
-
-/** One update state, as a union: impossible combinations (e.g. none + "dismiss") can't be expressed. */
+/**
+ * One update state. `reason` always belongs to `attention`, and `latest` is present
+ * once a check has landed.
+ *
+ * - `unknown`: no check has landed yet.
+ * - `caught-up`: the tab runs the latest build.
+ * - `outdated`: a newer build is being served; attention says how loudly to ask.
+ * - `dismissed`: the user dismissed the prompt.
+ * - `rollback` / `forced`: sticky urgency, kept until the tab reloads.
+ */
 export type UpdateState =
+  | { attention: 'none'; reason: 'unknown' }
+  | { attention: 'none'; reason: 'caught-up'; latest: BuildFacts }
   | {
-      attention: 'none'
-      reason: ReasonsByAttention['none']
-      latest?: VersionInfo
+      attention: 'passive'
+      reason: 'outdated' | 'dismissed'
+      latest: BuildFacts
     }
+  | { attention: 'prompt'; reason: 'outdated'; latest: BuildFacts }
   | {
-      [A in Behind]: {
-        attention: A
-        reason: ReasonsByAttention[A]
-        latest: VersionInfo
-      }
-    }[Behind]
+      attention: 'urgent'
+      reason: 'outdated' | 'rollback' | 'forced'
+      latest: BuildFacts
+    }
 
 /** The destination of an explicit refresh. */
 export interface ReloadDetails {

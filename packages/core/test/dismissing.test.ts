@@ -3,7 +3,7 @@ import { serveBuild, serveNetworkError } from './mocks/overrides'
 import {
   HOUR,
   MINUTE,
-  SNOOZE_KEY,
+  DISMISSAL_KEY,
   expect,
   newer,
   older,
@@ -19,7 +19,7 @@ test('given the user dismissed the prompt level, then it stays quiet until the u
   const store = app.create()
   app.subscribe(store)
   await clock.waitForResponse()
-  expect(store.getState().reason).toBe('stale')
+  expect(store.getState().attention).toBe('prompt')
 
   store.dismiss()
   await clock.runFor(10 * HOUR)
@@ -28,7 +28,7 @@ test('given the user dismissed the prompt level, then it stays quiet until the u
 
   await clock.runFor(HOUR)
 
-  expect(store.getState().reason).toBe('expired')
+  expect(store.getState().attention).toBe('urgent')
 })
 
 test("given Date headers round down to the second, then a prompt dismissal can't end before urgent starts", async ({
@@ -52,10 +52,10 @@ test("given Date headers round down to the second, then a prompt dismissal can't
 
   await clock.runFor(11 * HOUR)
 
-  expect(states).not.toContain('prompt:stale')
+  expect(states).not.toContain('prompt:outdated')
   expect(store.getState()).toMatchObject({
     attention: 'urgent',
-    reason: 'expired',
+    reason: 'outdated',
   })
 })
 
@@ -67,10 +67,10 @@ test.for([
     reason: 'rollback',
   },
   {
-    name: 'expired',
+    name: 'outdated',
     build: newer,
     time: '2026-11-12T16:00:00Z',
-    reason: 'expired',
+    reason: 'outdated',
   },
   {
     name: 'forced',
@@ -87,10 +87,10 @@ test.for([
     app.subscribe(store)
     await clock.waitForResponse()
     const before = store.getState()
-    expect(before.reason).toBe(reason)
+    expect(before).toMatchObject({ attention: 'urgent', reason })
     expect(store.dismiss()).toBe(false)
     expect(store.getState()).toBe(before)
-    expect(host.localStorage.getItem(SNOOZE_KEY)).toBeNull()
+    expect(host.localStorage.getItem(DISMISSAL_KEY)).toBeNull()
   },
 )
 
@@ -107,7 +107,7 @@ test('given a default prompt snooze and a clock jump, then it stays quiet until 
   clock.setSystemTime(Date.now() + 24 * HOUR)
   server.use(serveNetworkError())
   await clock.runFor(10 * MINUTE)
-  expect(store.getState().reason).toBe('dismiss')
+  expect(store.getState().reason).toBe('dismissed')
 })
 
 test('given a custom prompt snooze, then its expiry wakes without another poll', async ({
@@ -131,7 +131,7 @@ test('given a custom prompt snooze, then its expiry wakes without another poll',
 test('given no prompt, then dismiss has no effect', ({ app, host }) => {
   const store = app.create()
   expect(store.dismiss()).toBe(false)
-  expect(host.localStorage.getItem(SNOOZE_KEY)).toBeNull()
+  expect(host.localStorage.getItem(DISMISSAL_KEY)).toBeNull()
 })
 
 test('given a hidden prompt passes the urgent deadline, then dismissal writes nothing and visibility reveals urgent', async ({
@@ -150,7 +150,7 @@ test('given a hidden prompt passes the urgent deadline, then dismissal writes no
   expect(before.attention).toBe('prompt')
   expect(store.dismiss()).toBe(false)
   expect(store.getState()).toBe(before)
-  expect(host.localStorage.getItem(SNOOZE_KEY)).toBeNull()
+  expect(host.localStorage.getItem(DISMISSAL_KEY)).toBeNull()
   host.setVisibility('visible')
-  expect(store.getState().reason).toBe('expired')
+  expect(store.getState().attention).toBe('urgent')
 })

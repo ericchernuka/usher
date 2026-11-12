@@ -24,7 +24,7 @@ describe('escalating as the running build ages', () => {
 
     expect(store.getState()).toMatchObject({
       attention: 'urgent',
-      reason: 'expired',
+      reason: 'outdated',
     })
   })
 
@@ -43,14 +43,14 @@ describe('escalating as the running build ages', () => {
 
     expect(store.getState()).toMatchObject({
       attention: 'prompt',
-      reason: 'stale',
+      reason: 'outdated',
     })
 
     await clock.runFor(12 * HOUR)
 
     expect(store.getState()).toMatchObject({
       attention: 'urgent',
-      reason: 'expired',
+      reason: 'outdated',
     })
   })
 })
@@ -86,7 +86,7 @@ test('given time passed while hidden, then visibility evaluates age even if the 
   server.use(serveNetworkError())
   host.setVisibility('visible')
   await clock.waitForResponse()
-  expect(store.getState().reason).toBe('expired')
+  expect(store.getState().attention).toBe('urgent')
 })
 
 test('given time passed while unsubscribed, then subscribing evaluates age before a failed check', async ({
@@ -101,5 +101,5 @@ test('given time passed while unsubscribed, then subscribing evaluates age befor
   await clock.runFor(24 * HOUR)
   server.use(serveNetworkError())
   app.subscribe(store)
-  expect(store.getState().reason).toBe('expired')
+  expect(store.getState().attention).toBe('urgent')
 })

@@ -3,7 +3,7 @@ import { resolve } from 'node:path'
 import * as v from 'valibot'
 import type { Plugin, ResolvedConfig } from 'vite'
 import type { SkewProtectionAdapter, SkewProtectionContext } from './adapter'
-import type { VersionInfo } from '@app-version/core'
+import type { BuildFacts } from '@app-version/core'
 
 export type {
   SkewProtectionAdapter,
@@ -110,10 +110,10 @@ function buildVersion(version: { value: string } | undefined, now: Date) {
   return version?.value ?? `dev-${now.getTime()}`
 }
 
-export function resolveVersionInfo(
+export function resolveBuildFacts(
   opts: AppVersionOptions = {},
   { env = process.env, now = new Date(), warn }: VersionRuntime = {},
-): VersionInfo {
+): BuildFacts {
   const version = firstSet(
     ['version', opts.version],
     ['APP_VERSION', env['APP_VERSION']],
@@ -143,10 +143,10 @@ export function resolveVersionInfo(
     ),
   )
 
-  const info: VersionInfo = {
+  const info: BuildFacts = {
     version: buildVersion(version, now),
     commitTime: commitTime ?? now.toISOString(),
-    builtAt: now.toISOString(),
+    buildTime: now.toISOString(),
   }
 
   if (forceUpdateBefore) {
@@ -199,13 +199,13 @@ const resolveId = (id: string) => (id === VIRTUAL_ID ? RESOLVED_ID : undefined)
 export function appVersion(opts: AppVersionOptions = {}) {
   const fileName = opts.fileName ?? 'version.json'
   let config: VersionConfig
-  let info: VersionInfo
+  let info: BuildFacts
 
   return {
     name: 'app-version',
     configResolved(resolved: VersionConfig) {
       config = resolved
-      info = resolveVersionInfo(opts, {
+      info = resolveBuildFacts(opts, {
         warn: m => resolved.logger.warn(m),
       })
 
@@ -221,7 +221,7 @@ export function appVersion(opts: AppVersionOptions = {}) {
         return undefined
       }
 
-      return `export const appVersion = ${JSON.stringify(info)};\nexport const versionUrl = ${JSON.stringify(config.base + fileName)};\n`
+      return `export const runningBuild = ${JSON.stringify(info)};\nexport const versionUrl = ${JSON.stringify(config.base + fileName)};\n`
     },
     configureServer(server: VersionServer) {
       server.middlewares.use(versionMiddleware(config.base, fileName, info))
@@ -267,7 +267,7 @@ function isServerBuild(ctx: HookEnvironment) {
 function versionMiddleware(
   base: string,
   fileName: string,
-  info: VersionInfo,
+  info: BuildFacts,
 ): Parameters<VersionServer['middlewares']['use']>[0] {
   return (req, res, next) => {
     if (!isVersionRequest(base, fileName, req.url)) {

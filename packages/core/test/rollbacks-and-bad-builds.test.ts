@@ -1,6 +1,6 @@
 import { server } from './mocks/node'
 import { serveBuild } from './mocks/overrides'
-import { HOUR, current, describe, expect, newer, older, test } from './fixtures'
+import { HOUR, running, describe, expect, newer, older, test } from './fixtures'
 
 describe('a rollback', () => {
   test('given the server redeploys an older commit, then the tab is urgent at once', async ({
@@ -45,7 +45,7 @@ describe('a forced update', () => {
     clock,
   }) => {
     server.use(
-      serveBuild({ ...current, forceUpdateBefore: '2026-11-11T15:30:00.000Z' }),
+      serveBuild({ ...running, forceUpdateBefore: '2026-11-11T15:30:00.000Z' }),
     )
     const store = app.create()
     app.subscribe(store)
@@ -65,7 +65,7 @@ describe('a forced update', () => {
       serveBuild({
         ...newer,
         forceUpdateBefore: new Date(
-          Date.parse(current.builtAt) - HOUR,
+          Date.parse(running.buildTime) - HOUR,
         ).toISOString(),
       }),
     )
@@ -75,7 +75,7 @@ describe('a forced update', () => {
 
     expect(store.getState()).toMatchObject({
       attention: 'passive',
-      reason: 'new-build',
+      reason: 'outdated',
     })
   })
 })

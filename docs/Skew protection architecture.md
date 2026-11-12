@@ -60,7 +60,7 @@ Generated Workers entries also check the asset prefix before calling the handler
 
 ## Update state
 
-`app-updates.ts` owns observed build facts, sticky rollback or forced-update knowledge, the published snapshot, subscribers, and the dismiss operation. Snapshot identity stays stable while attention, reason, and latest version remain unchanged.
+`app-updates.ts` owns observed build facts, sticky rollback or forced-update knowledge, the published snapshot, subscribers, and the dismiss operation. Snapshot identity stays stable while attention, reason, and the latest build facts remain unchanged.
 
 `attention.ts` computes attention and the next deadline from explicit inputs. It reads neither clocks nor storage. It compares source versions for ordinary update detection, commit times for rollback detection, and running-build time against the forced-update cutoff. Rollback and forced-update knowledge remains urgent after later deployments, including a deployment that matches the running version.
 

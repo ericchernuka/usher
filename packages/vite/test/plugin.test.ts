@@ -3,11 +3,11 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { build, createLogger } from 'vite'
 import { describe, expect, it, vi } from 'vitest'
-import { appVersion, resolveVersionInfo } from '../src/index'
+import { appVersion, resolveBuildFacts } from '../src/index'
 
-describe('resolveVersionInfo', () => {
+describe('resolveBuildFacts', () => {
   it('prefers env and normalizes dates', () => {
-    const info = resolveVersionInfo(
+    const info = resolveBuildFacts(
       { commitTime: '2026-11-11T09:00:00-06:00' },
       {
         env: {
@@ -21,7 +21,7 @@ describe('resolveVersionInfo', () => {
     expect(info).toEqual({
       version: 'abc123',
       commitTime: '2026-11-11T15:00:00.000Z',
-      builtAt: '2026-11-11T16:00:00.000Z',
+      buildTime: '2026-11-11T16:00:00.000Z',
       forceUpdateBefore: '2026-11-11T10:00:00.000Z',
     })
   })
@@ -36,7 +36,7 @@ describe('appVersion plugin', () => {
     )
     writeFileSync(
       join(root, 'main.js'),
-      `import { appVersion, versionUrl } from "virtual:app-version";\nwindow.__v = [appVersion.version, versionUrl];`,
+      `import { runningBuild, versionUrl } from "virtual:app-version";\nwindow.__v = [runningBuild.version, versionUrl];`,
     )
 
     await build({
@@ -128,7 +128,7 @@ it.each(['bundleAssets', 'writeBundle'] as const)(
 
 describe('plugin and edge (first review #12)', () => {
   it('treats empty CI variables as missing and accepts an explicit commit time', () => {
-    const info = resolveVersionInfo(
+    const info = resolveBuildFacts(
       {},
       {
         env: { APP_VERSION: '', GITHUB_SHA: 'abc', APP_COMMIT_TIME: '' },
@@ -138,7 +138,7 @@ describe('plugin and edge (first review #12)', () => {
 
     expect(info.version).toBe('abc')
 
-    const explicit = resolveVersionInfo(
+    const explicit = resolveBuildFacts(
       {},
       { env: { GITHUB_SHA: 'abc', APP_COMMIT_TIME: '2026-11-10T00:00:00Z' } },
     )
@@ -150,7 +150,7 @@ describe('plugin and edge (first review #12)', () => {
 describe('given a malformed timestamp', () => {
   it('when APP_COMMIT_TIME is not ISO 8601, then the build fails naming the variable', () => {
     expect(() =>
-      resolveVersionInfo(
+      resolveBuildFacts(
         {},
         { env: { GITHUB_SHA: 'abc', APP_COMMIT_TIME: 'last tuesday' } },
       ),
@@ -161,7 +161,7 @@ describe('given a malformed timestamp', () => {
 
   it('when the forceUpdateBefore option is malformed, then the build fails naming the option', () => {
     expect(() =>
-      resolveVersionInfo(
+      resolveBuildFacts(
         { forceUpdateBefore: '2026-13-45' },
         { env: { GITHUB_SHA: 'abc', APP_COMMIT_TIME: '2026-11-10T00:00:00Z' } },
       ),
@@ -169,7 +169,7 @@ describe('given a malformed timestamp', () => {
   })
 
   it('when a value is only whitespace, then it counts as unset', () => {
-    const info = resolveVersionInfo(
+    const info = resolveBuildFacts(
       { version: '  ' },
       { env: { GITHUB_SHA: ' abc ', APP_COMMIT_TIME: '2026-11-10T00:00:00Z' } },
     )
@@ -240,12 +240,12 @@ describe('given no git and no environment', () => {
     const warn = vi.fn<() => void>()
     const now = new Date('2026-11-11T16:00:00Z')
 
-    const info = resolveVersionInfo({}, { env: {}, now, warn })
+    const info = resolveBuildFacts({}, { env: {}, now, warn })
 
     expect(info).toEqual({
       version: `dev-${now.getTime()}`,
       commitTime: '2026-11-11T16:00:00.000Z',
-      builtAt: '2026-11-11T16:00:00.000Z',
+      buildTime: '2026-11-11T16:00:00.000Z',
     })
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('no commit time'))
     vi.unstubAllEnvs()
@@ -285,7 +285,7 @@ describe('given a module the plugin does not own', () => {
     )
     writeFileSync(
       join(root, 'main.js'),
-      'import { appVersion } from "virtual:app-version"\nimport { greeting } from "./dep.js"\nwindow.__v = [appVersion.version, greeting]\n',
+      'import { runningBuild } from "virtual:app-version"\nimport { greeting } from "./dep.js"\nwindow.__v = [runningBuild.version, greeting]\n',
     )
 
     await build({

@@ -7,10 +7,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createAppUpdatesStore } from '../src/app-updates'
 import { captureNavigations, type NavigationRequest } from './navigation'
 
-const current = {
+const running = {
   version: 'aaa',
   commitTime: '2026-11-11T15:00:00.000Z',
-  builtAt: '2026-11-11T15:00:00.000Z',
+  buildTime: '2026-11-11T15:00:00.000Z',
 }
 
 let navigations: NavigationRequest[]
@@ -26,8 +26,8 @@ function setup() {
   })
 
   const appUpdates = createAppUpdatesStore({
-    current,
-    url: '/version.json',
+    running,
+    versionUrl: '/version.json',
     reload: async ({ href }) => {
       await router.navigate({ href, reloadDocument: true, replace: true })
 

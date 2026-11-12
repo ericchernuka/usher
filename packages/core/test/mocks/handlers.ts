@@ -1,5 +1,5 @@
 import { http, HttpResponse, type HttpHandler } from 'msw/http'
-import { appVersion } from '../build-info.stub'
+import { runningBuild } from '../build-info.stub'
 
 export const VERSION_URL = 'https://app.test/version.json'
 
@@ -30,4 +30,4 @@ export function versionHandler(
   )
 }
 
-export const handlers = [versionHandler(appVersion)]
+export const handlers = [versionHandler(runningBuild)]

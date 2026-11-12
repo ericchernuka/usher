@@ -1,7 +1,7 @@
 import { ms, resolveEscalation, type ResolvedEscalation } from './duration'
 import { createUpdateMonitor } from './update-monitor'
 import { createBrowserEnvironment, type BrowserEnvironment } from './browser'
-import { resolveAttention, type KnownBad } from './attention'
+import { resolveAttention, type StickyUrgency } from './attention'
 import { isolate } from './callbacks'
 import { createRefresh, type ReloadBlocker } from './refresh'
 import { createPromptDismissal } from './prompt-dismissal'
@@ -10,16 +10,16 @@ import type {
   Escalation,
   ReloadFn,
   UpdateState,
-  VersionInfo,
+  BuildFacts,
 } from './types'
 
 export type { ReloadBlocker } from './refresh'
 
 export interface AppUpdatesOptions {
-  /** Build facts embedded in the running application. */
-  current: VersionInfo
+  /** Build facts of the running build. */
+  running: BuildFacts
   /** URL of the serving deployment's version.json. */
-  url: string
+  versionUrl: string
   /** When outdated tabs escalate, by build age. Default `{ prompt: { after: "12h" }, urgent: { after: "24h" } }`. */
   escalation?: Escalation
   /**
@@ -66,6 +66,27 @@ function pollMs(value: Duration = '5m'): number {
   return result
 }
 
+const FACTS = [
+  'version',
+  'commitTime',
+  'buildTime',
+  'forceUpdateBefore',
+] as const satisfies ReadonlyArray<keyof BuildFacts>
+
+function sameState(a: UpdateState, b: UpdateState) {
+  if (a.attention !== b.attention || a.reason !== b.reason) {
+    return false
+  }
+
+  if (!('latest' in a) || !('latest' in b)) {
+    return true
+  }
+
+  const [x, y] = [a.latest, b.latest]
+
+  return FACTS.every(fact => x[fact] === y[fact])
+}
+
 function notifyAll(listeners: ReadonlySet<{ listener: () => void }>) {
   for (const entry of Array.from(listeners)) {
     isolate('listener', entry.listener)
@@ -81,8 +102,8 @@ class AppUpdatesStore implements AppUpdates {
   readonly monitor: ReturnType<typeof createUpdateMonitor>
   readonly listeners = new Set<{ listener: () => void }>()
   state: UpdateState = { attention: 'none', reason: 'unknown' }
-  latest: VersionInfo | undefined
-  knownBad: KnownBad | undefined
+  latest: BuildFacts | undefined
+  stickyUrgency: StickyUrgency | undefined
 
   constructor(options: UpdateStoreOptions) {
     this.options = options
@@ -97,7 +118,7 @@ class AppUpdatesStore implements AppUpdates {
       browser: this.browser,
     })
     this.monitor = createUpdateMonitor({
-      url: options.url,
+      versionUrl: options.versionUrl,
       pollMs: pollMs(options.pollEvery),
       browser: this.browser,
       dismissal: this.dismissal,
@@ -109,10 +130,10 @@ class AppUpdatesStore implements AppUpdates {
   decision = (dismissal = this.dismissal.get()) =>
     this.latest
       ? resolveAttention({
-          current: this.options.current,
+          running: this.options.running,
           latest: this.latest,
           now: this.monitor.serverNow(),
-          ...(this.knownBad && { knownBad: this.knownBad }),
+          ...(this.stickyUrgency && { stickyUrgency: this.stickyUrgency }),
           dismissal,
           escalation: this.escalation,
         })
@@ -123,17 +144,13 @@ class AppUpdatesStore implements AppUpdates {
     const result = this.decision()
 
     if (result) {
-      this.knownBad = result.knownBad
+      this.stickyUrgency = result.stickyUrgency
       this.publish(result.state)
     }
   }
 
   publish = (next: UpdateState) => {
-    if (
-      next.attention === this.state.attention &&
-      next.reason === this.state.reason &&
-      next.latest?.version === this.state.latest?.version
-    ) {
+    if (sameState(next, this.state)) {
       return
     }
 
@@ -172,12 +189,12 @@ class AppUpdatesStore implements AppUpdates {
       return false
     }
 
-    const proposed = { promptAt: this.monitor.serverNow() }
+    const proposed = { dismissedAt: this.monitor.serverNow() }
     const result = this.decision(proposed)
 
     if (
       result?.state.attention !== 'passive' ||
-      result.state.reason !== 'dismiss'
+      result.state.reason !== 'dismissed'
     ) {
       return false
     }

@@ -13,17 +13,17 @@ import {
 } from '@app-version/core'
 import { useAppUpdates, useReloadBlocker } from '../src/index'
 import { captureNavigations } from '../../core/test/navigation'
-import { appVersion, versionUrl } from './build-info.stub'
+import { runningBuild, versionUrl } from './build-info.stub'
 
 configure({ reactStrictMode: true })
 
 const createAppUpdates = () =>
-  createCoreUpdates({ current: appVersion, url: versionUrl })
+  createCoreUpdates({ running: runningBuild, versionUrl })
 
 const older = {
   version: 'old',
   commitTime: '2026-11-10T15:00:00.000Z',
-  builtAt: '2026-11-10T15:00:00.000Z',
+  buildTime: '2026-11-10T15:00:00.000Z',
 }
 
 const tick = () => new Promise(resolve => setTimeout(resolve, 20))
@@ -83,7 +83,9 @@ describe('useAppUpdates', () => {
     vi.advanceTimersByTime(61_000)
     window.dispatchEvent(new Event('focus'))
     await vi.waitFor(() =>
-      expect(updates.getState().latest?.version).toBe('newest'),
+      expect(updates.getState()).toMatchObject({
+        latest: { version: 'newest' },
+      }),
     )
     expect(renders).toBe(before)
 

@@ -86,7 +86,7 @@ describe('checking for a new build', () => {
     server.use(serveBuild({ ...newer, version: 'ccc' }))
     await app.poll()
 
-    expect(store.getState().latest?.version).toBe('ccc')
+    expect(store.getState()).toMatchObject({ latest: { version: 'ccc' } })
   })
 })
 
@@ -248,7 +248,7 @@ describe('build age and the server clock', () => {
 
     expect(store.getState()).toMatchObject({
       attention: 'passive',
-      reason: 'new-build',
+      reason: 'outdated',
     })
   })
 
@@ -260,11 +260,11 @@ describe('build age and the server clock', () => {
     const store = app.create()
     app.subscribe(store)
     await clock.waitForResponse()
-    expect(store.getState().reason).toBe('stale')
+    expect(store.getState().attention).toBe('prompt')
 
     server.use(serveBuild(newer, { date: null }))
     await clock.runFor(5 * MINUTE)
 
-    expect(store.getState().reason).toBe('stale')
+    expect(store.getState().attention).toBe('prompt')
   })
 })

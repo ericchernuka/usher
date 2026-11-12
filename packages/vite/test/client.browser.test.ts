@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { createAppUpdates } from '../src/client'
-import { appVersion } from './build-info.stub'
+import { runningBuild } from './build-info.stub'
 
 beforeEach(() => {
   vi.useFakeTimers({
@@ -10,7 +10,7 @@ beforeEach(() => {
   localStorage.clear()
   vi.stubGlobal(
     'fetch',
-    vi.fn<typeof fetch>(async () => Response.json(appVersion)),
+    vi.fn<typeof fetch>(async () => Response.json(runningBuild)),
   )
 })
 
@@ -28,7 +28,7 @@ it('uses the embedded build and version URL without configuration', async () => 
       expect(updates.getState()).toEqual({
         attention: 'none',
         reason: 'caught-up',
-        latest: appVersion,
+        latest: runningBuild,
       }),
     )
     expect(fetch).toHaveBeenCalledWith(

@@ -8,7 +8,7 @@ import type {
   StorageChange,
   StorageLike,
 } from '../src/browser'
-import { appVersion } from './build-info.stub'
+import { runningBuild } from './build-info.stub'
 import { VERSION_URL } from './mocks/handlers'
 
 class FakeStorageEvent extends Event implements StorageChange {
@@ -135,17 +135,17 @@ export function createFakeHost(options: { fetch?: typeof fetch } = {}) {
 
 export type FakeHost = ReturnType<typeof createFakeHost>
 
-export type StoreOptions = Omit<AppUpdatesOptions, 'current' | 'url'>
+export type StoreOptions = Omit<AppUpdatesOptions, 'running' | 'versionUrl'>
 
-const stubBuild = appVersion
+const stubBuild = runningBuild
 
 export function createStore(
   fake: FakeHost,
   options: StoreOptions = {},
 ): AppUpdates {
   return createAppUpdatesStore({
-    current: stubBuild,
-    url: VERSION_URL,
+    running: stubBuild,
+    versionUrl: VERSION_URL,
     browser: fake.host,
     ...options,
   })

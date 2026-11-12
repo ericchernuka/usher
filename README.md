@@ -70,7 +70,7 @@ export const appUpdates = createAppUpdates({
   current: {
     version: 'commit-sha',
     commitTime: '2026-11-11T15:00:00Z',
-    builtAt: '2026-11-11T16:00:00Z',
+    buildTime: '2026-11-11T16:00:00Z',
   },
   url: '/version.json',
 })
@@ -103,10 +103,10 @@ Create one store at module scope. It starts polling when the first subscriber ar
 | ----------------------------------------------- | --------- | ----------- |
 | No response yet                                 | `none`    | `unknown`   |
 | Running the latest build                        | `none`    | `caught-up` |
-| A newer build exists                            | `passive` | `new-build` |
-| The prompt was dismissed                        | `passive` | `dismiss`   |
-| Running build is at least 12 hours old          | `prompt`  | `stale`     |
-| Running build is at least 24 hours old          | `urgent`  | `expired`   |
+| A newer build is being served                   | `passive` | `outdated`  |
+| The prompt was dismissed                        | `passive` | `dismissed` |
+| Running build is at least 12 hours old          | `prompt`  | `outdated`  |
+| Running build is at least 24 hours old          | `urgent`  | `outdated`  |
 | An older commit was deployed                    | `urgent`  | `rollback`  |
 | Running build predates the forced-update cutoff | `urgent`  | `forced`    |
 
@@ -126,12 +126,12 @@ interface AppUpdates {
 }
 ```
 
-Snapshots keep the same identity until attention, reason, or latest version changes. `dismiss()` succeeds only for a prompt that can still be lowered. It returns false without writing storage for urgent, passive, and unknown states.
+Snapshots keep the same identity until attention, reason, or any of the latest build facts change. `dismiss()` succeeds only for a prompt that can still be lowered. It returns false without writing storage for urgent, passive, and unknown states.
 
 | Option       | Default                                       | Meaning                                                                                                       |
 | ------------ | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `current`    | Required by core; embedded by the Vite helper | Build facts for the running application.                                                                      |
-| `url`        | Required by core; supplied by the Vite helper | The serving deployment's `version.json` URL.                                                                  |
+| `running`    | Required by core; embedded by the Vite helper | Build facts for the running build.                                                                            |
+| `versionUrl` | Required by core; supplied by the Vite helper | The serving deployment's `version.json` URL.                                                                  |
 | `escalation` | Prompt at `12h`, urgent at `24h`              | Typed build-age thresholds. Set either level to `false` to disable it. Only prompt accepts `snooze`.          |
 | `pollEvery`  | `5m`                                          | Visible-tab polling interval, at least `10s`. Focus and visibility can also trigger a check after one minute. |
 | `reload`     | `location.reload()`                           | An explicit refresh. Receives `{ href }`; may return or resolve false to decline.                             |

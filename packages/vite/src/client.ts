@@ -1,4 +1,4 @@
-import { appVersion, versionUrl } from 'virtual:app-version'
+import { runningBuild, versionUrl } from 'virtual:app-version'
 import {
   createAppUpdates as createCoreUpdates,
   type AppUpdates,
@@ -7,7 +7,7 @@ import {
 
 /** Create the update store using build facts supplied by the Vite plugin. */
 export function createAppUpdates(
-  options: Omit<AppUpdatesOptions, 'current' | 'url'> = {},
+  options: Omit<AppUpdatesOptions, 'running' | 'versionUrl'> = {},
 ): AppUpdates {
-  return createCoreUpdates({ ...options, current: appVersion, url: versionUrl })
+  return createCoreUpdates({ ...options, running: runningBuild, versionUrl })
 }

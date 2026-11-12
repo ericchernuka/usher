@@ -1,8 +1,7 @@
 import type { BrowserEnvironment, StorageChange } from './browser'
 import * as v from 'valibot'
-import { isVersionInfo } from './attention'
 import type { createPromptDismissal } from './prompt-dismissal'
-import type { VersionInfo } from './types'
+import { isBuildFacts, type BuildFacts } from './types'
 
 const MIN = 60_000
 const FETCH_TIMEOUT_MS = 30_000
@@ -10,9 +9,9 @@ const MAX_TIMER_MS = 2 ** 31 - 1
 const CLOCK_JITTER_MS = 2_000
 
 export interface UpdateMonitorOptions {
-  url: string
+  versionUrl: string
   pollMs: number
-  evaluate: (latest?: VersionInfo) => void
+  evaluate: (latest?: BuildFacts) => void
   nextDeadline: () => number | undefined
   dismissal: ReturnType<typeof createPromptDismissal>
   browser: BrowserEnvironment
@@ -37,7 +36,7 @@ async function readResponse(res: Response, signal: AbortSignal) {
     return undefined
   }
 
-  if (!isVersionInfo(body)) {
+  if (!isBuildFacts(body)) {
     return console.warn('[app-version] ignoring malformed version.json', body)
   }
 
@@ -108,7 +107,7 @@ class UpdateMonitor {
 
   sinceCheck = () => tick() - this.lastCheck
 
-  evaluate = (latest?: VersionInfo) => {
+  evaluate = (latest?: BuildFacts) => {
     this.deps.evaluate(latest)
     this.reschedule()
   }
@@ -162,7 +161,7 @@ class UpdateMonitor {
 
     try {
       const res = await this.deps.browser.fetch(
-        `${this.deps.url}?t=${Date.now()}`,
+        `${this.deps.versionUrl}?t=${Date.now()}`,
         {
           cache: 'no-store',
           signal: controller.signal,

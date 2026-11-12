@@ -2,7 +2,7 @@ import * as v from 'valibot'
 import type { BrowserEnvironment, StorageChange } from './browser'
 
 export interface PromptDismissal {
-  promptAt?: number
+  dismissedAt?: number
 }
 
 const Finite = v.pipe(v.number(), v.finite())
@@ -12,10 +12,10 @@ const lenient = <const T extends v.GenericSchema>(schema: T) =>
 
 const StoredDismissal = v.pipe(
   v.object({
-    promptAt: lenient(Finite),
+    dismissedAt: lenient(Finite),
   }),
-  v.transform(({ promptAt }): PromptDismissal => ({
-    ...(promptAt !== undefined && { promptAt }),
+  v.transform(({ dismissedAt }): PromptDismissal => ({
+    ...(dismissedAt !== undefined && { dismissedAt }),
   })),
 )
 
@@ -31,9 +31,9 @@ const max = (x?: number, y?: number) =>
   x === undefined ? y : y === undefined ? x : Math.max(x, y)
 
 function later(a: PromptDismissal, b: PromptDismissal): PromptDismissal {
-  const promptAt = max(a.promptAt, b.promptAt)
+  const dismissedAt = max(a.dismissedAt, b.dismissedAt)
 
-  return promptAt === undefined ? {} : { promptAt }
+  return dismissedAt === undefined ? {} : { dismissedAt }
 }
 
 function isOurArea(e: StorageChange, browser: BrowserEnvironment) {
@@ -48,7 +48,7 @@ export function createPromptDismissal(
   storageKey: string,
   browser: BrowserEnvironment,
 ) {
-  const key = `${storageKey}:snooze`
+  const key = `${storageKey}:prompt-dismissal`
   let memory: PromptDismissal = {}
   let unsynced = false
 

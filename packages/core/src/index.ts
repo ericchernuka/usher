@@ -22,15 +22,13 @@ export {
 
 export type {
   Attention,
-  Behind,
   Duration,
   Escalation,
   EscalationLevel,
-  ReasonsByAttention,
   ReloadDetails,
   ReloadFn,
   UpdateState,
-  VersionInfo,
+  BuildFacts,
 } from './types'
 
 /**

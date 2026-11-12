@@ -3,8 +3,8 @@ import { fakeAdapter } from './fake-adapter'
 import { server } from './mocks/node'
 import { serveBuild } from './mocks/overrides'
 import {
-  SNOOZE_KEY,
-  current,
+  DISMISSAL_KEY,
+  running,
   describe,
   expect,
   newer,
@@ -29,7 +29,7 @@ describe('showing and hiding', () => {
     await app.poll()
     expect(ui.log).toEqual(['show:prompt'])
 
-    server.use(serveBuild(current))
+    server.use(serveBuild(running))
     await app.poll()
 
     expect(ui.log).toEqual(['show:prompt', 'hide'])
@@ -96,7 +96,7 @@ describe('showing and hiding', () => {
 })
 
 describe('closing the prompt', () => {
-  test("given the user closes the toast, then the update is snoozed and a stale handle's second close is ignored", async ({
+  test("given the user closes the toast, then the prompt is dismissed and a stale handle's second close is ignored", async ({
     app,
     clock,
   }) => {
@@ -140,11 +140,11 @@ describe('closing the prompt', () => {
     )
     await clock.waitForResponse()
 
-    server.use(serveBuild(current))
+    server.use(serveBuild(running))
     await app.poll()
 
     expect(store.getState().attention).toBe('none')
-    expect(host.localStorage.getItem(SNOOZE_KEY)).toBeNull()
+    expect(host.localStorage.getItem(DISMISSAL_KEY)).toBeNull()
   })
 
   test('given an urgent prompt, when the user tries to close it, then it remains shown', async ({
@@ -204,13 +204,13 @@ describe('default copy', () => {
   test.for([
     {
       attention: 'prompt',
-      reason: 'stale',
+      reason: 'outdated',
       description: /ready/,
       action: 'Refresh',
     },
     {
       attention: 'urgent',
-      reason: 'expired',
+      reason: 'outdated',
       description: /old version/,
       action: 'Refresh now',
     },

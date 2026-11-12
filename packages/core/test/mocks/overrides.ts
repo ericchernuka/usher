@@ -1,8 +1,8 @@
 import { http, HttpResponse, type HttpHandler } from 'msw/http'
-import type { VersionInfo } from '../../src/types'
+import type { BuildFacts } from '../../src/types'
 import { versionHandler, VERSION_URL, type Serve } from './handlers'
 
-export const serveBuild = (build: VersionInfo, options?: Serve): HttpHandler =>
+export const serveBuild = (build: BuildFacts, options?: Serve): HttpHandler =>
   versionHandler(build, options)
 
 export const serveRaw = (

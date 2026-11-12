@@ -1,40 +1,40 @@
 import * as fc from 'fast-check'
 import { vi } from 'vitest'
-import type { Escalation, VersionInfo } from '../../src/types'
+import type { Escalation, BuildFacts } from '../../src/types'
 import type { Clock } from '../clock'
 import { createFakeHost, createStore } from '../fake-host'
 
 const H = 3_600_000
-export const SNOOZE_KEY = 'app-version:snooze'
+export const DISMISSAL_KEY = 'app-version:prompt-dismissal'
 
-export const current: VersionInfo = {
+export const running: BuildFacts = {
   version: 'aaa',
   commitTime: '2026-11-11T15:00:00.000Z',
-  builtAt: '2026-11-11T15:00:00.000Z',
+  buildTime: '2026-11-11T15:00:00.000Z',
 }
 
 const builds = {
-  current,
+  running,
   newer: {
-    ...current,
+    ...running,
     version: 'bbb',
     commitTime: '2026-11-11T15:30:00.000Z',
-    builtAt: '2026-11-11T15:30:00.000Z',
+    buildTime: '2026-11-11T15:30:00.000Z',
   },
   newest: {
-    ...current,
+    ...running,
     version: 'ccc',
     commitTime: '2026-11-11T16:30:00.000Z',
-    builtAt: '2026-11-11T16:30:00.000Z',
+    buildTime: '2026-11-11T16:30:00.000Z',
   },
-  older: { ...current, version: 'old', commitTime: '2026-11-10T15:00:00.000Z' },
+  older: { ...running, version: 'old', commitTime: '2026-11-10T15:00:00.000Z' },
   forced: {
-    ...current,
+    ...running,
     version: 'fix',
     commitTime: '2026-11-11T17:00:00.000Z',
     forceUpdateBefore: '2026-11-11T17:00:00.000Z',
   },
-} satisfies Record<string, VersionInfo>
+} satisfies Record<string, BuildFacts>
 
 export type Build = keyof typeof builds
 
@@ -56,7 +56,7 @@ export type Action =
   | { type: 'serve'; build: Served }
   | { type: 'focus' }
   | { type: 'visibility'; visible: boolean }
-  | { type: 'dismiss' }
+  | { type: 'dismissed' }
   | { type: 'otherTabClear' }
   | { type: 'otherTabSet' }
   | { type: 'refresh' }
@@ -64,7 +64,7 @@ export type Action =
   | { type: 'clockJump'; ms: number }
 
 const build = fc.constantFrom<Build>(
-  'current',
+  'running',
   'newer',
   'newest',
   'older',
@@ -75,7 +75,7 @@ const served: fc.Arbitrary<Served> = fc.oneof(
   {
     weight: 10,
     arbitrary: fc.constantFrom<Served>(
-      'current',
+      'running',
       'newer',
       'newest',
       'offline',
@@ -109,7 +109,7 @@ const action: fc.Arbitrary<Action> = fc.oneof(
   { weight: 3, arbitrary: fc.record({ type: t('serve'), build: served }) },
   { weight: 2, arbitrary: fc.record({ type: t('focus') }) },
   { weight: 1, arbitrary: visibilityAction },
-  { weight: 3, arbitrary: fc.record({ type: t('dismiss') }) },
+  { weight: 3, arbitrary: fc.record({ type: t('dismissed') }) },
   { weight: 1, arbitrary: fc.record({ type: t('otherTabClear') }) },
   { weight: 1, arbitrary: fc.record({ type: t('otherTabSet') }) },
   { weight: 1, arbitrary: fc.record({ type: t('refresh') }) },
@@ -159,7 +159,7 @@ export const random = scenario(fc.array(action, { maxLength: 60 }))
 
 export const rollbackThenFix = scenario(
   fc
-    .tuple(noise, noise, fc.constantFrom<Build>('newer', 'newest', 'current'))
+    .tuple(noise, noise, fc.constantFrom<Build>('newer', 'newest', 'running'))
     .map(([a, b, fix]): Action[] =>
       Array.of<Action>(
         { type: 'serve', build: 'older' },
@@ -190,17 +190,17 @@ export const aged = scenario(
         { type: 'serve', build: 'newer' },
         { type: 'focus' },
         { type: 'advance', ms: first },
-        { type: 'dismiss' },
-      ).concat(a, [{ type: 'advance', ms: second }, { type: 'dismiss' }], b),
+        { type: 'dismissed' },
+      ).concat(a, [{ type: 'advance', ms: second }, { type: 'dismissed' }], b),
     ),
 )
 
 function initialServed(): Served {
-  return 'current'
+  return 'running'
 }
 
 interface DeliveredBuild {
-  build: VersionInfo
+  build: BuildFacts
   signal: AbortSignal | null | undefined
 }
 

@@ -1,11 +1,5 @@
 import type { AppUpdates } from './app-updates'
-import type {
-  Attention,
-  Behind,
-  ReasonsByAttention,
-  UpdateState,
-  VersionInfo,
-} from './types'
+import type { Attention, UpdateState } from './types'
 
 const rank: Record<Attention, number> = {
   none: 0,
@@ -19,7 +13,6 @@ export const PROMPT_ID = 'app-update'
 export interface PromptBase {
   /** Stable id: upsert your toast/banner by it. */
   readonly id: typeof PROMPT_ID
-  readonly latest: VersionInfo
   /** The user wants the update. Resolves false if a blocker or your `reload` declined. */
   refresh(): Promise<boolean>
   /**
@@ -31,16 +24,11 @@ export interface PromptBase {
 }
 
 /** What an adapter renders: a union, so `reason` always belongs to `attention`. A new handle per change. */
-export type Prompt = {
-  [A in Behind]: PromptBase & {
-    readonly attention: A
-    readonly reason: ReasonsByAttention[A]
-  }
-}[Behind]
+export type Prompt = Exclude<UpdateState, { attention: 'none' }> & PromptBase
 
 export interface PromptAdapter {
   /** Lowest attention that shows the prompt. Default "prompt". */
-  minAttention?: Behind
+  minAttention?: Exclude<Attention, 'none'>
   /** Create or update your UI. Called once per attention/reason change, always with id "app-update". */
   show(prompt: Prompt): void
   /** Remove your UI. Called when the prompt should go away, including after a user dismiss. */
@@ -76,7 +64,7 @@ type View =
 
 class PromptConnection {
   readonly updates: AppUpdates
-  readonly minAttention: Behind
+  readonly minAttention: Exclude<Attention, 'none'>
   readonly show: (prompt: Prompt) => void
   readonly hide: () => void
   constructor(updates: AppUpdates, adapter: PromptAdapter) {
@@ -142,7 +130,7 @@ class PromptConnection {
     state: Exclude<UpdateState, { attention: 'none' }>,
     key: string,
   ): Prompt => {
-    const prompt: Prompt = Object.freeze({
+    const prompt: Prompt = Object.freeze<Prompt>({
       ...state,
       id: PROMPT_ID,
 
