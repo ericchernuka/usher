@@ -324,12 +324,12 @@ A pnpm workspace run by Turbo: `packages/*` are the libraries (built with tsdown
 
 | Script              | Runs                                                                                                                |
 | ------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `pnpm check`        | Everything below, in parallel                                                                                       |
+| `pnpm check`        | Coverage first, then all checks in parallel                                                                         |
 | `pnpm build`        | tsdown for each package, then the apps                                                                              |
 | `pnpm check:types`  | `tsc` per package and app (plus Workers types for the edge tests)                                                   |
 | `pnpm lint`         | oxlint, type-aware, with the vendored anti-slop rules (`tools/oxlint/anti-slop`) and the React Compiler rules       |
 | `pnpm format`       | oxfmt (`pnpm check:format` checks)                                                                                  |
 | `pnpm test`         | Vitest: Node for everything that doesn't need a browser, Chromium (browser mode) for what does; MSW for the network |
 | `pnpm test:edge`    | The emitted worker in workerd, with real R2 and Cloudflare asset serving                                            |
-| `pnpm coverage`     | Tests with V8 coverage; each package must reach 95% on lines, branches, functions and statements                    |
-| `pnpm check:fallow` | fallow: dead code, duplication, complexity, dependency hygiene                                                      |
+| `pnpm coverage`     | V8 coverage, merged for Fallow; each package must reach 95% on lines, branches, functions and statements            |
+| `pnpm check:fallow` | Fallow with merged coverage (run `pnpm coverage` first): dead code, duplication, complexity, dependencies           |

@@ -4,7 +4,7 @@
   "entry": ["packages/cloudflare/src/edge-handler.mjs"],
   "ignorePatterns": ["tools/**", "**/.edge-fixture/**", "**/dist-worker/**"],
   "ignoreDependencies": ["@oxlint/plugins"],
-  "includeEntryExports": true,
+  "includeEntryExports": false,
   "typeAware": {
     "enabled": true,
     "projects": [
@@ -20,6 +20,15 @@
     "maxCognitive": 10,
     "maxUnitSize": 60,
     "maxFileLines": 300,
+    "coverage": "coverage/coverage-final.json",
+    "thresholdOverrides": [
+      {
+        "files": ["**/test/**"],
+        "maxUnitSize": 500,
+        "maxFileLines": 0,
+        "reason": "Test suites group complete behaviour scenarios in describe callbacks.",
+      },
+    ],
   },
   "rules": {
     "unused-files": "error",
