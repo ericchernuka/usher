@@ -50,11 +50,8 @@ export type AssetFallback<Binding extends string> = (
  * real 404, never the SPA's HTML fallback. Archive keys are paths relative to
  * `base`, matching `aws s3 sync dist/assets s3://<bucket>/assets`.
  */
-export function createAssetFallback(
-  options?: Omit<AssetFallbackOptions, 'r2Binding'>,
-): AssetFallback<'CHUNK_ARCHIVE'>
-export function createAssetFallback<Binding extends string>(
-  options: AssetFallbackOptions<Binding> & { r2Binding: Binding },
+export function createAssetFallback<Binding extends string = 'CHUNK_ARCHIVE'>(
+  options?: AssetFallbackOptions<Binding>,
 ): AssetFallback<Binding>
 export function createAssetFallback<Binding extends string>(
   options: AssetFallbackOptions<Binding> = {},

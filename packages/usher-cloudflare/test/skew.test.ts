@@ -181,6 +181,19 @@ describe('createAssetFallback()', () => {
       .toEqualTypeOf<AssetFallbackEnv<'CHUNKS'>>()
   })
 
+  it('keeps the R2 binding name when the options come from a variable', () => {
+    const custom = { base: '/', r2Binding: 'CHUNKS' as const }
+    const defaults = { base: '/' }
+
+    expectTypeOf(createAssetFallback(custom))
+      .parameter(1)
+      .toEqualTypeOf<AssetFallbackEnv<'CHUNKS'>>()
+
+    expectTypeOf(createAssetFallback(defaults))
+      .parameter(1)
+      .toEqualTypeOf<AssetFallbackEnv>()
+  })
+
   it('passes non-GET requests straight through', async () => {
     const env = {
       ASSETS: { fetch: async () => assetsHtml() },

@@ -34,11 +34,15 @@ export interface UpdateSurface {
   minAttention?: Exclude<Attention, 'none'>
   /**
    * Create or replace your UI. Called once per change of attention or reason, with a
-   * new notice each time. If it throws, the error is logged, `hide()` removes whatever
-   * was showing, and the next state change retries.
+   * new notice each time. If your `show()` throws, usher logs the error, calls `hide()`
+   * in case your UI partly opened, and retries on the next state change.
    */
   show(notice: UpdateNotice): void
-  /** Remove your UI. Called when the surface should go away, including after the user closes it. */
+  /**
+   * Remove your UI. Called when the surface should go away, including after the user
+   * closes it. Also called after your `show()` throws, when your UI may not be open,
+   * so make it safe to call when nothing is showing.
+   */
   hide(): void
 }
 
@@ -102,13 +106,12 @@ class SurfaceConnection {
       return
     }
 
-    const replaced = this.shown
     const notice = this.makeNotice(wanted)
     this.shown = { key: keyOf(wanted), notice }
 
     if (!safely('show', () => this.show(notice))) {
-      this.shown = replaced
-      this.remove()
+      this.shown = undefined
+      safely('hide', this.hide)
     }
   }
 

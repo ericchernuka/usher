@@ -66,6 +66,28 @@ describe('surfaces that misbehave', () => {
     expect(shows).toEqual(['urgent'])
   })
 
+  test('given the first show() opens its UI and then throws, then hide() removes it', async ({
+    app,
+    tab,
+  }) => {
+    tab.setSystemTime('2026-11-12T04:00:00Z')
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    server.use(serveBuild(newer))
+    const log: string[] = []
+    app.track(
+      connectUpdateSurface(app.create(), {
+        show: shown => {
+          log.push(`show:${shown.attention}`)
+          throw new Error('toast library threw after opening')
+        },
+        hide: () => log.push('hide'),
+      }),
+    )
+    await tab.waitForResponse()
+
+    expect(log).toEqual(['show:prompt', 'hide'])
+  })
+
   test('given show() throws on an update, then the stale UI is hidden and the next change retries', async ({
     app,
     tab,
