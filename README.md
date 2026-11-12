@@ -322,3 +322,7 @@ A pnpm workspace run by Turbo. `packages/*` are the libraries, built with tsdown
 | `pnpm coverage`     | V8 coverage, merged for Fallow; each package must reach 95% on lines, branches, functions and statements                                            |
 | `pnpm check:fallow` | Fallow with merged coverage (run `pnpm coverage` first): dead code, duplication, complexity, dependencies                                           |
 | `pnpm check:pack`   | Packs the four packages, installs the tarballs into a throwaway app outside the workspace, and runs its type check, production build and dev server |
+
+### Releases
+
+Versions are managed with [Changesets](.changeset/README.md). Run `pnpm changeset` in any pull request that changes a published package. `pnpm version-packages` applies the pending changesets, and `pnpm release` builds and publishes. The four packages share one version.

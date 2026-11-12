@@ -21,11 +21,16 @@
     "check:build": "turbo run build",
     "check:fallow": "fallow",
     "check:pack": "node tools/check-pack.mjs",
-    "coverage": "turbo run coverage && node tools/merge-coverage.mjs"
+    "coverage": "turbo run coverage && node tools/merge-coverage.mjs",
+    "changeset": "changeset",
+    "version-packages": "changeset version && pnpm install --lockfile-only && oxfmt",
+    "release": "pnpm build && changeset publish"
   },
   "devDependencies": {
+    "@changesets/cli": "^3.0.3",
     "@oxlint/plugins": "^1.92.0",
     "@types/node": "^26.6.6",
+    "@vitest/browser-playwright": "^5.1.0",
     "eslint-plugin-no-only-tests": "^3.4.0",
     "eslint-plugin-react-hooks": "7.1.1",
     "fallow": "^3.41.0",
@@ -35,7 +40,6 @@
     "oxlint-tsgolint": "^7.0.2006",
     "turbo": "^2.11.10",
     "typescript": "^7.0.2",
-    "vitest": "^5.1.0",
-    "@vitest/browser-playwright": "^5.1.0"
+    "vitest": "^5.1.0"
   }
 }
