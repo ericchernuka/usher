@@ -52,7 +52,6 @@ async function perform(reload: Reload): Promise<RefreshOutcome> {
   }
 }
 
-/** Owns refresh blockers and the one refresh attempt that concurrent callers share. */
 export function createRefresh(
   reload: NonNullable<AppUpdatesOptions['reload']>,
 ) {

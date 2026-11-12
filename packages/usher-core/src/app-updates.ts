@@ -85,7 +85,6 @@ function sameState(next: UpdateState, current: UpdateState) {
   )
 }
 
-/** A listener that an earlier one removed during this pass is not called. */
 function notifyAll(listeners: ReadonlySet<{ listener: () => void }>) {
   for (const entry of Array.from(listeners)) {
     if (listeners.has(entry)) {
@@ -149,12 +148,10 @@ class AppUpdatesStore implements AppUpdates {
   apply = (decision: Decision) => {
     this.stickyUrgency = decision.stickyUrgency
     this.outdatedSince = decision.outdatedSince
-    // Scheduled first: a listener may dismiss, and that decision's deadline must win.
     this.scheduleDeadline(decision.nextAt)
     this.publish(decision.state)
   }
 
-  /** Every source calls back here: a new response, a storage change, a deadline, visibility. */
   evaluate = () => {
     const decision = this.decide()
 
@@ -163,7 +160,6 @@ class AppUpdatesStore implements AppUpdates {
     }
   }
 
-  /** One timer for the next moment attention changes on its own. Hidden tabs keep none. */
   scheduleDeadline = (nextAt: number | undefined) => {
     if (!this.active) {
       return
@@ -255,7 +251,6 @@ class AppUpdatesStore implements AppUpdates {
   }
 }
 
-/** The factory behind `createAppUpdates`. Tests inside core pass a fake environment. */
 export function createAppUpdatesStore(
   options: AppUpdatesOptions,
   env: Environment = createBrowserEnvironment(),

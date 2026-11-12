@@ -2,7 +2,6 @@ import * as valibot from 'valibot'
 
 const Timestamp = valibot.pipe(valibot.string(), valibot.isoTimestamp())
 
-/** The runtime check for `version.json`; `BuildFacts` is derived from it, so they can't drift. */
 const BuildFactsSchema = valibot.object({
   /** Source version the build came from, usually a commit SHA. Separate builds can share one. */
   version: valibot.pipe(valibot.string(), valibot.nonEmpty()),

@@ -2,7 +2,6 @@ import * as valibot from 'valibot'
 import type { Environment } from './environment'
 import { parseBuildFacts, type BuildFacts } from './types'
 
-/** Focus and visibility recheck at most this often. */
 const MIN_FOCUS_CHECK_GAP_MS = 60_000
 const FETCH_TIMEOUT_MS = 30_000
 const MAX_TIMER_MS = 2 ** 31 - 1
@@ -11,7 +10,6 @@ export interface LatestBuildOptions {
   versionUrl: string
   pollInterval: number
   env: Environment
-  /** Told the server time of each response that carries a Date header. */
   clock: { observe(serverTime: number): void }
 }
 
@@ -50,10 +48,6 @@ async function readFacts(res: Response): Promise<BuildFacts | Rejected> {
       }
 }
 
-/**
- * Observes the serving deployment: polls `version.json` while the tab is visible,
- * rechecks on focus and visibility, and keeps the last valid build facts it saw.
- */
 class LatestBuild {
   readonly options: LatestBuildOptions
   latest: BuildFacts | undefined
@@ -126,7 +120,6 @@ class LatestBuild {
     }
   }
 
-  /** The tab can be seen again, or watching just started: poll again, and check now if it has been a while. */
   resume = () => {
     this.schedulePoll()
     this.recheck()
@@ -187,10 +180,6 @@ class LatestBuild {
     this.watching?.onChange()
   }
 
-  /**
-   * A missing or misrouted version.json would otherwise fail silently forever.
-   * Warns once per run of bad responses, so a later outage is reported too.
-   */
   warnOnce = (problem: string) => {
     if (this.warned) {
       return
@@ -226,7 +215,6 @@ class LatestBuild {
     cancelPoll?.()
 
     if (inFlight) {
-      // That check never landed, so the next subscriber must not wait for it.
       inFlight.abort()
       this.lastCheck = undefined
     }

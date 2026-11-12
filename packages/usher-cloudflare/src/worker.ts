@@ -49,9 +49,6 @@ export type AssetFallback<Binding extends string> = (
  * get the current deployment's answer unchanged. A chunk in neither place is a
  * real 404, never the SPA's HTML fallback. Archive keys are paths relative to
  * `base`, matching `aws s3 sync dist/assets s3://<bucket>/assets`.
- *
- * Generated workers inline this function's own source text, so it must stay
- * self-contained: no imports and no references outside its body.
  */
 export function createAssetFallback(
   options?: Omit<AssetFallbackOptions, 'r2Binding'>,

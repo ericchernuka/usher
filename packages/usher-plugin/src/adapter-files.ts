@@ -10,10 +10,6 @@ function isInside(directory: string, file: string) {
   return !path.startsWith('..') && !isAbsolute(path)
 }
 
-/**
- * Asks the adapter which files its host needs and resolves them against the
- * build. Adapters only describe files; the plugin owns writing and failing.
- */
 export function adapterFiles(
   adapter: SkewProtectionAdapter,
   config: ResolvedConfig,
@@ -41,7 +37,6 @@ export function adapterFiles(
     warnings: (files.warnings ?? []).map(
       warning => `[usher] ${adapter.name}: ${warning}`,
     ),
-    /** Set when a private file would be served publicly. */
     error:
       exposed &&
       `[usher] ${adapter.name}: "${exposed.fileName}" must be outside outDir, or it is served as a public asset.`,

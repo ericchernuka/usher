@@ -3,7 +3,6 @@ import { runningBuild } from '../build-info.stub'
 
 export const VERSION_URL = 'https://app.test/version.json'
 
-/** The time the fake server stamps on its Date header. Tests point it at their virtual clock. */
 export const serverClock = { now: Date.now }
 
 export interface Serve {

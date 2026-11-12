@@ -7,7 +7,6 @@ import { cloudflarePages, cloudflareWorkers } from '../../src/index.ts'
 const targets = {
   pages: { adapter: cloudflarePages(), worker: 'dist/_worker.js' },
   workers: { adapter: cloudflareWorkers(), worker: 'dist-worker/index.js' },
-  /** The app owns its worker, so the build has no adapter. */
   composed: {
     adapter: undefined,
     worker: '../../test/edge/composed-worker.ts',

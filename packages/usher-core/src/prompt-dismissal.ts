@@ -66,7 +66,6 @@ export function createPromptDismissal(
   return {
     get: (): number | undefined => dismissedAt,
 
-    /** Read what other tabs left in storage and follow their changes. */
     start(onChange: () => void) {
       hydrate()
       stopListening = env.onStorageChange(change => onStorage(change, onChange))

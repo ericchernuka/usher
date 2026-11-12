@@ -58,10 +58,6 @@ function safely(label: string, fn: () => void) {
 
 const MAX_PASSES = 5
 
-/**
- * Two facts decide what the surface shows: the store's state, and the state the
- * user last closed. Everything else is `reconcile` moving the surface toward them.
- */
 class SurfaceConnection {
   readonly updates: AppUpdates
   readonly minAttention: Exclude<Attention, 'none'>
@@ -75,17 +71,14 @@ class SurfaceConnection {
     this.hide = () => surface.hide()
   }
 
-  /** What the surface is showing, as far as the connection knows. */
   shown: { key: string; notice: UpdateNotice } | undefined
 
-  /** The state the user closed. The surface stays hidden until the state leaves it. */
   closed: string | undefined
 
   syncing = false
 
   again = false
 
-  /** One step toward what the state asks for: hide, show, or nothing. */
   reconcile = () => {
     const state = this.updates.getState()
 
@@ -114,7 +107,6 @@ class SurfaceConnection {
     this.shown = { key: keyOf(wanted), notice }
 
     if (!safely('show', () => this.show(notice))) {
-      // The UI may be half-replaced. Nothing is shown now, so the next change retries.
       this.shown = replaced
       this.remove()
     }
@@ -131,8 +123,6 @@ class SurfaceConnection {
     if (notice.attention === 'passive') {
       this.closed = keyOf(notice)
     } else if (notice.attention === 'urgent') {
-      // Urgent attention cannot be closed, but some UI libraries remove a
-      // toast regardless, so forget the shown notice and show a new one.
       this.shown = undefined
     } else if (this.updates.dismiss()) {
       this.closed = keyOf(this.updates.getState())
@@ -155,11 +145,6 @@ class SurfaceConnection {
     return notice
   }
 
-  /**
-   * Applies `change`, then reconciles until the surface matches. A call made
-   * while one is running, from inside `show`, `hide` or a store listener, only
-   * asks the running one for another pass, so `hide` never runs inside `show`.
-   */
   sync = (change?: () => void) => {
     if (this.syncing) {
       change?.()

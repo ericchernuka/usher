@@ -14,7 +14,6 @@ const DEFAULT_URGENT_AFTER = 24 * HOUR
 const DEFAULT_POLL_INTERVAL = 5 * MINUTE
 const MIN_POLL_INTERVAL = 10 * SECOND
 
-/** Validated durations in milliseconds. `undefined` means the level is off, or for the snooze, "until urgent". */
 export interface Thresholds {
   promptAfter: number | undefined
   urgentAfter: number | undefined
@@ -108,7 +107,6 @@ export function resolveRunning(running: BuildFacts): BuildFacts {
       )
 }
 
-/** A relative URL is fine: the tab resolves it against the page. */
 const VersionUrl = valibot.pipe(
   valibot.string(),
   valibot.check(value => URL.canParse(value, 'https://app.invalid')),

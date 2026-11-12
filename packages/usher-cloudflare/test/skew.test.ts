@@ -17,7 +17,6 @@ const assetsHtml = () =>
     headers: { 'content-type': 'text/html' },
   })
 
-/** An R2 bucket with only the methods a test cares about. */
 const archiveOf = (bucket: Partial<ChunkArchive>): ChunkArchive => ({
   get: async () => null,
   head: async () => null,
@@ -36,7 +35,6 @@ type Worker = {
   default: { fetch: AssetFallback<'CHUNKS'> }
 }
 
-/** A deployed Worker whose R2 binding was never added: the type promises it, the runtime lacks it. */
 function withoutBinding(assets: AssetFallbackEnv['ASSETS']): AssetFallbackEnv {
   const env: AssetFallbackEnv = { ASSETS: assets, CHUNK_ARCHIVE: archiveOf({}) }
   Reflect.deleteProperty(env, 'CHUNK_ARCHIVE')

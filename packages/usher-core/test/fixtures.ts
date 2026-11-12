@@ -69,7 +69,6 @@ export const test = base
       subscribe: (store: AppUpdates, listener: () => void = () => {}) =>
         track(store.subscribe(listener)),
       track,
-      /** A minute later the tab regains focus, which triggers a check. */
       async poll() {
         await tab.runFor(MINUTE)
         tab.focus()

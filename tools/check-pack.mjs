@@ -1,6 +1,3 @@
-// Proves the packages work the way users get them: packed into tarballs and
-// installed into an app outside this workspace. Workspace links hide packaging
-// mistakes and keep Vite from pre-bundling the packages, so only this catches them.
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
 import {
@@ -75,7 +72,6 @@ const write = (file, content) => {
   writeFileSync(join(app, file), content)
 }
 
-/** The throwaway app: one file per way a user imports the packages. */
 const appFiles = {
   'tsconfig.json': JSON.stringify({
     compilerOptions: {
@@ -168,8 +164,6 @@ function writeApp(packed) {
     }),
   )
 
-  // The packages depend on each other, and none of them is on a registry.
-  // Its own workspace file also keeps pnpm from walking up into this repo.
   write(
     'pnpm-workspace.yaml',
     `overrides:\n${Object.entries(tarballs)
@@ -187,8 +181,6 @@ async function checkBuild() {
   assert.equal(facts.version, 'pack-smoke')
   assert(existsSync(join(app, 'dist/_routes.json')), 'no _routes.json')
 
-  // The generated worker is built from the published handler; run it to prove
-  // that the packed code is still self-contained.
   const worker = await import(pathToFileURL(join(app, 'dist/_worker.js')).href)
 
   const response = await worker.default.fetch(
@@ -208,9 +200,6 @@ async function checkBuild() {
   assert.equal(await response.text(), 'old')
 }
 
-// Runs inside the app so that it uses the app's own Vite. It requests the entry
-// module and then every module the entry imports, which is where a dependency
-// the optimizer could not resolve would fail.
 const devProbe = `import { createServer } from 'vite'
 
 const server = await createServer({ logLevel: 'error', server: { port: 0, host: '127.0.0.1' } })

@@ -12,7 +12,6 @@ const compatibilityDate = '2026-11-01'
 
 type Fixture = Awaited<ReturnType<typeof buildEdgeFixture>>
 
-/** Workers static assets with SPA fallback, in front of the given worker. */
 const workersProject = (fixture: Fixture) =>
   cloudflareTest({
     main: fixture.worker,

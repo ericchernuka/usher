@@ -48,7 +48,6 @@ function isServerBuild(config: ResolvedConfig, hook: HookEnvironment) {
 const relativeBaseWarning = (base: string, fileName: string) =>
   `[usher] base "${base}" is relative; ${fileName} is resolved from the page URL.`
 
-/** Emits the adapter's client files, logs its warnings, and fails on an exposed private file. */
 function emitAdapterFiles(
   context: Pick<Rollup.PluginContext, 'emitFile' | 'error'>,
   files: ReturnType<typeof adapterFiles>,

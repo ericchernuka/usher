@@ -24,11 +24,6 @@ export interface CloudflareWorkersOptions {
   workerFile?: string
 }
 
-/**
- * A self-contained Worker module: the handler's own source text plus a default
- * export. It has no imports, so it deploys whether or not the deploy step bundles.
- * Taking the text from the function keeps one copy of the handler.
- */
 function renderWorker(build: ClientBuild, r2Binding: string, factory: string) {
   const options: Required<AssetFallbackOptions<string>> = {
     base: build.base,

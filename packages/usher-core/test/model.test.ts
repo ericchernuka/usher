@@ -123,8 +123,6 @@ function invariants(harness: World, run: Run) {
 
   stickyUrgencyInvariant(harness, run, accepted)
 
-  // Catching up ends the outdated episode a dismissal belonged to. The next
-  // one counts from a later build, so its prompt is a new one.
   if (accepted.some(build => build.version === running.version)) {
     run.promptQuietUntil = -Infinity
   }

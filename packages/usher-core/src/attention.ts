@@ -8,7 +8,6 @@ export interface AttentionInput {
   latest: BuildFacts
   now: number
   stickyUrgency: StickyUrgency | undefined
-  /** What an earlier decision returned as `outdatedSince`, if the tab was already outdated. */
   outdatedSince: number | undefined
   dismissedAt: number | undefined
   thresholds: Thresholds
@@ -16,23 +15,14 @@ export interface AttentionInput {
 
 export interface Decision {
   state: UpdateState
-  /** Rollback or forced-update knowledge to keep until the tab reloads. */
   stickyUrgency: StickyUrgency | undefined
-  /**
-   * Server time from which the tab counts as outdated: the build time of the
-   * first build seen to supersede the running one. Later deploys do not move
-   * it, and catching up clears it.
-   */
   outdatedSince: number | undefined
-  /** Server time at which attention next changes on its own, if it will. */
   nextAt: number | undefined
 }
 
 function detectSticky(input: AttentionInput): StickyUrgency | undefined {
   const cutoff = Date.parse(input.latest.forceUpdateBuiltBefore ?? '')
 
-  // A cutoff later than the serving build itself could never be satisfied by
-  // refreshing, so it is ignored instead of nagging every tab forever.
   if (
     cutoff > Date.parse(input.running.buildTime) &&
     cutoff <= Date.parse(input.latest.buildTime)
@@ -56,12 +46,6 @@ function promptUntil(input: AttentionInput): number | undefined {
   return at !== undefined && snooze !== undefined ? at + snooze : undefined
 }
 
-/**
- * A tab is outdated from the moment a newer build was made, not from the moment
- * its own build was made: a fresh tab on a week-old build is one minute behind
- * when the next deploy lands. The first superseding build sets the time, so a
- * team that deploys a hundred times a day still escalates.
- */
 function outdatedSince(input: AttentionInput): number | undefined {
   if (input.latest.version === input.running.version) {
     return undefined
@@ -81,7 +65,6 @@ interface Outdated {
   since: number
 }
 
-/** Server time at which a level starts, if the level is on. */
 function startOf(
   { input, since }: Outdated,
   level: 'promptAfter' | 'urgentAfter',

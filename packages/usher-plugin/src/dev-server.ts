@@ -8,7 +8,6 @@ import {
   type DeploySimulation,
 } from './simulated-deploy'
 
-/** Path of the simulated-deploy endpoint, relative to `base`. */
 export const DEPLOY_PATH = '__usher/deploy'
 
 const isCdnBase = (base: string) => /^https?:/.test(base)
@@ -16,11 +15,9 @@ const isCdnBase = (base: string) => /^https?:/.test(base)
 export const isRelativeBase = (base: string) =>
   !base.startsWith('/') && !isCdnBase(base)
 
-/** The URL path of Vite's `base`. A CDN base keeps only its path. */
 export const pathBase = (base: string) =>
   isCdnBase(base) ? new URL(base).pathname : base
 
-/** Whether `url` requests `path` under `base`, ignoring the query. */
 function isRequestFor(base: string, path: string, url: string | undefined) {
   const requested = url?.split('?')[0] ?? ''
 
@@ -29,7 +26,6 @@ function isRequestFor(base: string, path: string, url: string | undefined) {
     : requested === `${pathBase(base)}${path}`
 }
 
-/** Serves the version file in development, where nothing is written to disk. */
 export function versionMiddleware(
   base: string,
   fileName: string,
@@ -100,10 +96,6 @@ async function deploy(
   })
 }
 
-/**
- * Takes `POST <base>__usher/deploy` with `{ "mode": ... }`, changes what the
- * version middleware serves, and answers with the build facts now served.
- */
 function deployMiddleware(
   base: string,
   simulation: DeploySimulation,
@@ -128,7 +120,6 @@ function deployMiddleware(
       })
     }
 
-    // Reading the body fails only when the client went away; close the connection.
     deploy(req, res, simulation).catch(() => res.destroy())
   }
 }
@@ -136,12 +127,10 @@ function deployMiddleware(
 export interface DevServing {
   base: string
   fileName: string
-  /** The real build facts, served until a simulated deploy replaces them. */
   facts: BuildFacts
   devtools: boolean
 }
 
-/** Serves the version file, and with devtools the simulated-deploy endpoint. */
 export function serveDevelopment(
   middlewares: Connect.Server,
   serving: DevServing,

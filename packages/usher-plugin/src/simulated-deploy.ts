@@ -4,21 +4,13 @@ export const DEPLOY_MODES = ['advance', 'force', 'rollback', 'reset'] as const
 
 export type DeployMode = (typeof DEPLOY_MODES)[number]
 
-/** One simulated deploy: its mode and its position in the dev server's sequence. */
 export interface SimulatedDeploy {
   mode: Exclude<DeployMode, 'reset'>
   sequence: number
 }
 
-/** How far before the real commit a simulated rollback's source lies. */
 const ROLLBACK_DISTANCE = 1_000
 
-/**
- * Build facts for a simulated deploy, derived from the real build every time so
- * that a forced-update cutoff from one deploy never carries into the next.
- * The build time is always later than the real one, even within the same
- * millisecond, so a forced-update cutoff at that time supersedes the real build.
- */
 export function simulatedBuild(
   real: BuildFacts,
   deploy: SimulatedDeploy,
@@ -48,13 +40,10 @@ export function simulatedBuild(
 }
 
 export interface DeploySimulation {
-  /** The build facts the dev server serves now. */
   served: () => BuildFacts
-  /** Replaces the served build, or serves the real one again on `reset`. */
   deploy: (mode: DeployMode) => BuildFacts
 }
 
-/** Owns what the dev server serves: the real build until a simulated deploy replaces it. */
 export function createDeploySimulation(real: BuildFacts): DeploySimulation {
   let simulated: BuildFacts | undefined
   let sequence = 0

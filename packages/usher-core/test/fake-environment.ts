@@ -38,7 +38,6 @@ function listeners<Event extends unknown[]>() {
   }
 }
 
-/** Counts a response as pending until its body has been read, so tests can wait for it. */
 function trackResponses(inner: () => typeof fetch) {
   const pending = new Set<symbol>()
 
@@ -78,7 +77,6 @@ function trackResponses(inner: () => typeof fetch) {
 /** setTimeout stores its delay in a signed 32-bit integer; a longer one overflows. */
 const MAX_BROWSER_TIMER_MS = 2 ** 31 - 1
 
-/** Far more than any real schedule needs, so reaching it means a timer loop. */
 const MAX_TIMERS_PER_ADVANCE = 20_000
 
 export interface FakeEnvironmentOptions {
@@ -86,11 +84,6 @@ export interface FakeEnvironmentOptions {
   fetch?: typeof fetch
 }
 
-/**
- * A browser tab with virtual time. The clock moves only when a test advances
- * it, and timers run in order as it passes them. The network stays real, so
- * MSW works without special handling.
- */
 export function createFakeEnvironment(options: FakeEnvironmentOptions = {}) {
   let wall = Date.parse(options.start ?? '2026-11-11T16:00:00Z')
   let monotonic = 0
@@ -156,7 +149,6 @@ export function createFakeEnvironment(options: FakeEnvironmentOptions = {}) {
     return next
   }
 
-  /** Move virtual time forward, running each timer as the clock reaches it. */
   async function advance(ms: number) {
     const end = monotonic + ms
 
@@ -201,7 +193,6 @@ export function createFakeEnvironment(options: FakeEnvironmentOptions = {}) {
     }
   }
 
-  /** Like `advance`, but also waits for the network after each timer. */
   async function runFor(ms: number) {
     const end = monotonic + ms
 
@@ -231,7 +222,6 @@ export function createFakeEnvironment(options: FakeEnvironmentOptions = {}) {
     get reloads() {
       return reloads
     },
-    /** Like a browser with storage disabled: reading the property throws. */
     blockStorage() {
       storageBlocked = true
     },

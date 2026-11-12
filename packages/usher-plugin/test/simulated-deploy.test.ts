@@ -13,12 +13,10 @@ interface Devtools {
   deploy(request?: { mode?: string }): Promise<BuildFacts>
 }
 
-/** A global scope the page script can run in: Node's, or a sandbox with its own fetch. */
 interface PageScope {
   fetch(path: string, init?: RequestInit): Promise<Response>
 }
 
-/** The devtools the page script installed in `scope`, as the console sees them. */
 const devtoolsIn = (scope: PageScope): Devtools =>
   Object.getOwnPropertyDescriptor(scope, '__USHER_DEVTOOLS__')?.value
 
