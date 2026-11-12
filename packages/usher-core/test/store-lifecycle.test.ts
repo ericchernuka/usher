@@ -74,6 +74,22 @@ describe('subscribing', () => {
     expect(store.getState().attention).toBe('passive')
   })
 
+  test('given a listener removes a later one, then the removed listener does not hear that change', async ({
+    app,
+    tab,
+  }) => {
+    server.use(serveBuild(newer))
+    const store = app.create()
+    const removed = vi.fn<() => void>()
+    let stopRemoved = noop
+    app.subscribe(store, () => stopRemoved())
+    stopRemoved = app.subscribe(store, removed)
+    await tab.waitForResponse()
+
+    expect(store.getState().attention).toBe('passive')
+    expect(removed).not.toHaveBeenCalled()
+  })
+
   test('given every subscriber left, when the app dismisses, then no timers are started', async ({
     app,
     tab,

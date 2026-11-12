@@ -1,5 +1,6 @@
+import * as v from 'valibot'
 import type { Environment } from './environment'
-import { isBuildFacts, type BuildFacts } from './types'
+import { parseBuildFacts, type BuildFacts } from './types'
 
 /** Focus and visibility recheck at most this often. */
 const MIN_FOCUS_CHECK_GAP_MS = 60_000
@@ -40,7 +41,13 @@ async function readFacts(res: Response): Promise<BuildFacts | Rejected> {
     return { problem: `a body that is not JSON (${type})` }
   }
 
-  return isBuildFacts(body) ? body : { problem: 'JSON that is not build facts' }
+  const parsed = parseBuildFacts(body)
+
+  return parsed.success
+    ? parsed.output
+    : {
+        problem: `JSON that is not build facts (${v.summarize(parsed.issues)})`,
+      }
 }
 
 /**
@@ -50,7 +57,7 @@ async function readFacts(res: Response): Promise<BuildFacts | Rejected> {
 class LatestBuild {
   readonly options: LatestBuildOptions
   latest: BuildFacts | undefined
-  lastCheck = -Infinity
+  lastCheck: { monotonic: number; wall: number } | undefined
   warned = false
   watching: Watching | undefined
 
@@ -60,7 +67,21 @@ class LatestBuild {
 
   get = () => this.latest
 
-  sinceCheck = () => this.options.env.monotonicNow() - this.lastCheck
+  /**
+   * Time since the last check started. Some browsers stop the monotonic clock
+   * while the device sleeps, so the wall clock counts too; whichever says more
+   * time has passed wins, and a wrong guess costs one extra request.
+   */
+  sinceCheck = () => {
+    const { env } = this.options
+
+    return this.lastCheck
+      ? Math.max(
+          env.monotonicNow() - this.lastCheck.monotonic,
+          env.wallNow() - this.lastCheck.wall,
+        )
+      : Infinity
+  }
 
   checkUrl = () => {
     const { env, versionUrl } = this.options
@@ -83,7 +104,7 @@ class LatestBuild {
       return
     }
 
-    const due = this.lastCheck + pollInterval - env.monotonicNow()
+    const due = pollInterval - this.sinceCheck()
     const delay = Math.min(Math.max(0, due), MAX_TIMER_MS)
     this.watching.cancelPoll = env.startTimer(this.onPoll, delay)
   }
@@ -105,6 +126,12 @@ class LatestBuild {
     }
   }
 
+  /** The tab can be seen again, or watching just started: poll again, and check now if it has been a while. */
+  resume = () => {
+    this.schedulePoll()
+    this.recheck()
+  }
+
   check = async () => {
     const { env } = this.options
 
@@ -115,7 +142,7 @@ class LatestBuild {
     this.watching.inFlight?.abort()
     const controller = new AbortController()
     this.watching.inFlight = controller
-    this.lastCheck = env.monotonicNow()
+    this.lastCheck = { monotonic: env.monotonicNow(), wall: env.wallNow() }
     this.schedulePoll()
 
     const cancelTimeout = env.startTimer(
@@ -155,11 +182,15 @@ class LatestBuild {
       this.options.clock.observe(serverTime)
     }
 
+    this.warned = false
     this.latest = facts
     this.watching?.onChange()
   }
 
-  /** A missing or misrouted version.json would otherwise fail silently forever. */
+  /**
+   * A missing or misrouted version.json would otherwise fail silently forever.
+   * Warns once per run of bad responses, so a later outage is reported too.
+   */
   warnOnce = (problem: string) => {
     if (this.warned) {
       return
@@ -177,15 +208,12 @@ class LatestBuild {
     this.watching = {
       onChange,
       stopListening: [
-        env.onVisibilityChange(() => {
-          this.schedulePoll()
-          this.recheck()
-        }),
+        env.onVisibilityChange(this.resume),
         env.onFocus(this.recheck),
       ],
     }
 
-    void this.check()
+    this.resume()
   }
 
   stop = () => {
@@ -196,7 +224,13 @@ class LatestBuild {
     const { stopListening, inFlight, cancelPoll } = this.watching
     this.watching = undefined
     cancelPoll?.()
-    inFlight?.abort()
+
+    if (inFlight) {
+      // That check never landed, so the next subscriber must not wait for it.
+      inFlight.abort()
+      this.lastCheck = undefined
+    }
+
     stopListening.forEach(stop => stop())
   }
 }

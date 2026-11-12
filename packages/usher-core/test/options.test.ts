@@ -41,6 +41,26 @@ describe('validating options', () => {
       message: /urgentAfter must be later than promptAfter/,
     },
     {
+      name: 'urgentAfter earlier than promptAfter',
+      options: { promptAfter: 12 * HOUR, urgentAfter: HOUR },
+      message: /got urgentAfter 3600000 ms and promptAfter 43200000 ms/,
+    },
+    {
+      name: 'a running build with a missing build time',
+      options: JSON.parse('{"running":{"version":"aaa","commitTime":"x"}}'),
+      message: /running must be the running build's build facts: .*buildTime/s,
+    },
+    {
+      name: 'a missing versionUrl',
+      options: JSON.parse('{"versionUrl":null}'),
+      message: /versionUrl must be the URL of version\.json, got null/,
+    },
+    {
+      name: 'a versionUrl no page could resolve',
+      options: { versionUrl: 'https://' },
+      message: /versionUrl must be the URL of version\.json, got https:/,
+    },
+    {
       name: 'a zero promptSnooze',
       options: { promptSnooze: 0 },
       message: /promptSnooze must be positive/,

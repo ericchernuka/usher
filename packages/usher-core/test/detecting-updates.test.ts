@@ -109,6 +109,22 @@ describe('checking for a new build', () => {
     expect(store.getState()).toEqual({ attention: 'none', reason: 'unknown' })
   })
 
+  test('given version.json carries fields the tab does not know, then the snapshot keeps only build facts', async ({
+    app,
+    tab,
+  }) => {
+    server.use(serveRaw({ ...newer, deployedBy: 'ci' }))
+    const store = app.create()
+    app.subscribe(store)
+    await tab.waitForResponse()
+
+    expect(store.getState()).toEqual({
+      attention: 'passive',
+      reason: 'outdated',
+      latest: newer,
+    })
+  })
+
   test('given a deploy is in progress (5xx), then the tab keeps what it knew and the next check picks the build up', async ({
     app,
     tab,
@@ -227,6 +243,39 @@ describe('polling schedule', () => {
     await tab.runFor(SECOND)
     tab.focus()
     await tab.waitForResponse()
+    expect(requests).toHaveLength(2)
+  })
+
+  test('given the last subscriber leaves and one returns within a minute of a check, then the tab does not check again and keeps its poll schedule', async ({
+    app,
+    tab,
+    requests,
+  }) => {
+    const store = app.create({ pollInterval: 5 * MINUTE })
+    const stop = app.subscribe(store)
+    await tab.waitForResponse()
+
+    stop()
+    app.subscribe(store)
+    await tab.waitForResponse()
+    expect(requests).toHaveLength(1)
+
+    await tab.runFor(5 * MINUTE)
+    expect(requests).toHaveLength(2)
+  })
+
+  test('given the device slept and its monotonic clock stood still, when focus returns, then the tab checks', async ({
+    app,
+    tab,
+    requests,
+  }) => {
+    app.subscribe(app.create())
+    await tab.waitForResponse()
+
+    tab.setSystemTime(tab.now() + 2 * HOUR)
+    tab.focus()
+    await tab.waitForResponse()
+
     expect(requests).toHaveLength(2)
   })
 
@@ -358,6 +407,24 @@ describe('a version file that is missing or misrouted', () => {
 
     expect(warn).toHaveBeenCalledTimes(1)
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('HTTP 404'))
+  })
+
+  test('given the file recovers and then breaks again, then the second outage is reported too', async ({
+    app,
+    tab,
+  }) => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    server.use(serveError(404, { once: true }))
+    app.subscribe(app.create())
+    await tab.waitForResponse()
+    await app.poll()
+
+    server.use(serveError(503))
+    await app.poll()
+    await app.poll()
+
+    expect(warn).toHaveBeenCalledTimes(2)
+    expect(warn).toHaveBeenLastCalledWith(expect.stringContaining('HTTP 503'))
   })
 
   test('given the network is down, then the tab does not warn', async ({

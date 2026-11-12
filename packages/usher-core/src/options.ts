@@ -1,4 +1,9 @@
-import type { AppUpdatesOptions } from './types'
+import * as v from 'valibot'
+import {
+  parseBuildFacts,
+  type AppUpdatesOptions,
+  type BuildFacts,
+} from './types'
 
 const SECOND = 1_000
 const MINUTE = 60 * SECOND
@@ -73,7 +78,9 @@ export function resolveThresholds(
     urgentAfter !== undefined &&
     urgentAfter <= promptAfter
   ) {
-    fail('urgentAfter must be later than promptAfter')
+    fail(
+      `urgentAfter must be later than promptAfter, got urgentAfter ${urgentAfter} ms and promptAfter ${promptAfter} ms`,
+    )
   }
 
   return {
@@ -89,4 +96,28 @@ export function resolvePollInterval(value = DEFAULT_POLL_INTERVAL): number {
   }
 
   return value
+}
+
+export function resolveRunning(running: BuildFacts): BuildFacts {
+  const parsed = parseBuildFacts(running)
+
+  return parsed.success
+    ? parsed.output
+    : fail(
+        `running must be the running build's build facts: ${v.summarize(parsed.issues)}`,
+      )
+}
+
+/** A relative URL is fine: the tab resolves it against the page. */
+const VersionUrl = v.pipe(
+  v.string(),
+  v.check(value => URL.canParse(value, 'https://app.invalid')),
+)
+
+export function resolveVersionUrl(versionUrl: string): string {
+  const parsed = v.safeParse(VersionUrl, versionUrl)
+
+  return parsed.success
+    ? parsed.output
+    : fail(`versionUrl must be the URL of version.json, got ${versionUrl}`)
 }

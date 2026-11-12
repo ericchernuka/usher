@@ -1,9 +1,6 @@
 import * as v from 'valibot'
 
-const Timestamp = v.pipe(
-  v.string(),
-  v.check(value => !Number.isNaN(Date.parse(value))),
-)
+const Timestamp = v.pipe(v.string(), v.isoTimestamp())
 
 /** The runtime check for `version.json`; `BuildFacts` is derived from it, so they can't drift. */
 const BuildFactsSchema = v.object({
@@ -24,9 +21,10 @@ const BuildFactsSchema = v.object({
 /** Build facts shared by the running build and the serving deployment. */
 export type BuildFacts = v.InferOutput<typeof BuildFactsSchema>
 
-export function isBuildFacts(value: unknown): value is BuildFacts {
-  return v.is(BuildFactsSchema, value)
-}
+export const BUILD_FACT_NAMES = v.keyof(BuildFactsSchema).options
+
+/** Reads build facts from untrusted input. Fields the schema does not know are dropped. */
+export const parseBuildFacts = v.safeParser(BuildFactsSchema)
 
 /**
  * How loudly the app should signal an update. Each surface picks its own threshold:

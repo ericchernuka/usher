@@ -3,6 +3,7 @@ import { serveBuild, serveNetworkError } from './mocks/overrides'
 import {
   HOUR,
   MINUTE,
+  SECOND,
   DISMISSAL_KEY,
   expect,
   newer,
@@ -130,6 +131,32 @@ test('given a custom prompt snooze, then its expiry wakes without another poll',
   expect(store.dismiss()).toBe(true)
   await tab.runFor(61_000)
   expect(store.getState().attention).toBe('prompt')
+})
+
+test('given a listener dismisses as soon as it hears of the prompt, then the snooze still ends on time', async ({
+  app,
+  tab,
+}) => {
+  server.use(serveBuild(newer))
+
+  const store = app.create({
+    pollInterval: HOUR,
+    promptAfter: HOUR,
+    promptSnooze: MINUTE,
+  })
+
+  let dismissals = 0
+
+  app.subscribe(store, () => {
+    if (store.dismiss()) {
+      dismissals += 1
+    }
+  })
+
+  await tab.waitForResponse()
+  await tab.runFor(3 * MINUTE + SECOND)
+
+  expect(dismissals).toBe(4)
 })
 
 test('given the urgent level is off, then a prompt dismissal never expires', async ({

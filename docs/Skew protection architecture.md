@@ -87,7 +87,7 @@ A tab is outdated since the build time of the first build it saw supersede its o
 
 Hidden tabs keep no poll or deadline timer and catch up when visible. A pending request keeps its 30-second timeout and is aborted when the final subscriber leaves. Age evaluation continues on the deadline timer when network checks fail. The clock estimate, the last observed build and sticky urgency survive periods without subscribers.
 
-The first time a store receives a response that is not OK or not build facts as JSON, it logs one warning naming the version URL. Network errors and timeouts stay silent.
+When a store receives a response that is not OK or not build facts as JSON, it logs one warning naming the version URL, and stays quiet until a valid response arrives. Network errors and timeouts stay silent. Timestamps in the file must be ISO 8601 with a time zone, and fields the store does not know are dropped.
 
 `prompt-dismissal.ts` stores `{ "dismissedAt": <server time in ms> }` under `<storageKey>:prompt-dismissal`. Every tab of the app reads it, across releases, so the format is a contract. The latest dismissal wins. Dismissal quiets tabs whose prompt threshold had already started. It never quiets urgent attention. Without an explicit prompt snooze, dismissal lasts until urgent starts; if urgent is disabled, it has no expiry. Blocked storage keeps a dismissal for the current tab.
 

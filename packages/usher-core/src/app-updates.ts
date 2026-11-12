@@ -1,6 +1,8 @@
 import {
   resolvePollInterval,
+  resolveRunning,
   resolveThresholds,
+  resolveVersionUrl,
   type Thresholds,
 } from './options'
 import { createLatestBuild } from './latest-build'
@@ -14,7 +16,12 @@ import {
 import { isolate } from './callbacks'
 import { createRefresh, type RefreshBlocker } from './refresh'
 import { createPromptDismissal } from './prompt-dismissal'
-import type { AppUpdatesOptions, BuildFacts, UpdateState } from './types'
+import {
+  BUILD_FACT_NAMES,
+  type AppUpdatesOptions,
+  type BuildFacts,
+  type UpdateState,
+} from './types'
 
 export type { RefreshBlocker } from './refresh'
 
@@ -58,13 +65,6 @@ export interface AppUpdates {
   addRefreshBlocker: (blocker: RefreshBlocker) => () => void
 }
 
-const FACTS = [
-  'version',
-  'commitTime',
-  'buildTime',
-  'forceUpdateBuiltBefore',
-] as const satisfies ReadonlyArray<keyof BuildFacts>
-
 function sameState(a: UpdateState, b: UpdateState) {
   if (a.attention !== b.attention || a.reason !== b.reason) {
     return false
@@ -76,12 +76,15 @@ function sameState(a: UpdateState, b: UpdateState) {
 
   const [x, y] = [a.latest, b.latest]
 
-  return FACTS.every(fact => x[fact] === y[fact])
+  return BUILD_FACT_NAMES.every(fact => x[fact] === y[fact])
 }
 
+/** A listener that an earlier one removed during this pass is not called. */
 function notifyAll(listeners: ReadonlySet<{ listener: () => void }>) {
   for (const entry of Array.from(listeners)) {
-    isolate('listener', entry.listener)
+    if (listeners.has(entry)) {
+      isolate('listener', entry.listener)
+    }
   }
 }
 
@@ -107,14 +110,14 @@ class AppUpdatesStore implements AppUpdates {
   active: Active | undefined
 
   constructor(options: AppUpdatesOptions, env: Environment) {
-    this.running = options.running
+    this.running = resolveRunning(options.running)
     this.env = env
     this.thresholds = resolveThresholds(options)
     this.clock = createServerClock(env)
     this.dismissal = createPromptDismissal(options.storageKey ?? 'usher', env)
     this.refreshes = createRefresh(options.reload ?? (() => env.reload()))
     this.latestBuild = createLatestBuild({
-      versionUrl: options.versionUrl,
+      versionUrl: resolveVersionUrl(options.versionUrl),
       pollInterval: resolvePollInterval(options.pollInterval),
       env,
       clock: this.clock,
@@ -140,8 +143,9 @@ class AppUpdatesStore implements AppUpdates {
   apply = (decision: Decision) => {
     this.stickyUrgency = decision.stickyUrgency
     this.outdatedSince = decision.outdatedSince
-    this.publish(decision.state)
+    // Scheduled first: a listener may dismiss, and that decision's deadline must win.
     this.scheduleDeadline(decision.nextAt)
+    this.publish(decision.state)
   }
 
   /** Every source calls back here: a new response, a storage change, a deadline, visibility. */
