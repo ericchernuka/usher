@@ -61,7 +61,7 @@ const FACTS = [
   'version',
   'commitTime',
   'buildTime',
-  'forceUpdateBefore',
+  'forceUpdateBuiltBefore',
 ] as const satisfies ReadonlyArray<keyof BuildFacts>
 
 function sameState(a: UpdateState, b: UpdateState) {

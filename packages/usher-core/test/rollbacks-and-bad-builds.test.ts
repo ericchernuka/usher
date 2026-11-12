@@ -45,7 +45,11 @@ describe('a forced update', () => {
     tab,
   }) => {
     server.use(
-      serveBuild({ ...running, forceUpdateBefore: '2026-11-11T15:30:00.000Z' }),
+      serveBuild({
+        ...running,
+        buildTime: '2026-11-11T15:30:00.000Z',
+        forceUpdateBuiltBefore: '2026-11-11T15:30:00.000Z',
+      }),
     )
     const store = app.create()
     app.subscribe(store)
@@ -64,9 +68,29 @@ describe('a forced update', () => {
     server.use(
       serveBuild({
         ...newer,
-        forceUpdateBefore: new Date(
+        forceUpdateBuiltBefore: new Date(
           Date.parse(running.buildTime) - HOUR,
         ).toISOString(),
+      }),
+    )
+    const store = app.create()
+    app.subscribe(store)
+    await tab.waitForResponse()
+
+    expect(store.getState()).toMatchObject({
+      attention: 'passive',
+      reason: 'outdated',
+    })
+  })
+
+  test('given a cutoff later than the serving build itself, then it does not apply, because refreshing could never satisfy it', async ({
+    app,
+    tab,
+  }) => {
+    server.use(
+      serveBuild({
+        ...newer,
+        forceUpdateBuiltBefore: '2026-11-12T09:00:00.000Z',
       }),
     )
     const store = app.create()

@@ -26,7 +26,8 @@ const builds = {
     ...running,
     version: 'fix',
     commitTime: '2026-11-11T17:00:00.000Z',
-    forceUpdateBefore: '2026-11-11T17:00:00.000Z',
+    buildTime: '2026-11-11T17:00:00.000Z',
+    forceUpdateBuiltBefore: '2026-11-11T17:00:00.000Z',
   },
 } satisfies Record<string, BuildFacts>
 

@@ -55,7 +55,11 @@ describe('surfaces that misbehave', () => {
 
     ready = true
     server.use(
-      serveBuild({ ...older, forceUpdateBefore: '2026-11-12T00:00:00Z' }),
+      serveBuild({
+        ...older,
+        buildTime: '2026-11-11T15:30:00.000Z',
+        forceUpdateBuiltBefore: '2026-11-11T15:30:00.000Z',
+      }),
     )
     await app.poll()
 

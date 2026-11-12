@@ -19,8 +19,12 @@ export interface UsherPluginOptions {
   version?: string
   /** Override the commit time (ISO). Default: APP_COMMIT_TIME, then `git log -1 --format=%cI`. */
   commitTime?: string
-  /** Force tabs built before this time (ISO) to update. Default: APP_FORCE_UPDATE_BEFORE. */
-  forceUpdateBefore?: string
+  /**
+   * Force tabs built before this time (ISO) to update. It is a build time, not a
+   * deadline, so a value later than this build fails the build.
+   * Default: APP_FORCE_UPDATE_BUILT_BEFORE.
+   */
+  forceUpdateBuiltBefore?: string
   /**
    * Serve chunks from older builds after a deploy, e.g. `cloudflarePages()` from
    * `@rndsqr/usher-cloudflare`. Off by default.

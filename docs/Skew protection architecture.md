@@ -109,7 +109,7 @@ A Pages-to-Workers migration reuses the R2 asset pool. Change the adapter factor
 
 ## Rollbacks and scope
 
-Dashboard rollbacks and old-commit redeploys have an older commit time. A revert deployed as a new commit needs `APP_FORCE_UPDATE_BEFORE` when existing tabs must become urgent. R2 continues serving their chunks until users refresh.
+Dashboard rollbacks and old-commit redeploys have an older commit time. A revert deployed as a new commit needs `APP_FORCE_UPDATE_BUILT_BEFORE` when existing tabs must become urgent. R2 continues serving their chunks until users refresh.
 
 Deploy one Workers version at a time. Alternating version responses during a gradual deployment can appear to be a rollback.
 

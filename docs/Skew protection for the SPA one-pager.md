@@ -49,7 +49,7 @@ Skew protection keeps old tabs alive while the update library asks users to move
 
 Users catch up through prompts or their own refreshes. Each app picks its update surface, such as a toast or navigation button. Age-based escalation defaults to prompt attention at 12 hours and urgent attention at 24 hours. A rollback or forced update is urgent immediately and stays urgent until reload. A prompt dismissal quiets tabs whose prompt threshold had already started, until each reaches urgent. An explicit prompt snooze can set a duration but cannot quiet urgent attention.
 
-Rollbacks need no new steps for dashboard rollbacks or old-commit redeploys: the older commit time marks them urgent. A forward revert needs `APP_FORCE_UPDATE_BEFORE` set for one deploy. The trade-off: tabs on a bad build keep running it until they refresh, since R2 still serves its chunks.
+Rollbacks need no new steps for dashboard rollbacks or old-commit redeploys: the older commit time marks them urgent. A forward revert needs `APP_FORCE_UPDATE_BUILT_BEFORE` set for one deploy. The trade-off: tabs on a bad build keep running it until they refresh, since R2 still serves its chunks.
 
 ## Success measures
 

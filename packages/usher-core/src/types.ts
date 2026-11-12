@@ -13,8 +13,12 @@ const BuildFactsSchema = v.object({
   commitTime: Timestamp,
   /** When the build ran (ISO). Build age, the basis of escalation, counts from here. */
   buildTime: Timestamp,
-  /** Tabs whose build ran before this time (ISO) must update. Set via APP_FORCE_UPDATE_BEFORE. */
-  forceUpdateBefore: v.exactOptional(Timestamp),
+  /**
+   * Tabs whose build ran before this time (ISO) must update. It is a build time,
+   * not a deadline, and it cannot be later than this build's own `buildTime`.
+   * Set via APP_FORCE_UPDATE_BUILT_BEFORE.
+   */
+  forceUpdateBuiltBefore: v.exactOptional(Timestamp),
 })
 
 /** Build facts shared by the running build and the serving deployment. */

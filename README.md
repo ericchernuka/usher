@@ -31,13 +31,13 @@ Serve `version.json` uncached. The client also adds a `t` query parameter to eac
   Cache-Control: no-store
 ```
 
-| Plugin option       | Default                                           | Meaning                                              |
-| ------------------- | ------------------------------------------------- | ---------------------------------------------------- |
-| `fileName`          | `version.json`                                    | Output file, relative to `outDir` and `base`.        |
-| `version`           | `APP_VERSION`, `GITHUB_SHA`, then `git rev-parse` | The source version of the build.                     |
-| `commitTime`        | `APP_COMMIT_TIME`, then `git log`                 | ISO 8601 commit time, used to detect rollbacks.      |
-| `forceUpdateBefore` | `APP_FORCE_UPDATE_BEFORE`                         | ISO 8601 cutoff. Tabs built before it become urgent. |
-| `adapter`           | None                                              | A skew-protection adapter. See below.                |
+| Plugin option            | Default                                           | Meaning                                                                                                                                |
+| ------------------------ | ------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `fileName`               | `version.json`                                    | Output file, relative to `outDir` and `base`.                                                                                          |
+| `version`                | `APP_VERSION`, `GITHUB_SHA`, then `git rev-parse` | The source version of the build.                                                                                                       |
+| `commitTime`             | `APP_COMMIT_TIME`, then `git log`                 | ISO 8601 commit time, used to detect rollbacks.                                                                                        |
+| `forceUpdateBuiltBefore` | `APP_FORCE_UPDATE_BUILT_BEFORE`                   | ISO 8601 build time. Tabs running a build made before it become urgent. Not a deadline: a value later than this build fails the build. |
+| `adapter`                | None                                              | A skew-protection adapter. See below.                                                                                                  |
 
 ## Use it in an app
 
@@ -302,7 +302,7 @@ The app then owns its routing: `_routes.json` on Pages, or `assets.run_worker_fi
 
 ## Rollbacks and deployment
 
-Dashboard rollbacks and old-commit redeploys are detected through `commitTime`. The build needs `.git` or `APP_COMMIT_TIME`; the plugin warns when neither exists. For a revert deployed as a new commit, set `APP_FORCE_UPDATE_BEFORE` for that deployment. Clearing it later does not lower urgency in tabs that already saw it.
+Dashboard rollbacks and old-commit redeploys are detected through `commitTime`. The build needs `.git` or `APP_COMMIT_TIME`; the plugin warns when neither exists. For a revert deployed as a new commit, set `APP_FORCE_UPDATE_BUILT_BEFORE` to the time of that build (`date -u +%Y-%m-%dT%H:%M:%SZ` in the deploy job), so every tab built before the fix becomes urgent. It is a build time, not a deadline. A value later than the build itself fails the build, because no refresh could ever satisfy it. Clearing it in a later deploy does not lower urgency in tabs that already saw it.
 
 Deploy one Workers version at a time. Alternating version responses during a gradual deployment can look like a rollback. R2 keeps serving bad-build tabs until their users refresh.
 

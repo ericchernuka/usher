@@ -84,7 +84,8 @@ A deployment whose source commit is older than the running build's source commit
 _Avoid_: Revert, which can be a new commit.
 
 **Forced-update cutoff**:
-The build-time threshold before which running builds require an urgent update.
+The build-time threshold before which running builds require an urgent update. It names a build time, not a deadline, so it is never later than the build that declares it.
+_Avoid_: Deadline.
 
 **Update surface**:
 The app's presentation of attention, such as a toast, banner, or update button.

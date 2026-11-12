@@ -6,7 +6,7 @@ import type { BuildFacts } from '@rndsqr/usher-core'
 export interface BuildFactsSources {
   version?: string
   commitTime?: string
-  forceUpdateBefore?: string
+  forceUpdateBuiltBefore?: string
 }
 
 const git = (args: string) => {
@@ -68,8 +68,8 @@ function buildVersion(version: { value: string } | undefined, now: Date) {
 }
 
 export function resolveBuildFacts(
-  sources: BuildFactsSources,
-  { env = process.env, now = new Date(), warn }: BuildFactsRuntime,
+  sources: BuildFactsSources = {},
+  { env = process.env, now = new Date(), warn }: BuildFactsRuntime = {},
 ): BuildFacts {
   const version = firstSet(
     ['version', sources.version],
@@ -89,14 +89,15 @@ export function resolveBuildFacts(
   if (!commitTime) {
     warn?.(
       '[usher] no commit time (no .git and no APP_COMMIT_TIME); using build time. ' +
-        "Redeploying an old commit won't be detected as a rollback.",
+        "Redeploying an old commit won't be detected as a rollback. " +
+        'Set APP_COMMIT_TIME or build inside the Git checkout.',
     )
   }
 
-  const forceUpdateBefore = timestamp(
+  const forceUpdateBuiltBefore = timestamp(
     firstSet(
-      ['forceUpdateBefore', sources.forceUpdateBefore],
-      ['APP_FORCE_UPDATE_BEFORE', env['APP_FORCE_UPDATE_BEFORE']],
+      ['forceUpdateBuiltBefore', sources.forceUpdateBuiltBefore],
+      ['APP_FORCE_UPDATE_BUILT_BEFORE', env['APP_FORCE_UPDATE_BUILT_BEFORE']],
     ),
   )
 
@@ -106,8 +107,16 @@ export function resolveBuildFacts(
     buildTime: now.toISOString(),
   }
 
-  if (forceUpdateBefore) {
-    facts.forceUpdateBefore = forceUpdateBefore
+  if (forceUpdateBuiltBefore) {
+    if (forceUpdateBuiltBefore > facts.buildTime) {
+      throw new Error(
+        `[usher] forceUpdateBuiltBefore (${forceUpdateBuiltBefore}) is later than this build (${facts.buildTime}). ` +
+          'It is a build time, not a deadline: tabs on this build could never satisfy it. ' +
+          'Use the time of this build, or of the last bad one.',
+      )
+    }
+
+    facts.forceUpdateBuiltBefore = forceUpdateBuiltBefore
   }
 
   return facts

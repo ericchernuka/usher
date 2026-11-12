@@ -99,7 +99,7 @@ function stickyUrgencyInvariant(w: World, r: Run) {
     ({ build, signal }) =>
       !signal?.aborted &&
       (Date.parse(build.commitTime) < Date.parse(running.commitTime) ||
-        Date.parse(build.forceUpdateBefore ?? '') >
+        Date.parse(build.forceUpdateBuiltBefore ?? '') >
           Date.parse(running.buildTime)),
   )
 

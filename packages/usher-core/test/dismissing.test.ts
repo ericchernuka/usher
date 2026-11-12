@@ -73,7 +73,11 @@ test.for([
   },
   {
     name: 'forced',
-    build: { ...newer, forceUpdateBefore: '2026-11-12T00:00:00Z' },
+    build: {
+      ...newer,
+      buildTime: '2026-11-11T15:30:00.000Z',
+      forceUpdateBuiltBefore: '2026-11-11T15:30:00.000Z',
+    },
     time: '2026-11-11T16:00:00Z',
     reason: 'forced',
   },

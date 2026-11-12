@@ -25,7 +25,7 @@ describe('resolveBuildFacts', () => {
       {
         env: {
           GITHUB_SHA: 'abc123',
-          APP_FORCE_UPDATE_BEFORE: '2026-11-11T10:00:00Z',
+          APP_FORCE_UPDATE_BUILT_BEFORE: '2026-11-11T10:00:00Z',
         },
         now: new Date('2026-11-11T16:00:00Z'),
       },
@@ -35,7 +35,7 @@ describe('resolveBuildFacts', () => {
       version: 'abc123',
       commitTime: '2026-11-11T15:00:00.000Z',
       buildTime: '2026-11-11T16:00:00.000Z',
-      forceUpdateBefore: '2026-11-11T10:00:00.000Z',
+      forceUpdateBuiltBefore: '2026-11-11T10:00:00.000Z',
     })
   })
 })
@@ -280,13 +280,25 @@ describe('given a malformed timestamp', () => {
     )
   })
 
-  it('when the forceUpdateBefore option is malformed, then the build fails naming the option', () => {
+  it('when the forceUpdateBuiltBefore option is malformed, then the build fails naming the option', () => {
     expect(() =>
       resolveBuildFacts(
-        { forceUpdateBefore: '2026-13-45' },
+        { forceUpdateBuiltBefore: '2026-13-45' },
         { env: { GITHUB_SHA: 'abc', APP_COMMIT_TIME: '2026-11-10T00:00:00Z' } },
       ),
-    ).toThrow(/forceUpdateBefore must be an ISO 8601 timestamp/)
+    ).toThrow(/forceUpdateBuiltBefore must be an ISO 8601 timestamp/)
+  })
+
+  it('when forceUpdateBuiltBefore is later than the build itself, then the build fails, because no refresh could satisfy it', () => {
+    expect(() =>
+      resolveBuildFacts(
+        { forceUpdateBuiltBefore: '2026-11-12T09:00:00Z' },
+        {
+          env: { GITHUB_SHA: 'abc', APP_COMMIT_TIME: '2026-11-10T00:00:00Z' },
+          now: new Date('2026-11-11T16:00:00Z'),
+        },
+      ),
+    ).toThrow(/forceUpdateBuiltBefore .* is later than this build/)
   })
 
   it('when a value is only whitespace, then it counts as unset', () => {

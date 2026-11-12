@@ -13,7 +13,11 @@ describe('isBuildFacts', () => {
 
 describe('isBuildFacts edge cases', () => {
   it('accepts a file with a force-update cutoff and fields it does not know about', () => {
-    const file = { ...running, forceUpdateBefore: running.buildTime, extra: 1 }
+    const file = {
+      ...running,
+      forceUpdateBuiltBefore: running.buildTime,
+      extra: 1,
+    }
 
     expect(isBuildFacts(file)).toBe(true)
   })
@@ -22,7 +26,7 @@ describe('isBuildFacts edge cases', () => {
     ['an empty version', { ...running, version: '' }],
     ['a numeric version', { ...running, version: 123 }],
     ['a missing commit time', { ...running, commitTime: undefined }],
-    ['an unreadable cutoff', { ...running, forceUpdateBefore: 'soon' }],
+    ['an unreadable cutoff', { ...running, forceUpdateBuiltBefore: 'soon' }],
     ['null', null],
   ])('rejects %s', (_name, file) => {
     expect(isBuildFacts(file)).toBe(false)
