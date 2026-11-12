@@ -237,8 +237,8 @@ describe('given a skew-protection adapter', () => {
   })
 })
 
-describe('plugin and edge (first review #12)', () => {
-  it('treats empty CI variables as missing and accepts an explicit commit time', () => {
+describe('given CI variables', () => {
+  it('when some are empty, then they count as missing and an explicit commit time is used', () => {
     const info = resolveBuildFacts(
       {},
       {

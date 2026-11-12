@@ -19,19 +19,42 @@ import type { AppUpdatesOptions, BuildFacts, UpdateState } from './types'
 export type { RefreshBlocker } from './refresh'
 
 /**
- * External store, one per app at module scope. Creating it has no side effects;
- * it polls while it has at least one subscriber.
+ * The update store, one per app at module scope.
+ *
+ * Polling, timers and listeners exist only while there is at least one
+ * subscriber. The state, the last observed build, the server clock estimate and
+ * sticky urgency survive a gap with no subscribers.
  */
 export interface AppUpdates {
+  /**
+   * The current snapshot. It is the same object until attention, reason or any
+   * field of `latest` changes, so it is safe for `useSyncExternalStore`.
+   */
   getState: () => UpdateState
-  /** Each call is its own subscription, even with the same function. */
+  /**
+   * Listen for state changes. Listeners run after the new state is readable, and
+   * one that throws does not stop the others. Each call is its own
+   * subscription, even with the same function.
+   */
   subscribe: (listener: () => void) => () => void
-  /** Register a synchronous veto on refresh (e.g. unsaved work); returns a cleanup. */
-  addRefreshBlocker: (blocker: RefreshBlocker) => () => void
-  /** Refresh onto the latest build. Resolves false if a blocker or your `reload` declined. Concurrent calls share one attempt. */
+  /**
+   * Refresh onto the latest build. Blockers run synchronously in the order they
+   * were added. Resolves `false` when a blocker blocked it, or when `reload`
+   * returned `false` or threw; a later call may try again. Concurrent calls
+   * share one attempt.
+   */
   refresh: () => Promise<boolean>
-  /** Dismiss the current prompt for every tab. Urgent states cannot be dismissed. */
+  /**
+   * Dismiss the prompt for every tab. Returns `true` only when the state was
+   * `prompt` and is now `passive` / `dismissed`. Otherwise it returns `false`
+   * and writes nothing; urgent attention cannot be dismissed.
+   */
   dismiss: () => boolean
+  /**
+   * Register a synchronous veto on refresh, for example for unsaved work. A
+   * blocker that returns `true` or throws blocks the refresh. Returns a cleanup.
+   */
+  addRefreshBlocker: (blocker: RefreshBlocker) => () => void
 }
 
 const FACTS = [

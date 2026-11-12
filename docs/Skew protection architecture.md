@@ -2,18 +2,20 @@
 
 The library keeps old chunks available across deployments and asks users to refresh an outdated tab. The product goals are in the [SPA one-pager](Skew%20protection%20for%20the%20SPA%20one-pager.md), domain terms are in the [glossary](../GLOSSARY.md), and setup and interface examples are in the [README](../README.md).
 
-The repository contains the libraries, two sample app builds, and local browser and workerd tests. It does not contain a production CI deployment job, a provisioned R2 bucket, or deployment credentials. The deployment sequence below describes the remaining integration work.
+The repository contains the libraries, two example apps, and local browser and workerd tests. It does not contain a production CI deployment job, a provisioned R2 bucket, or deployment credentials. The deployment sequence below describes the remaining integration work.
 
 ## Package ownership
 
-| Package                     | Responsibility                                                                                                                                                             |
-| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `@rndsqr/usher-core`        | Build-tool-independent update state, polling, prompt dismissal, explicit refresh, and update surfaces. Its constructor accepts running-build facts and a version URL.      |
-| `@rndsqr/usher-plugin/vite` | The build plugin, virtual build facts, and the skew-protection adapter contract. Its `/client` entry creates the core store with embedded build facts and the version URL. |
-| `@rndsqr/react-usher`       | Hooks that read a core store and register explicit refresh blockers.                                                                                                       |
-| `@rndsqr/usher-cloudflare`  | Build adapters for Pages and Workers, plus the asset fallback handler at `/worker`.                                                                                        |
+| Package                    | Responsibility                                                                                                                                                                                                                                                                              |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@rndsqr/usher-core`       | Build-tool-independent update state, polling, prompt dismissal, explicit refresh, and update surfaces. Its constructor accepts running-build facts and a version URL.                                                                                                                       |
+| `@rndsqr/usher-plugin`     | The build plugin at `/vite`, which also defines the skew-protection adapter contract, and the browser entry at `/client`, which creates the core store with the embedded build facts and version URL. Only Vite is implemented; the bundler is a subpath so another can be added beside it. |
+| `@rndsqr/react-usher`      | Hooks that read a core store and register explicit refresh blockers.                                                                                                                                                                                                                        |
+| `@rndsqr/usher-cloudflare` | Build adapters for Pages and Workers, plus the asset fallback handler at `/worker`.                                                                                                                                                                                                         |
 
-Core does not import Vite or a virtual module. The Vite client helper imports core. React uses the core store interface. Cloudflare implements the adapter contract exported by the Vite package. The sample apps assemble these pieces.
+Core does not import a build tool. The plugin's client entry imports core. React uses the core store interface. Cloudflare implements the adapter contract exported by the plugin package. The example apps assemble these pieces.
+
+Decisions that someone may want to reopen are recorded in [docs/adr](adr/).
 
 ## Build output
 
@@ -70,6 +72,10 @@ Inside core, the store composes five sources, and dependencies point one way. No
 | `server-clock.ts`     | The offset between server time and monotonic time.                                                                                          |
 | `prompt-dismissal.ts` | The shared dismissal timestamp, in memory and in localStorage, and the storage event subscription.                                          |
 | `refresh.ts`          | Refresh blockers and the one refresh attempt that concurrent callers share.                                                                 |
+| `options.ts`          | Nothing. Validates the duration options and applies their defaults.                                                                         |
+| `environment.ts`      | Nothing. Describes what core needs from a tab: clocks, timers, fetch, storage, visibility, focus and reload.                                |
+
+`environment.ts` is the one internal seam. Its browser adapter is the only code that touches globals, and the tests replace it with a fake tab that has virtual time. It is not part of the public interface: an app that tests its own update UI can fake the five-method `AppUpdates` interface by hand.
 
 Every source calls back into the store's single `evaluate()`. It reads the latest build, the server time and the dismissal, asks `attention.ts` for a decision, keeps sticky urgency, publishes, and sets the deadline timer. Snapshot identity stays stable while attention, reason, and the latest build facts remain unchanged.
 
@@ -111,8 +117,10 @@ The library retains age-based escalation, shared prompt dismissal, sticky urgenc
 
 ## Verification
 
-Behaviour and model tests cover lifecycle, network failure, cancellation, clock changes, storage failures, shared dismissal, rollback persistence, and explicit refresh. Chromium tests cover the browser environment, the Vite client helper, React hooks, and both sample update surfaces.
+Behaviour and model tests run against a fake environment with virtual time. They cover lifecycle, network failure, cancellation, clock changes, storage failures, shared dismissal, rollback persistence, and explicit refresh. Chromium tests cover the browser environment, the Vite client helper, React hooks, and both sample update surfaces.
 
 Vite tests build real output and check version metadata, emitted and private adapter files, warnings, and the build failure for a private file inside the client output. Workerd tests run the generated Pages and Workers handlers, and a hand-written worker that composes the handler, with static asset bindings and an R2 bucket. Local proof covers current chunks, R2 fallback, HEAD responses, missing chunks, and SPA routes.
+
+A smoke test packs the four packages, installs the tarballs into an app outside the workspace, and runs its type check, production build and dev server.
 
 Package scripts and workspace configuration define the current verification commands. See the README for usage.
