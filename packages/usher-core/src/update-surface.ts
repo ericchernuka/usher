@@ -34,7 +34,8 @@ export interface UpdateSurface {
   minAttention?: Exclude<Attention, 'none'>
   /**
    * Create or replace your UI. Called once per change of attention or reason, with a
-   * new notice each time. If it throws, the error is logged and the next state change retries.
+   * new notice each time. If it throws, the error is logged, `hide()` removes whatever
+   * was showing, and the next state change retries.
    */
   show(notice: UpdateNotice): void
   /** Remove your UI. Called when the surface should go away, including after the user closes it. */
@@ -55,13 +56,12 @@ function safely(label: string, fn: () => void) {
   }
 }
 
-type View =
-  | { kind: 'hidden' }
-  | { kind: 'shown'; notice: UpdateNotice; key: string }
-  | { kind: 'closed'; key: string }
-
 const MAX_PASSES = 5
 
+/**
+ * Two facts decide what the surface shows: the store's state, and the state the
+ * user last closed. Everything else is `reconcile` moving the surface toward them.
+ */
 class SurfaceConnection {
   readonly updates: AppUpdates
   readonly minAttention: Exclude<Attention, 'none'>
@@ -75,111 +75,94 @@ class SurfaceConnection {
     this.hide = () => surface.hide()
   }
 
-  view: View = { kind: 'hidden' }
+  /** What the surface is showing, as far as the connection knows. */
+  shown: { key: string; notice: UpdateNotice } | undefined
 
-  dismissing = false
-
-  hideAfterStep = false
+  /** The state the user closed. The surface stays hidden until the state leaves it. */
+  closed: string | undefined
 
   syncing = false
 
   again = false
 
-  markClosed = (key: string) => {
-    this.view = { kind: 'closed', key }
+  /** One step toward what the state asks for: hide, show, or nothing. */
+  reconcile = () => {
+    const state = this.updates.getState()
 
-    if (this.syncing) {
-      this.hideAfterStep = true
-    } else {
+    const wanted =
+      state.attention !== 'none' &&
+      rank[state.attention] >= rank[this.minAttention]
+        ? state
+        : undefined
+
+    const key = wanted && keyOf(wanted)
+
+    if (key !== this.closed) {
+      this.closed = undefined
+    }
+
+    if (!wanted || key === this.closed) {
+      return this.remove()
+    }
+
+    if (key === this.shown?.key) {
+      return
+    }
+
+    const replaced = this.shown
+    const notice = this.makeNotice(wanted)
+    this.shown = { key: keyOf(wanted), notice }
+
+    if (!safely('show', () => this.show(notice))) {
+      // The UI may be half-replaced. Nothing is shown now, so the next change retries.
+      this.shown = replaced
+      this.remove()
+    }
+  }
+
+  remove = () => {
+    if (this.shown) {
+      this.shown = undefined
       safely('hide', this.hide)
     }
   }
 
-  step = () => {
-    if (this.dismissing) {
-      return
+  close = (notice: UpdateNotice) => {
+    if (notice.attention === 'passive') {
+      this.closed = keyOf(notice)
+    } else if (notice.attention === 'urgent') {
+      // Urgent attention cannot be closed, but some UI libraries remove a
+      // toast regardless, so forget the shown notice and show a new one.
+      this.shown = undefined
+    } else if (this.updates.dismiss()) {
+      this.closed = keyOf(this.updates.getState())
     }
-
-    const state = this.updates.getState()
-
-    if (
-      state.attention === 'none' ||
-      rank[state.attention] < rank[this.minAttention]
-    ) {
-      const wasShown = this.view.kind === 'shown'
-      this.view = { kind: 'hidden' }
-
-      if (wasShown) {
-        safely('hide', this.hide)
-      }
-
-      return
-    }
-
-    const key = keyOf(state)
-
-    if (this.view.kind !== 'hidden' && this.view.key === key) {
-      return
-    }
-
-    const notice = this.makeNotice(state, key)
-    const previous = this.view
-    this.view = { kind: 'shown', notice, key }
-
-    if (!safely('show', () => this.show(notice))) {
-      this.view = previous.kind === 'shown' ? { kind: 'hidden' } : previous
-    }
-  }
-
-  dismissPrompt = () => {
-    this.dismissing = true
-    let dismissed = false
-
-    try {
-      dismissed = this.updates.dismiss()
-    } finally {
-      this.dismissing = false
-    }
-
-    if (dismissed) {
-      return this.markClosed(keyOf(this.updates.getState()))
-    }
-
-    this.sync()
   }
 
   makeNotice = (
     state: Exclude<UpdateState, { attention: 'none' }>,
-    key: string,
   ): UpdateNotice => {
     const notice: UpdateNotice = Object.freeze<UpdateNotice>({
       ...state,
       refresh: () => this.updates.refresh(),
       close: () => {
-        if (this.view.kind !== 'shown' || this.view.notice !== notice) {
-          return
+        if (this.shown?.notice === notice) {
+          this.sync(() => this.close(notice))
         }
-
-        if (notice.attention === 'passive') {
-          return this.markClosed(key)
-        }
-
-        if (notice.attention === 'prompt') {
-          return this.dismissPrompt()
-        }
-
-        // Urgent attention cannot be closed, but some UI libraries remove a
-        // toast regardless, so forget the shown notice and show a new one.
-        this.view = { kind: 'hidden' }
-        this.sync()
       },
     })
 
     return notice
   }
 
-  sync = () => {
+  /**
+   * Applies `change`, then reconciles until the surface matches. A call made
+   * while one is running, from inside `show`, `hide` or a store listener, only
+   * asks the running one for another pass, so `hide` never runs inside `show`.
+   */
+  sync = (change?: () => void) => {
     if (this.syncing) {
+      change?.()
       this.again = true
 
       return
@@ -188,16 +171,12 @@ class SurfaceConnection {
     this.syncing = true
 
     try {
+      change?.()
       let passes = 0
 
       do {
         this.again = false
-        this.step()
-
-        if (this.hideAfterStep) {
-          this.hideAfterStep = false
-          safely('hide', this.hide)
-        }
+        this.reconcile()
       } while (this.again && ++passes < MAX_PASSES)
 
       if (this.again) {
@@ -206,25 +185,21 @@ class SurfaceConnection {
           MAX_PASSES,
         )
       }
-
-      this.again = false
     } finally {
+      this.again = false
       this.syncing = false
     }
   }
 
   connect = () => {
-    const unsubscribe = this.updates.subscribe(this.sync)
+    const onChange = () => this.sync()
+    const unsubscribe = this.updates.subscribe(onChange)
     this.sync()
 
     return () => {
       unsubscribe()
-      const wasShown = this.view.kind === 'shown'
-      this.view = { kind: 'hidden' }
-
-      if (wasShown) {
-        safely('hide', this.hide)
-      }
+      this.closed = undefined
+      this.remove()
     }
   }
 }

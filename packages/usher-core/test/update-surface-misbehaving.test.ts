@@ -66,13 +66,13 @@ describe('surfaces that misbehave', () => {
     expect(shows).toEqual(['urgent'])
   })
 
-  test('given show() throws on an update, when the next change arrives, then the surface is retried', async ({
+  test('given show() throws on an update, then the stale UI is hidden and the next change retries', async ({
     app,
     tab,
   }) => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
     server.use(serveBuild(newer))
-    const shows: string[] = []
+    const log: string[] = []
     let failNext = false
     app.track(
       connectUpdateSurface(app.create(), {
@@ -82,9 +82,9 @@ describe('surfaces that misbehave', () => {
             throw new Error('toast library not ready')
           }
 
-          shows.push(`${p.attention}:${p.reason}`)
+          log.push(`${p.attention}:${p.reason}`)
         },
-        hide: () => {},
+        hide: () => log.push('hide'),
       }),
     )
     await tab.waitForResponse()
@@ -96,6 +96,6 @@ describe('surfaces that misbehave', () => {
     server.use(serveBuild({ ...older, version: 'older-still' }))
     await app.poll()
 
-    expect(shows).toEqual(['passive:outdated', 'urgent:rollback'])
+    expect(log).toEqual(['passive:outdated', 'hide', 'urgent:rollback'])
   })
 })

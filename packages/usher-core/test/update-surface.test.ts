@@ -72,6 +72,22 @@ describe('showing and hiding', () => {
     expect(requests).toHaveLength(checks)
   })
 
+  test('given the app disconnected, when the UI closes the notice it still holds, then nothing is shown again', async ({
+    app,
+    tab,
+  }) => {
+    server.use(serveBuild(older))
+    const ui = fakeSurface()
+    const disconnect = connectUpdateSurface(app.create(), ui.surface)
+    await tab.waitForResponse()
+    const stale = ui.open
+    disconnect()
+
+    stale.close()
+
+    expect(ui.log).toEqual(['show:urgent', 'hide'])
+  })
+
   test("given refresh is wired to the toast's action, then it follows the store's refresh rules", async ({
     app,
     tab,
