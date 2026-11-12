@@ -10,7 +10,7 @@ import {
   type RefreshBlocker,
   type UpdateNotice,
 } from '@app-version/core'
-import { useAppUpdates, useRefreshBlocker } from '../src/index'
+import { useUpdateState, useRefreshBlocker } from '../src/index'
 import { captureNavigations } from '../../core/test/navigation'
 import { runningBuild, versionUrl } from './build-info.stub'
 
@@ -42,11 +42,11 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-describe('useAppUpdates', () => {
-  it('selects a slice and re-renders only when it changes', async () => {
+describe('useUpdateState', () => {
+  it('reads the state, re-renders when it changes, and stops polling on unmount', async () => {
     vi.setSystemTime(new Date('2026-11-12T04:00:00Z'))
 
-    let latest = {
+    const latest = {
       ...older,
       version: 'new',
       commitTime: '2026-11-12T00:00:00Z',
@@ -57,11 +57,9 @@ describe('useAppUpdates', () => {
       vi.fn<typeof fetch>(async () => Response.json(latest)),
     )
     const updates = createAppUpdates()
-    let renders = 0
 
     function NavButton() {
-      renders++
-      const attention = useAppUpdates(updates, s => s.attention)
+      const { attention } = useUpdateState(updates)
 
       return attention === 'none' ? null : (
         <button
@@ -77,17 +75,6 @@ describe('useAppUpdates', () => {
     const button = view.getByRole('button')
     await expect.element(button).toHaveAttribute('data-attention', 'prompt')
 
-    const before = renders
-    latest = { ...latest, version: 'newest' }
-    vi.advanceTimersByTime(61_000)
-    window.dispatchEvent(new Event('focus'))
-    await vi.waitFor(() =>
-      expect(updates.getState()).toMatchObject({
-        latest: { version: 'newest' },
-      }),
-    )
-    expect(renders).toBe(before)
-
     await button.click()
     await expect.element(button).toHaveAttribute('data-attention', 'passive')
 
@@ -99,12 +86,12 @@ describe('useAppUpdates', () => {
   })
 })
 
-describe('useAppUpdates without a selector', () => {
-  it('returns the whole state', async () => {
+describe('useUpdateState with a rollback', () => {
+  it('returns attention together with its reason', async () => {
     const updates = createAppUpdates()
 
     function Reason() {
-      const state = useAppUpdates(updates)
+      const state = useUpdateState(updates)
 
       return <output>{`${state.attention}:${state.reason}`}</output>
     }
@@ -117,43 +104,7 @@ describe('useAppUpdates without a selector', () => {
   })
 })
 
-describe('useAppUpdates selector check', () => {
-  it('warns once in dev when a selector returns a new object', async () => {
-    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
-    const updates = createAppUpdates()
-
-    function Good() {
-      useAppUpdates(updates, s => s.attention)
-
-      return null
-    }
-
-    const ok = await render(<Good />)
-    expect(error.mock.calls.some(([m]) => String(m).includes('selector'))).toBe(
-      false,
-    )
-    await ok.unmount()
-
-    function Worse() {
-      useAppUpdates(updates, s => ({ a: s.attention }))
-
-      return null
-    }
-
-    try {
-      await (await render(<Worse />)).unmount()
-    } catch {}
-
-    expect(
-      error.mock.calls.some(([m]) =>
-        String(m).includes('[app-version] useAppUpdates selector'),
-      ),
-    ).toBe(true)
-    error.mockRestore()
-  })
-})
-
-describe('useAppUpdates deferral', () => {
+describe('useUpdateState deferral', () => {
   it('renders the new value at low priority: urgent pass keeps the old value, then catches up', async () => {
     const updates = createAppUpdates()
     const seen: Array<[urgent: string, deferred: string]> = []
@@ -164,7 +115,7 @@ describe('useAppUpdates deferral', () => {
         () => updates.getState().attention,
       )
 
-      const deferred = useAppUpdates(updates, s => s.attention)
+      const deferred = useUpdateState(updates).attention
       seen.push([urgent, deferred])
 
       return null

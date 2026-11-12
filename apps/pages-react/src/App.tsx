@@ -1,8 +1,8 @@
-import { useAppUpdates } from '@app-version/react'
+import { useUpdateState } from '@app-version/react'
 import { appUpdates } from './updates'
 
 function App() {
-  const attention = useAppUpdates(appUpdates, s => s.attention)
+  const { attention } = useUpdateState(appUpdates)
 
   return (
     <main>

@@ -9,7 +9,7 @@ See the [glossary](GLOSSARY.md) for domain terms and the [architecture](docs/Ske
 | `@app-version/core`       | `@app-version/core`        | `createAppUpdates({ current, url, ... })`: the update store; `connectUpdateSurface()`: drive any toast/banner UI | —           |
 | `@app-version/vite`       | `@app-version/vite`        | `appVersion()` plugin: writes `version.json`, provides `virtual:app-version`, runs a skew adapter                | Vite        |
 |                           | `@app-version/vite/client` | `createAppUpdates()`: creates the core store using embedded build facts and the version URL                      | Vite plugin |
-| `@app-version/react`      | `@app-version/react`       | `useAppUpdates(store, selector?)`, `useRefreshBlocker(store, shouldBlock)`                                       | React       |
+| `@app-version/react`      | `@app-version/react`       | `useUpdateState(updates)`, `useRefreshBlocker(updates, shouldBlock)`                                             | React       |
 | `@app-version/cloudflare` | `@app-version/cloudflare`  | `cloudflarePages()`, `cloudflareWorkers()`: skew-protection adapters that serve old chunks from R2               | Cloudflare  |
 
 ## Setup
@@ -80,10 +80,10 @@ export const appUpdates = createAppUpdates({
 ```
 
 ```tsx
-import { useAppUpdates, useRefreshBlocker } from '@app-version/react'
+import { useUpdateState, useRefreshBlocker } from '@app-version/react'
 
 function UpdateButton() {
-  const attention = useAppUpdates(appUpdates, state => state.attention)
+  const { attention } = useUpdateState(appUpdates)
   if (attention === 'none') return null
   return (
     <button type="button" onClick={() => appUpdates.refresh()}>
@@ -98,7 +98,7 @@ function JobForm() {
 }
 ```
 
-Create one store at module scope. It starts polling when the first subscriber arrives and stops after the last leaves. Select a stable field with `useAppUpdates`; a selector that creates a new object is not supported. The hook defers the selected value with `useDeferredValue`. Actions read the current store directly.
+Create one store at module scope. It starts polling when the first subscriber arrives and stops after the last leaves. `useUpdateState` returns the whole state and defers it with `useDeferredValue`, so a store change never blocks input. Actions read the current store directly.
 
 ## Update state
 
