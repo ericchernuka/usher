@@ -124,7 +124,7 @@ describe('the store on the real browser', () => {
     stop()
   })
 
-  it('given a chunk error, then the library does not prevent it or reload', () => {
+  it('given a chunk error, then the library does not prevent it or reload', async () => {
     const navigations = captureNavigations()
 
     const updates = createAppUpdates({
@@ -135,6 +135,7 @@ describe('the store on the real browser', () => {
     const stop = updates.subscribe(() => {})
     const event = new Event('vite:preloadError', { cancelable: true })
     window.dispatchEvent(event)
+    await settle()
     expect(event.defaultPrevented).toBe(false)
     expect(navigations).toEqual([])
     stop()

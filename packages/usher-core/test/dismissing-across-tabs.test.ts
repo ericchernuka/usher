@@ -185,3 +185,28 @@ describe('clearing and blocking storage', () => {
     })
   })
 })
+
+describe('storage the browser refuses to open', () => {
+  test('given reading storage throws, then the tab still starts and a dismissal holds here, also after it resubscribes', async ({
+    app,
+    tab,
+  }) => {
+    tab.setSystemTime('2026-11-12T04:00:00Z')
+    server.use(serveBuild(newer))
+    tab.blockStorage()
+    const store = app.create()
+    const stop = app.subscribe(store)
+    await tab.waitForResponse()
+    expect(store.getState().attention).toBe('prompt')
+
+    expect(store.dismiss()).toBe(true)
+    stop()
+    app.subscribe(store)
+    await tab.waitForResponse()
+
+    expect(store.getState()).toMatchObject({
+      attention: 'passive',
+      reason: 'dismissed',
+    })
+  })
+})

@@ -93,7 +93,7 @@ test.for([
   },
 )
 
-test('given a default prompt snooze and a clock jump, then it stays quiet until the urgent deadline', async ({
+test('given a default prompt snooze, then a forward jump of the wall clock does not end it', async ({
   app,
   tab,
 }) => {

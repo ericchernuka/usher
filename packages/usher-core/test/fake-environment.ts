@@ -75,6 +75,9 @@ function trackResponses(inner: () => typeof fetch) {
   return { fetch, pending }
 }
 
+/** setTimeout stores its delay in a signed 32-bit integer; a longer one overflows. */
+const MAX_BROWSER_TIMER_MS = 2 ** 31 - 1
+
 export interface FakeEnvironmentOptions {
   start?: string
   fetch?: typeof fetch
@@ -91,6 +94,7 @@ export function createFakeEnvironment(options: FakeEnvironmentOptions = {}) {
   let visible = true
   let reloads = 0
   let lastTimer = 0
+  let storageBlocked = false
   const timers = new Map<number, { due: number; callback: () => void }>()
 
   const storage: Pick<Storage, 'getItem' | 'setItem' | 'removeItem' | 'clear'> =
@@ -105,13 +109,25 @@ export function createFakeEnvironment(options: FakeEnvironmentOptions = {}) {
     wallNow: () => wall,
     monotonicNow: () => monotonic,
     startTimer(callback, ms) {
+      if (ms > MAX_BROWSER_TIMER_MS) {
+        throw new Error(
+          `A browser would fire a ${ms} ms timer at once; clamp it to ${MAX_BROWSER_TIMER_MS}`,
+        )
+      }
+
       const id = ++lastTimer
       timers.set(id, { due: monotonic + ms, callback })
 
       return () => void timers.delete(id)
     },
     fetch: responses.fetch,
-    storage,
+    get storage() {
+      if (storageBlocked) {
+        throw new DOMException('Storage is blocked', 'SecurityError')
+      }
+
+      return storage
+    },
     baseUrl: () => 'https://app.test/now',
     isVisible: () => visible,
     onVisibilityChange: visibility.add,
@@ -202,6 +218,10 @@ export function createFakeEnvironment(options: FakeEnvironmentOptions = {}) {
     pendingTimers: () => timers.size,
     get reloads() {
       return reloads
+    },
+    /** Like a browser with storage disabled: reading the property throws. */
+    blockStorage() {
+      storageBlocked = true
     },
     focus: () => focus.emit(),
     setVisibility(state: 'visible' | 'hidden') {

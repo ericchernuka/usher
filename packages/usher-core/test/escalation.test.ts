@@ -2,6 +2,7 @@ import type { Attention } from '../src/types'
 import { server } from './mocks/node'
 import { serveBuild, serveNetworkError } from './mocks/overrides'
 import {
+  DAY,
   HOUR,
   MINUTE,
   describe,
@@ -138,4 +139,26 @@ test('given time passed while unsubscribed, then subscribing evaluates age befor
   server.use(serveNetworkError())
   app.subscribe(store)
   expect(store.getState().attention).toBe('urgent')
+})
+
+test('given thresholds longer than a browser timer can hold, then the tab still escalates on time', async ({
+  app,
+  tab,
+}) => {
+  server.use(serveBuild(newer))
+
+  const store = app.create({
+    pollInterval: 40 * DAY,
+    promptAfter: 30 * DAY,
+    urgentAfter: false,
+  })
+
+  app.subscribe(store)
+  await tab.waitForResponse()
+
+  await tab.runFor(29 * DAY)
+  expect(store.getState().attention).toBe('passive')
+
+  await tab.runFor(DAY)
+  expect(store.getState().attention).toBe('prompt')
 })

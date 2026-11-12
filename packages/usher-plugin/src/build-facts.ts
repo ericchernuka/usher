@@ -68,8 +68,8 @@ function buildVersion(version: { value: string } | undefined, now: Date) {
 }
 
 export function resolveBuildFacts(
-  sources: BuildFactsSources = {},
-  { env = process.env, now = new Date(), warn }: BuildFactsRuntime = {},
+  sources: BuildFactsSources,
+  { env = process.env, now = new Date(), warn }: BuildFactsRuntime,
 ): BuildFacts {
   const version = firstSet(
     ['version', sources.version],

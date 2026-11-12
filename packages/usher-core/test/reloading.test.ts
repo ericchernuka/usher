@@ -72,4 +72,17 @@ describe('refreshing', () => {
     expect(await store.refresh()).toBe(true)
     expect(tab.reloads).toBe(1)
   })
+
+  test('given several refresh blockers, then they run in the order added and stop at the first that blocks', async ({
+    app,
+  }) => {
+    const calls: string[] = []
+    const store = app.create()
+    store.addRefreshBlocker(() => calls.push('first') < 0)
+    store.addRefreshBlocker(() => calls.push('second') > 0)
+    store.addRefreshBlocker(() => calls.push('third') > 0)
+
+    expect(await store.refresh()).toBe(false)
+    expect(calls).toEqual(['first', 'second'])
+  })
 })
