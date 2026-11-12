@@ -3,7 +3,7 @@ import { resolve } from 'node:path'
 import * as v from 'valibot'
 import type { Plugin, ResolvedConfig } from 'vite'
 import type { SkewProtectionAdapter, SkewProtectionContext } from './adapter'
-import type { VersionInfo } from './types'
+import type { VersionInfo } from '@app-version/core'
 
 export type {
   SkewProtectionAdapter,

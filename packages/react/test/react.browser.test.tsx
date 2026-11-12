@@ -6,15 +6,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   connectPrompt,
   PROMPT_ID,
-  createAppUpdates,
+  createAppUpdates as createCoreUpdates,
   defaultCopy,
   type AppUpdates,
   type ReloadBlocker,
 } from '@app-version/core'
 import { useAppUpdates, useReloadBlocker } from '../src/index'
 import { captureNavigations } from '../../core/test/navigation'
+import { appVersion, versionUrl } from './build-info.stub'
 
 configure({ reactStrictMode: true })
+
+const createAppUpdates = () =>
+  createCoreUpdates({ current: appVersion, url: versionUrl })
 
 const older = {
   version: 'old',

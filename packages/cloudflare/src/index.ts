@@ -3,7 +3,7 @@ import { dirname, isAbsolute, relative, resolve } from 'node:path'
 import type {
   SkewProtectionAdapter,
   SkewProtectionContext,
-} from '@app-version/core/vite'
+} from '@app-version/vite'
 
 const DEFAULT_BINDING = 'BUILD_CACHE'
 const DEFAULT_WORKER_FILE = 'dist-worker/index.js'

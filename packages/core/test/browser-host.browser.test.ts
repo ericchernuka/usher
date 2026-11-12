@@ -38,8 +38,8 @@ afterEach(() => {
 })
 
 describe('the store on the real browser', () => {
-  it('given the build baked in by the Vite plugin, when it checks, then it asks /version.json uncached and sees it is up to date', async () => {
-    const updates = createAppUpdates({})
+  it('given explicit build facts and a version URL, then it checks uncached and sees it is up to date', async () => {
+    const updates = createAppUpdates({ current, url: '/version.json' })
     const stop = updates.subscribe(() => {})
     await settle()
     expect(fetch).toHaveBeenCalledWith(

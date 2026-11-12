@@ -135,11 +135,13 @@ export function createFakeHost(options: { fetch?: typeof fetch } = {}) {
 
 export type FakeHost = ReturnType<typeof createFakeHost>
 
+export type StoreOptions = Omit<AppUpdatesOptions, 'current' | 'url'>
+
 const stubBuild = appVersion
 
 export function createStore(
   fake: FakeHost,
-  options: AppUpdatesOptions = {},
+  options: StoreOptions = {},
 ): AppUpdates {
   return createAppUpdatesStore({
     current: stubBuild,

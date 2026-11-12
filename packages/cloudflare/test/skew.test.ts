@@ -10,7 +10,7 @@ import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { build, createLogger, type Logger } from 'vite'
 import { describe, expect, it, vi } from 'vitest'
-import { appVersion, type SkewProtectionAdapter } from '@app-version/core/vite'
+import { appVersion, type SkewProtectionAdapter } from '@app-version/vite'
 import { cloudflarePages, cloudflareWorkers } from '../src/index'
 
 const assetsHtml = () =>

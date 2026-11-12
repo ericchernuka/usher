@@ -16,6 +16,10 @@ import type {
 export type { ReloadBlocker } from './refresh'
 
 export interface AppUpdatesOptions {
+  /** Build facts embedded in the running application. */
+  current: VersionInfo
+  /** URL of the serving deployment's version.json. */
+  url: string
   /** When outdated tabs escalate, by build age. Default `{ prompt: { after: "12h" }, urgent: { after: "24h" } }`. */
   escalation?: Escalation
   /**
@@ -31,8 +35,6 @@ export interface AppUpdatesOptions {
 }
 
 export interface UpdateStoreOptions extends AppUpdatesOptions {
-  current: VersionInfo
-  url: string
   browser?: BrowserEnvironment
 }
 

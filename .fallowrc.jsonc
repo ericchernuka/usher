@@ -1,6 +1,7 @@
 {
   "$schema": "./node_modules/fallow/schema.json",
   "entry": ["packages/cloudflare/src/edge-handler.mjs"],
+  "supportEntry": ["packages/*/test/setup.node.ts"],
   "ignorePatterns": ["tools/**", "**/.edge-fixture/**", "**/dist-worker/**"],
   "ignoreDependencies": ["@oxlint/plugins"],
   "includeEntryExports": false,
@@ -9,6 +10,7 @@
     "projects": [
       "tsconfig.json",
       "packages/core/tsconfig.json",
+      "packages/vite/tsconfig.json",
       "packages/react/tsconfig.json",
       "packages/cloudflare/tsconfig.json",
     ],

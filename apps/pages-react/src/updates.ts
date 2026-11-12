@@ -1,3 +1,3 @@
-import { createAppUpdates } from '@app-version/core'
+import { createAppUpdates } from '@app-version/vite/client'
 
 export const appUpdates = createAppUpdates()

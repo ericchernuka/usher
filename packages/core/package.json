@@ -1,20 +1,15 @@
 {
   "name": "@app-version/core",
   "version": "0.1.0",
-  "description": "Keep open tabs on the current build: version polling, update prompts, and the Vite plugin.",
+  "description": "Keep open tabs on the current build with version polling, update state, and prompt adapters.",
   "type": "module",
   "sideEffects": false,
   "exports": {
     ".": "./dist/index.js",
-    "./vite": "./dist/vite.js",
-    "./client": {
-      "types": "./client.d.ts"
-    },
     "./package.json": "./package.json"
   },
   "files": [
-    "dist",
-    "client.d.ts"
+    "dist"
   ],
   "scripts": {
     "build": "tsdown",
@@ -22,14 +17,6 @@
     "typecheck": "tsc",
     "test": "vitest run",
     "coverage": "vitest run --coverage"
-  },
-  "peerDependencies": {
-    "vite": "^5.0.0 || ^6.0.0 || ^7.0.0 || ^8.0.0"
-  },
-  "peerDependenciesMeta": {
-    "vite": {
-      "optional": true
-    }
   },
   "devDependencies": {
     "@tanstack/react-router": "^1.170.46",
@@ -43,7 +30,6 @@
     "react-dom": "^19.3.1",
     "tsdown": "^0.23.7",
     "typescript": "^7.0.2",
-    "vite": "^8.3.6",
     "vitest": "^5.1.0"
   },
   "dependencies": {

@@ -17,7 +17,7 @@ export const VersionInfoSchema = v.object({
   forceUpdateBefore: v.exactOptional(Timestamp),
 })
 
-/** Shape of `version.json` and of the `virtual:app-version` module. */
+/** Build facts shared by the running application and the serving deployment. */
 export type VersionInfo = v.InferOutput<typeof VersionInfoSchema>
 
 /** A duration such as "30s", "5m", "12h" or "2d". Checked at runtime too ("-5m", "1e3s" throw). */

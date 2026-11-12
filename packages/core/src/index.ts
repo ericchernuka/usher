@@ -1,4 +1,3 @@
-import { appVersion, versionUrl } from 'virtual:app-version'
 import {
   createAppUpdatesStore,
   type AppUpdates,
@@ -35,13 +34,9 @@ export type {
 } from './types'
 
 /**
- * Create the app's update store. Call once at module scope.
+ * Create the app's update store with the running build and version URL.
  * No side effects until the first subscribe(); polls while subscribed.
  */
-export function createAppUpdates(options: AppUpdatesOptions = {}): AppUpdates {
-  return createAppUpdatesStore({
-    ...options,
-    current: appVersion,
-    url: versionUrl,
-  })
+export function createAppUpdates(options: AppUpdatesOptions): AppUpdates {
+  return createAppUpdatesStore(options)
 }

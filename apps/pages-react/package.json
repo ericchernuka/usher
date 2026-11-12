@@ -10,10 +10,10 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@app-version/core": "workspace:*",
     "@app-version/react": "workspace:*",
     "react": "^19.3.1",
-    "react-dom": "^19.3.1"
+    "react-dom": "^19.3.1",
+    "@app-version/vite": "workspace:*"
   },
   "devDependencies": {
     "@app-version/cloudflare": "workspace:*",

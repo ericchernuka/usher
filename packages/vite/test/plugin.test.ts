@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { build, createLogger } from 'vite'
 import { describe, expect, it, vi } from 'vitest'
-import { appVersion, resolveVersionInfo } from '../src/vite'
+import { appVersion, resolveVersionInfo } from '../src/index'
 
 describe('resolveVersionInfo', () => {
   it('prefers env and normalizes dates', () => {
@@ -44,7 +44,17 @@ describe('appVersion plugin', () => {
       base: '/app/',
       logLevel: 'silent',
       plugins: [
-        appVersion({ version: 'sha-test', commitTime: '2026-11-11T09:00:00Z' }),
+        appVersion({
+          version: 'sha-test',
+          commitTime: '2026-11-11T09:00:00Z',
+          skewProtection: {
+            kind: 'skew-protection',
+            name: 'test-assets',
+            bundleAssets: ({ base }) => [
+              { fileName: 'adapter.txt', source: base },
+            ],
+          },
+        }),
       ],
     })
 
@@ -53,6 +63,7 @@ describe('appVersion plugin', () => {
     )
 
     expect(json.version).toBe('sha-test')
+    expect(readFileSync(join(root, 'dist/adapter.txt'), 'utf8')).toBe('/app/')
 
     const html = readFileSync(join(root, 'dist/index.html'), 'utf8')
     const js = html.match(/src="\/app\/(assets\/[^"]+\.js)"/)?.[1]
@@ -66,6 +77,58 @@ describe('appVersion plugin', () => {
     expect(bundle).toContain('/app/version.json')
   })
 })
+
+it('reports a missing commit time through the build logger', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'app-version-warning-'))
+  writeFileSync(join(root, 'index.html'), '<main>App</main>')
+  vi.stubEnv('PATH', '/nonexistent')
+  vi.stubEnv('APP_COMMIT_TIME', '')
+  const logger = createLogger('warn')
+  const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+
+  await build({
+    root,
+    customLogger: logger,
+    plugins: [appVersion({ version: 'test' })],
+  })
+
+  expect(warn).toHaveBeenCalledWith(expect.stringContaining('no commit time'))
+})
+
+it.each(['bundleAssets', 'writeBundle'] as const)(
+  'fails the build when an adapter rejects it during %s',
+  async phase => {
+    const root = mkdtempSync(join(tmpdir(), 'app-version-rejected-'))
+    writeFileSync(join(root, 'index.html'), '<main>App</main>')
+
+    await expect(
+      build({
+        root,
+        logLevel: 'silent',
+        plugins: [
+          appVersion({
+            version: 'test',
+            commitTime: '2026-11-11T09:00:00Z',
+            skewProtection: {
+              kind: 'skew-protection',
+              name: 'rejecting-adapter',
+              bundleAssets(context) {
+                if (phase === 'bundleAssets') {
+                  context.error('adapter rejected the build')
+                }
+
+                return []
+              },
+              writeBundle(context) {
+                context.error('adapter rejected the build')
+              },
+            },
+          }),
+        ],
+      }),
+    ).rejects.toThrow('adapter rejected the build')
+  },
+)
 
 describe('plugin and edge (first review #12)', () => {
   it('treats empty CI variables as missing and accepts an explicit commit time', () => {

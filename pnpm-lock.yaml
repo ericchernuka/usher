@@ -172,6 +172,9 @@ importers:
       '@types/node':
         specifier: ^26.6.6
         version: 26.6.6
+      '@vitest/browser-playwright':
+        specifier: ^5.1.0
+        version: 5.1.0(msw@3.0.4(@types/node@26.6.6)(supports-color@10.2.2)(typescript@7.0.2)(vite@8.3.6(@types/node@26.6.6)(esbuild@0.28.2)))(playwright@1.65.0)(vite@8.3.6(@types/node@26.6.6)(esbuild@0.28.2))(vitest@5.1.0)
       eslint-plugin-no-only-tests:
         specifier: ^3.4.0
         version: 3.4.0
@@ -199,15 +202,18 @@ importers:
       typescript:
         specifier: ^7.0.2
         version: 7.0.2
+      vitest:
+        specifier: ^5.1.0
+        version: 5.1.0(@types/node@26.6.6)(@vitest/browser-playwright@5.1.0)(@vitest/coverage-v8@5.1.0)(@vitest/ui@5.1.0)(msw@3.0.4(@types/node@26.6.6)(supports-color@10.2.2)(typescript@7.0.2)(vite@8.3.6(@types/node@26.6.6)(esbuild@0.28.2)))(vite@8.3.6(@types/node@26.6.6)(esbuild@0.28.2))
 
   apps/pages-react:
     dependencies:
-      '@app-version/core':
-        specifier: workspace:*
-        version: link:../../packages/core
       '@app-version/react':
         specifier: workspace:*
         version: link:../../packages/react
+      '@app-version/vite':
+        specifier: workspace:*
+        version: link:../../packages/vite
       react:
         specifier: ^19.3.1
         version: 19.3.1
@@ -239,12 +245,12 @@ importers:
 
   apps/workers-react:
     dependencies:
-      '@app-version/core':
-        specifier: workspace:*
-        version: link:../../packages/core
       '@app-version/react':
         specifier: workspace:*
         version: link:../../packages/react
+      '@app-version/vite':
+        specifier: workspace:*
+        version: link:../../packages/vite
       react:
         specifier: ^19.3.1
         version: 19.3.1
@@ -276,9 +282,9 @@ importers:
 
   packages/cloudflare:
     devDependencies:
-      '@app-version/core':
+      '@app-version/vite':
         specifier: workspace:*
-        version: link:../core
+        version: link:../vite
       '@cloudflare/vitest-plugin':
         specifier: ^1.6.0
         version: 1.6.0(@cloudflare/workers-types@5.20261108.1)(@types/node@26.6.6)(vitest@5.1.0)
@@ -343,9 +349,6 @@ importers:
       typescript:
         specifier: ^7.0.2
         version: 7.0.2
-      vite:
-        specifier: ^8.3.6
-        version: 8.3.6(@types/node@26.6.6)(esbuild@0.28.2)
       vitest:
         specifier: ^5.1.0
         version: 5.1.0(@types/node@26.6.6)(@vitest/browser-playwright@5.1.0)(@vitest/coverage-v8@5.1.0)(@vitest/ui@5.1.0)(msw@3.0.4(@types/node@26.6.6)(supports-color@10.2.2)(typescript@7.0.2)(vite@8.3.6(@types/node@26.6.6)(esbuild@0.28.2)))(vite@8.3.6(@types/node@26.6.6)(esbuild@0.28.2))
@@ -356,6 +359,9 @@ importers:
         specifier: workspace:*
         version: link:../core
     devDependencies:
+      '@app-version/vite':
+        specifier: workspace:*
+        version: link:../vite
       '@base-ui/react':
         specifier: ^1.9.0
         version: 1.9.0(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
@@ -395,6 +401,40 @@ importers:
       vitest-browser-react:
         specifier: ^2.3.0
         version: 2.3.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.1.0)
+
+  packages/vite:
+    dependencies:
+      '@app-version/core':
+        specifier: workspace:*
+        version: link:../core
+      valibot:
+        specifier: ^1.5.0
+        version: 1.5.0(typescript@7.0.2)
+    devDependencies:
+      '@types/node':
+        specifier: ^26.6.6
+        version: 26.6.6
+      '@vitest/browser-playwright':
+        specifier: ^5.1.0
+        version: 5.1.0(msw@3.0.4(@types/node@26.6.6)(supports-color@10.2.2)(typescript@7.0.2)(vite@8.3.6(@types/node@26.6.6)(esbuild@0.28.2)))(playwright@1.65.0)(vite@8.3.6(@types/node@26.6.6)(esbuild@0.28.2))(vitest@5.1.0)
+      '@vitest/coverage-v8':
+        specifier: ^5.1.0
+        version: 5.1.0(@vitest/browser@5.1.0)(vitest@5.1.0)
+      playwright:
+        specifier: ^1.65.0
+        version: 1.65.0
+      tsdown:
+        specifier: ^0.23.7
+        version: 0.23.7(typescript@7.0.2)
+      typescript:
+        specifier: ^7.0.2
+        version: 7.0.2
+      vite:
+        specifier: ^8.3.6
+        version: 8.3.6(@types/node@26.6.6)(esbuild@0.28.2)
+      vitest:
+        specifier: ^5.1.0
+        version: 5.1.0(@types/node@26.6.6)(@vitest/browser-playwright@5.1.0)(@vitest/coverage-v8@5.1.0)(@vitest/ui@5.1.0)(msw@3.0.4(@types/node@26.6.6)(supports-color@10.2.2)(typescript@7.0.2)(vite@8.3.6(@types/node@26.6.6)(esbuild@0.28.2)))(vite@8.3.6(@types/node@26.6.6)(esbuild@0.28.2))
 
 packages:
 

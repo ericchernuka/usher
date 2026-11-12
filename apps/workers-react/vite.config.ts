@@ -1,4 +1,4 @@
-import { appVersion } from '@app-version/core/vite'
+import { appVersion } from '@app-version/vite'
 import { cloudflareWorkers } from '@app-version/cloudflare'
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'

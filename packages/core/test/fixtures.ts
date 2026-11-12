@@ -1,8 +1,8 @@
 import { test as base, vi } from 'vitest'
-import type { AppUpdates, AppUpdatesOptions } from '../src/app-updates'
+import type { AppUpdates } from '../src/app-updates'
 import type { VersionInfo } from '../src/types'
 import { installClock } from './clock'
-import { createFakeHost, createStore } from './fake-host'
+import { createFakeHost, createStore, type StoreOptions } from './fake-host'
 import { recordRequests } from './requests'
 
 export { describe, expect } from 'vitest'
@@ -53,7 +53,7 @@ export const test = base
     }
 
     return {
-      create: (options: AppUpdatesOptions = {}): AppUpdates =>
+      create: (options: StoreOptions = {}): AppUpdates =>
         createStore(host, options),
       subscribe: (store: AppUpdates, listener: () => void = () => {}) =>
         track(store.subscribe(listener)),

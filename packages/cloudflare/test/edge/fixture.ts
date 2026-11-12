@@ -1,7 +1,7 @@
 import { mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { build } from 'vite'
-import { appVersion } from '@app-version/core/vite'
+import { appVersion } from '@app-version/vite'
 import { cloudflarePages, cloudflareWorkers } from '../../src/index.ts'
 
 export async function buildEdgeFixture(target: 'pages' | 'workers') {
