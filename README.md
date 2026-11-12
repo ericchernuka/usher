@@ -16,6 +16,17 @@ The [glossary](GLOSSARY.md) defines the domain terms. The [architecture document
 
 ## Setup
 
+Install the plugin and core, plus the packages for React and Cloudflare if the app uses them:
+
+```sh
+pnpm add @rndsqr/usher-core
+pnpm add -D @rndsqr/usher-plugin
+pnpm add @rndsqr/react-usher        # React hooks
+pnpm add -D @rndsqr/usher-cloudflare # skew protection on Pages or Workers
+```
+
+Declare `@rndsqr/usher-core` yourself even though the other packages depend on it. The app imports `connectUpdateSurface` and the types from it, and strict package managers resolve only what the app declares.
+
 ```ts
 // vite.config.ts
 import react from '@vitejs/plugin-react'
@@ -25,12 +36,16 @@ import { usher } from '@rndsqr/usher-plugin/vite'
 export default defineConfig({ plugins: [react(), usher()] })
 ```
 
-Serve `version.json` uncached. The client also adds a `t` query parameter to each check.
+Serve `version.json` uncached. The client also adds a `t` query parameter to each check. On Cloudflare Pages and Workers static assets, put this in `public/_headers`:
 
 ```
 /version.json
   Cache-Control: no-store
 ```
+
+Do not cache the HTML document at the edge either. A refresh has to load the new build's `index.html`, so serve it with `Cache-Control: no-cache` or the host's default.
+
+Time outdated and dismissals are measured against the server's clock, read from the `Date` header of each check. If `version.json` is on another origin, that response needs `Access-Control-Expose-Headers: Date`; without it the tab falls back to the user's clock.
 
 | Plugin option            | Default                                           | Meaning                                                                                                                                |
 | ------------------------ | ------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
@@ -133,6 +148,8 @@ interface AppUpdates {
 }
 ```
 
+Create one store per `storageKey` in a document. Two stores that share a key in the same document do not hear each other's dismissals, because the browser reports a storage change only to other documents.
+
 `getState()` returns the same object until attention, reason, or any of the latest build facts change. `dismiss()` returns `true` only when it lowered a prompt; otherwise it returns `false` and writes nothing.
 
 Durations are milliseconds, so they can be computed:
@@ -148,16 +165,16 @@ export const appUpdates = createAppUpdates({
 })
 ```
 
-| Option         | Default                            | Meaning                                                                                                                |
-| -------------- | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `running`      | Required by core; set by `/client` | Build facts of the running build.                                                                                      |
-| `versionUrl`   | Required by core; set by `/client` | The serving deployment's `version.json` URL.                                                                           |
-| `promptAfter`  | 12 hours                           | Time outdated at which a tab reaches prompt attention. `false` turns the level off.                                    |
-| `urgentAfter`  | 24 hours                           | Time outdated at which it reaches urgent attention. `false` turns the level off. Must be later than `promptAfter`.     |
-| `promptSnooze` | Until urgent attention starts      | How long a prompt dismissal quiets prompt attention.                                                                   |
-| `pollInterval` | 5 minutes                          | How often a visible tab checks, at least 10 seconds. Focus and visibility also trigger a check, at most once a minute. |
-| `reload`       | `location.reload()`                | The document load a refresh performs. Return or resolve `false` when you know it did not happen.                       |
-| `storageKey`   | `usher`                            | Set one per app when apps share an origin.                                                                             |
+| Option         | Default                            | Meaning                                                                                                                        |
+| -------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `running`      | Required by core; set by `/client` | Build facts of the running build.                                                                                              |
+| `versionUrl`   | Required by core; set by `/client` | The serving deployment's `version.json` URL.                                                                                   |
+| `promptAfter`  | 12 hours                           | Time outdated at which a tab reaches prompt attention. `false` turns the level off.                                            |
+| `urgentAfter`  | 24 hours                           | Time outdated at which it reaches urgent attention. `false` turns the level off. Must be later than `promptAfter`.             |
+| `promptSnooze` | Until urgent attention starts      | How long a prompt dismissal quiets prompt attention.                                                                           |
+| `pollInterval` | 5 minutes                          | How often a visible tab checks, at least 10 seconds. Focus and visibility also trigger a check, at most once a minute.         |
+| `reload`       | `location.reload()`                | The document load a refresh performs. Return or resolve `false` when you know it did not happen.                               |
+| `storageKey`   | `usher`                            | Prefix for the keys Usher writes to localStorage, such as `usher:prompt-dismissal`. Set one per app when apps share an origin. |
 
 Invalid options throw when the store is created, with a message that names the option.
 
@@ -253,6 +270,8 @@ function copyFor({ attention, reason }: UpdateNotice) {
 
 `notice.close()` means the user closed the surface. For a prompt it dismisses the prompt for every tab and then calls `hide()`. For a passive notice it calls `hide()` and stays hidden until attention or reason changes. For an urgent notice it calls `show()` again with a new notice, because urgent attention cannot be closed and some libraries remove a toast regardless. A notice that is no longer the one shown ignores `close()`, so a library that fires `onClose` during a programmatic hide is safe.
 
+Give urgent notices no timeout. A toast library that closes one on its own timer makes the connection show it again, and after five such rounds in one pass it stops and logs an error.
+
 `disconnect()` hides the surface and removes its store subscription. A surface that throws is isolated and retried on the next state change.
 
 ## Skew protection
@@ -319,6 +338,15 @@ The app then owns its routing: `_routes.json` on Pages, or `assets.run_worker_fi
 ## Rollbacks and deployment
 
 Dashboard rollbacks and old-commit redeploys are detected through `commitTime`. The build needs `.git` or `APP_COMMIT_TIME`; the plugin warns when neither exists. For a revert deployed as a new commit, set `APP_FORCE_UPDATE_BUILT_BEFORE` to the time of that build (`date -u +%Y-%m-%dT%H:%M:%SZ` in the deploy job), so every tab built before the fix becomes urgent. It is a build time, not a deadline. A value later than the build itself fails the build, because no refresh could ever satisfy it. Clearing it in a later deploy does not lower urgency in tabs that already saw it.
+
+Upload chunks before the deployment that references them goes live, and never delete from the archive in the same step:
+
+```sh
+aws s3 sync dist/assets "s3://$BUCKET/assets"   # no --delete
+wrangler pages deploy dist                       # or: wrangler deploy
+```
+
+Uploading first means a tab that loads the new `index.html` in the first seconds can already fall back to R2. Leaving out `--delete` is what keeps old tabs working; expire old chunks with an R2 lifecycle rule instead.
 
 Deploy one Workers version at a time. Alternating version responses during a gradual deployment can look like a rollback. R2 keeps serving bad-build tabs until their users refresh.
 
