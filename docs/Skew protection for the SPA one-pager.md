@@ -6,7 +6,7 @@ The library and generated Pages and Workers adapters are implemented in this rep
 
 ## Purpose
 
-We propose keeping every built JS/CSS chunk in an R2 bucket and serving old chunks from it when the current deploy no longer has them. This stops chunk-load errors in tabs that stay open across a deploy. We ask for approval to build this on Cloudflare Pages now and to plan a move to Workers static assets.
+We propose keeping every built JS/CSS chunk in an R2 bucket, the chunk archive (bound as `CHUNK_ARCHIVE` by default), and serving old chunks from it when the current deploy no longer has them. This stops chunk-load errors in tabs that stay open across a deploy. We ask for approval to build this on Cloudflare Pages now and to plan a move to Workers static assets.
 
 ## Background
 

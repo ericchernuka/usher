@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 declare global {
   namespace Cloudflare {
     interface Env {
-      BUILD_CACHE: R2Bucket
+      CHUNK_ARCHIVE: R2Bucket
       CURRENT_ASSET: string
     }
   }
@@ -13,11 +13,15 @@ declare global {
 const get = (path: string, init?: RequestInit) =>
   SELF.fetch(`https://app.test${path}`, init)
 
-describe('emitted skew-protection worker', () => {
+describe('asset fallback worker', () => {
   beforeEach(async () => {
-    await env.BUILD_CACHE.put('assets/old-123.js', "console.log('yesterday')", {
-      httpMetadata: { contentType: 'text/javascript' },
-    })
+    await env.CHUNK_ARCHIVE.put(
+      'assets/old-123.js',
+      "console.log('yesterday')",
+      {
+        httpMetadata: { contentType: 'text/javascript' },
+      },
+    )
   })
 
   it("serves the current build's chunk from static assets", async () => {
@@ -52,5 +56,13 @@ describe('emitted skew-protection worker', () => {
     const res = await get('/jobs/42')
     expect(res.status).toBe(200)
     expect(res.headers.get('content-type')).toContain('text/html')
+  })
+
+  it('serves a file outside the assets prefix from static assets', async () => {
+    const res = await get('/version.json')
+    expect(res.status).toBe(200)
+    expect(await res.json()).toMatchObject({
+      version: expect.stringMatching(/^sha-/),
+    })
   })
 })

@@ -11,7 +11,7 @@ The repository contains the libraries, two sample app builds, and local browser 
 | `@app-version/core`       | Build-tool-independent update state, polling, prompt dismissal, explicit refresh, and update surfaces. Its constructor accepts running-build facts and a version URL.      |
 | `@app-version/vite`       | The build plugin, virtual build facts, and the skew-protection adapter contract. Its `/client` entry creates the core store with embedded build facts and the version URL. |
 | `@app-version/react`      | Hooks that read a core store and register explicit refresh blockers.                                                                                                       |
-| `@app-version/cloudflare` | Build adapters for Pages and Workers, plus the shared asset fallback handler.                                                                                              |
+| `@app-version/cloudflare` | Build adapters for Pages and Workers, plus the asset fallback handler at `/worker`.                                                                                        |
 
 Core does not import Vite or a virtual module. The Vite client helper imports core. React uses the core store interface. Cloudflare implements the adapter contract exported by the Vite package. The sample apps assemble these pieces.
 
@@ -42,21 +42,21 @@ These are alternatives for the two hosting targets.
 | Pages   | `_worker.js` and `_routes.json` inside the client output directory. Routes include only the asset prefix. | Set the R2 binding on the Pages project. Advanced mode takes precedence over `functions/`; the build warns if that directory exists.                                  |
 | Workers | A Worker entry outside the client output directory, by default `dist-worker/index.js`.                    | Point Wrangler `main` to that entry. Configure the static asset binding as `ASSETS`, enable SPA fallback, and restrict `assets.run_worker_first` to the asset prefix. |
 
-Both adapters default to the `BUILD_CACHE` R2 binding. The binding name can be configured. The asset prefix includes Vite's base path and asset directory. The Workers output must stay outside the public client output directory; the plugin rejects an output path inside it.
+Both adapters default to the `CHUNK_ARCHIVE` R2 binding. The binding name can be configured. The asset prefix includes Vite's base path and asset directory. The Workers output must stay outside the public client output directory; the plugin rejects an output path inside it.
 
 The sample apps demonstrate the Vite configuration and update UI. Deployment configuration and account resources must be supplied for the target environment.
 
 ## Asset requests
 
 1. Ask the current deployment's `ASSETS` binding for the request.
-2. Pass non-GET and non-HEAD requests through unchanged.
+2. Pass requests outside the asset prefix, and non-GET and non-HEAD requests, through unchanged.
 3. Return the current asset if the response is neither a 404 nor HTML. HTML is treated as a miss because SPA fallback can return an index page for a missing chunk.
 4. Look up the old asset in R2, using the request path relative to the configured base.
 5. Return the stored asset with its HTTP metadata, ETag, and immutable cache header. Return a real 404 when no copy exists.
 
 HEAD requests use R2 metadata without opening an object body. The handler releases an unused current-deployment response before returning a fallback. If the R2 binding is missing, it warns and returns a 404 for a missing asset rather than an HTML success response.
 
-Generated Workers entries also check the asset prefix before calling the handler. Other paths go to static assets and SPA routing.
+The handler is `createAssetFallback()` in `@app-version/cloudflare/worker`, one type-checked module with no imports. Generated workers inline its source text and add a default export, so there is one copy of the handler and the generated file deploys without bundling. An app that already has a Worker imports the same function and calls it for requests it does not answer itself; that app owns its routing configuration.
 
 ## Update state
 
@@ -113,6 +113,6 @@ The library retains age-based escalation, shared prompt dismissal, sticky urgenc
 
 Behaviour and model tests cover lifecycle, network failure, cancellation, clock changes, storage failures, shared dismissal, rollback persistence, and explicit refresh. Chromium tests cover the browser environment, the Vite client helper, React hooks, and both sample update surfaces.
 
-Vite tests build real output and check version metadata, emitted and private adapter files, warnings, and the build failure for a private file inside the client output. Workerd tests run the generated Pages and Workers handlers with static asset bindings and an R2 bucket. Local proof covers current chunks, R2 fallback, HEAD responses, missing chunks, and SPA routes.
+Vite tests build real output and check version metadata, emitted and private adapter files, warnings, and the build failure for a private file inside the client output. Workerd tests run the generated Pages and Workers handlers, and a hand-written worker that composes the handler, with static asset bindings and an R2 bucket. Local proof covers current chunks, R2 fallback, HEAD responses, missing chunks, and SPA routes.
 
 Package scripts and workspace configuration define the current verification commands. See the README for usage.

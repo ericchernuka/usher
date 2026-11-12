@@ -4,7 +4,18 @@ import { build } from 'vite'
 import { appVersion } from '@app-version/vite'
 import { cloudflarePages, cloudflareWorkers } from '../../src/index.ts'
 
-export async function buildEdgeFixture(target: 'pages' | 'workers') {
+const targets = {
+  pages: { adapter: cloudflarePages(), worker: 'dist/_worker.js' },
+  workers: { adapter: cloudflareWorkers(), worker: 'dist-worker/index.js' },
+  /** The app owns its worker, so the build has no adapter. */
+  composed: {
+    adapter: undefined,
+    worker: '../../test/edge/composed-worker.ts',
+  },
+}
+
+export async function buildEdgeFixture(target: keyof typeof targets) {
+  const { adapter, worker } = targets[target]
   const root = resolve(import.meta.dirname, `../../.edge-fixture/${target}`)
   rmSync(root, { recursive: true, force: true })
   mkdirSync(root, { recursive: true })
@@ -19,21 +30,12 @@ export async function buildEdgeFixture(target: 'pages' | 'workers') {
     plugins: [
       appVersion({
         version: `sha-${target}`,
-        skewProtection:
-          target === 'pages' ? cloudflarePages() : cloudflareWorkers(),
+        ...(adapter && { skewProtection: adapter }),
       }),
     ],
   })
   const dist = join(root, 'dist')
   const currentAsset = `/assets/${readdirSync(join(dist, 'assets')).find(f => f.endsWith('.js'))}`
 
-  return {
-    root,
-    dist,
-    currentAsset,
-    worker:
-      target === 'pages'
-        ? join(dist, '_worker.js')
-        : join(root, 'dist-worker/index.js'),
-  }
+  return { dist, currentAsset, worker: resolve(root, worker) }
 }

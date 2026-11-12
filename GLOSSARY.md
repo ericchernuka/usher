@@ -45,6 +45,10 @@ _Avoid_: Forced refresh.
 **Asset fallback**:
 Serving a previously shipped chunk when the current deployment no longer has it.
 
+**Chunk archive**:
+The append-only store of every chunk shipped, which asset fallback reads from.
+_Avoid_: Build cache.
+
 **Attention**:
 The update signal for a tab: none, passive, prompt, or urgent.
 _Avoid_: Severity, which can imply an error classification.

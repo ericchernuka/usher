@@ -49,7 +49,45 @@ appVersion({
 | `cloudflarePages()`   | `dist/_worker.js` (Pages advanced mode) and `dist/_routes.json` limited to `<base>assets/*` | An R2 binding on the Pages project. Pages ignores `functions/` once `_worker.js` exists |
 | `cloudflareWorkers()` | `dist-worker/index.js` (`.js` or `.mjs`), outside `dist` so it's never served publicly      | `wrangler.jsonc`: `main`, `assets.run_worker_first: ["/assets/*"]`, the R2 binding      |
 
-The handler (`packages/cloudflare/src/edge-handler.mjs`, standalone ESM) serves the current deploy's file, falls back to R2 on a 404 or an SPA-fallback HTML response, and returns a real 404 when neither has it. R2 keys are paths relative to `base`, matching `aws s3 sync dist/assets s3://<bucket>/assets` in CI.
+The generated worker serves the current deploy's file, falls back to R2 on a 404 or an SPA-fallback HTML response, and returns a real 404 when neither has it. Requests outside the assets prefix go straight to static assets. R2 keys are paths relative to `base`, matching `aws s3 sync dist/assets s3://<bucket>/assets` in CI. The R2 binding defaults to `CHUNK_ARCHIVE`.
+
+For Workers, point wrangler at the generated entry:
+
+```jsonc
+// wrangler.jsonc
+{
+  "main": "dist-worker/index.js",
+  "assets": {
+    "directory": "dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/assets/*"],
+  },
+  "r2_buckets": [{ "binding": "CHUNK_ARCHIVE", "bucket_name": "<bucket>" }],
+}
+```
+
+#### Apps that already have a Worker
+
+If the app owns its Worker or Pages Functions, pass no adapter to the plugin and call the handler for the requests the app does not answer itself:
+
+```ts
+import { createAssetFallback } from '@app-version/cloudflare/worker'
+
+const assets = createAssetFallback() // { base?, assetsDir?, r2Binding? }
+
+export default {
+  fetch(request, env) {
+    if (new URL(request.url).pathname.startsWith('/api/')) {
+      return api(request, env)
+    }
+
+    return assets(request, env)
+  },
+}
+```
+
+The app then owns its routing: `_routes.json` on Pages, or `assets.run_worker_first` on Workers, must send the assets prefix to the worker. Keep `base` and `assetsDir` in step with the Vite config. The handler needs the static assets binding as `ASSETS`.
 
 ## Use it in an app
 
