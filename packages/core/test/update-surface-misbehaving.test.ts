@@ -7,9 +7,9 @@ import { describe, expect, newer, older, test } from './fixtures'
 describe('surfaces that misbehave', () => {
   test('given show() closes synchronously, then hide() waits for show() to return', async ({
     app,
-    clock,
+    tab,
   }) => {
-    clock.setSystemTime('2026-11-12T04:00:00Z')
+    tab.setSystemTime('2026-11-12T04:00:00Z')
     server.use(serveBuild(newer))
     const log: string[] = []
     const store = app.create()
@@ -23,7 +23,7 @@ describe('surfaces that misbehave', () => {
         hide: () => log.push('hide'),
       }),
     )
-    await clock.waitForResponse()
+    await tab.waitForResponse()
 
     expect(log).toEqual(['show-start:prompt', 'show-end', 'hide'])
     expect(store.getState().attention).toBe('passive')
@@ -31,7 +31,7 @@ describe('surfaces that misbehave', () => {
 
   test('given show() throws at first, then connecting does not throw and the surface appears once the library is ready', async ({
     app,
-    clock,
+    tab,
   }) => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
     server.use(serveBuild(older))
@@ -50,7 +50,7 @@ describe('surfaces that misbehave', () => {
         hide: () => {},
       }),
     )
-    await clock.waitForResponse()
+    await tab.waitForResponse()
     expect(shows).toEqual([])
 
     ready = true
@@ -64,7 +64,7 @@ describe('surfaces that misbehave', () => {
 
   test('given show() throws on an update, when the next change arrives, then the surface is retried', async ({
     app,
-    clock,
+    tab,
   }) => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
     server.use(serveBuild(newer))
@@ -83,7 +83,7 @@ describe('surfaces that misbehave', () => {
         hide: () => {},
       }),
     )
-    await clock.waitForResponse()
+    await tab.waitForResponse()
     failNext = true
     server.use(serveBuild(older))
     await app.poll()

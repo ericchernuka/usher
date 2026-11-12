@@ -16,36 +16,36 @@ const noop = () => {}
 describe('subscribing', () => {
   test('given no subscribers, then the store does nothing; it polls while at least one remains and stops after the last', async ({
     app,
-    clock,
+    tab,
     requests,
   }) => {
     const store = app.create()
-    await clock.waitForResponse()
+    await tab.waitForResponse()
     expect(requests).toHaveLength(0)
 
     const first = store.subscribe(() => {})
     const second = store.subscribe(() => {})
-    await clock.waitForResponse()
+    await tab.waitForResponse()
     expect(requests).toHaveLength(1)
 
     first()
-    await clock.runFor(5 * MINUTE)
+    await tab.runFor(5 * MINUTE)
     expect(requests).toHaveLength(2)
 
     second()
-    await clock.runFor(10 * MINUTE)
+    await tab.runFor(10 * MINUTE)
     expect(requests).toHaveLength(2)
   })
 
   test('given the same function subscribed twice, then each is its own subscription and unsubscribing is idempotent', async ({
     app,
-    clock,
+    tab,
     requests,
   }) => {
     const store = app.create()
     const first = store.subscribe(noop)
     const second = app.subscribe(store, noop)
-    await clock.waitForResponse()
+    await tab.waitForResponse()
     first()
     first()
     requests.length = 0
@@ -58,7 +58,7 @@ describe('subscribing', () => {
 
   test('given a listener throws, then the others still hear about the change', async ({
     app,
-    clock,
+    tab,
   }) => {
     server.use(serveBuild(newer))
     vi.spyOn(console, 'error').mockImplementation(() => {})
@@ -68,7 +68,7 @@ describe('subscribing', () => {
     })
     const later = vi.fn<() => void>()
     app.subscribe(store, later)
-    await clock.waitForResponse()
+    await tab.waitForResponse()
 
     expect(later).toHaveBeenCalled()
     expect(store.getState().attention).toBe('passive')
@@ -76,32 +76,32 @@ describe('subscribing', () => {
 
   test('given every subscriber left, when the app dismisses, then no timers are started', async ({
     app,
-    clock,
+    tab,
   }) => {
     server.use(serveBuild(newer))
-    clock.setSystemTime('2026-11-12T04:00:00Z')
+    tab.setSystemTime('2026-11-12T04:00:00Z')
     const store = app.create()
     const stop = app.subscribe(store)
-    await clock.waitForResponse()
+    await tab.waitForResponse()
     stop()
 
     expect(store.dismiss()).toBe(true)
 
-    expect(clock.pendingStoreTimers()).toBe(0)
+    expect(tab.pendingTimers()).toBe(0)
   })
 })
 
 describe('snapshots', () => {
   test('given a poll that changes nothing, then getState() returns the same snapshot and listeners are not called', async ({
     app,
-    clock,
+    tab,
     requests,
   }) => {
     server.use(serveBuild(newer))
     const store = app.create()
     const listener = vi.fn<() => void>()
     app.subscribe(store, listener)
-    await clock.waitForResponse()
+    await tab.waitForResponse()
     const first = store.getState()
     listener.mockClear()
 
@@ -114,7 +114,7 @@ describe('snapshots', () => {
 
   test('given the server moves between builds, then no snapshot pairs an attention with the wrong latest', async ({
     app,
-    clock,
+    tab,
   }) => {
     server.use(serveBuild(older))
     const store = app.create()
@@ -126,7 +126,7 @@ describe('snapshots', () => {
         'latest' in state ? state.latest.version : undefined,
       ])
     })
-    await clock.waitForResponse()
+    await tab.waitForResponse()
 
     server.use(serveBuild(running))
     await app.poll()
@@ -139,13 +139,13 @@ describe('snapshots', () => {
 
   test('given the same version is rebuilt, when the check lands, then the snapshot carries the new build facts', async ({
     app,
-    clock,
+    tab,
   }) => {
     server.use(serveBuild(newer))
     const store = app.create()
     const listener = vi.fn<() => void>()
     app.subscribe(store, listener)
-    await clock.waitForResponse()
+    await tab.waitForResponse()
     const first = store.getState()
     listener.mockClear()
 

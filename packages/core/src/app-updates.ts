@@ -5,11 +5,7 @@ import {
 } from './options'
 import { createLatestBuild } from './latest-build'
 import { createServerClock } from './server-clock'
-import {
-  createBrowserEnvironment,
-  listen,
-  type BrowserEnvironment,
-} from './browser'
+import { createBrowserEnvironment, type Environment } from './environment'
 import {
   resolveAttention,
   type Decision,
@@ -21,10 +17,6 @@ import { createPromptDismissal } from './prompt-dismissal'
 import type { AppUpdatesOptions, BuildFacts, UpdateState } from './types'
 
 export type { RefreshBlocker } from './refresh'
-
-export interface UpdateStoreOptions extends AppUpdatesOptions {
-  browser?: BrowserEnvironment
-}
 
 /**
  * External store, one per app at module scope. Creating it has no side effects;
@@ -73,12 +65,12 @@ const MAX_TIMER_MS = 2 ** 31 - 1
 
 interface Active {
   stopListening: () => void
-  deadline?: ReturnType<typeof setTimeout> | undefined
+  cancelDeadline?: (() => void) | undefined
 }
 
 class AppUpdatesStore implements AppUpdates {
   readonly running: BuildFacts
-  readonly browser: BrowserEnvironment
+  readonly env: Environment
   readonly thresholds: Thresholds
   readonly clock: ReturnType<typeof createServerClock>
   readonly dismissal: ReturnType<typeof createPromptDismissal>
@@ -89,23 +81,20 @@ class AppUpdatesStore implements AppUpdates {
   stickyUrgency: StickyUrgency | undefined
   active: Active | undefined
 
-  constructor(options: UpdateStoreOptions) {
-    const browser = options.browser ?? createBrowserEnvironment()
+  constructor(options: AppUpdatesOptions, env: Environment) {
     this.running = options.running
-    this.browser = browser
+    this.env = env
     this.thresholds = resolveThresholds(options)
-    this.clock = createServerClock()
+    this.clock = createServerClock(env)
     this.dismissal = createPromptDismissal(
       options.storageKey ?? 'app-version',
-      browser,
+      env,
     )
-    this.refreshes = createRefresh(
-      options.reload ?? (() => browser.location.reload()),
-    )
+    this.refreshes = createRefresh(options.reload ?? (() => env.reload()))
     this.latestBuild = createLatestBuild({
       versionUrl: options.versionUrl,
       pollInterval: resolvePollInterval(options.pollInterval),
-      browser,
+      env,
       clock: this.clock,
     })
   }
@@ -146,18 +135,15 @@ class AppUpdatesStore implements AppUpdates {
       return
     }
 
-    clearTimeout(this.active.deadline)
-    this.active.deadline = undefined
+    this.active.cancelDeadline?.()
+    this.active.cancelDeadline = undefined
 
-    if (
-      nextAt === undefined ||
-      this.browser.document.visibilityState !== 'visible'
-    ) {
+    if (nextAt === undefined || !this.env.isVisible()) {
       return
     }
 
     const delay = Math.min(Math.max(0, nextAt - this.clock.now()), MAX_TIMER_MS)
-    this.active.deadline = setTimeout(this.evaluate, delay)
+    this.active.cancelDeadline = this.env.startTimer(this.evaluate, delay)
   }
 
   publish = (next: UpdateState) => {
@@ -171,11 +157,7 @@ class AppUpdatesStore implements AppUpdates {
 
   start = () => {
     this.active = {
-      stopListening: listen(
-        this.browser.document,
-        'visibilitychange',
-        this.evaluate,
-      ),
+      stopListening: this.env.onVisibilityChange(this.evaluate),
     }
     this.dismissal.start(this.evaluate)
     this.latestBuild.start(this.evaluate)
@@ -187,9 +169,9 @@ class AppUpdatesStore implements AppUpdates {
       return
     }
 
-    const { stopListening, deadline } = this.active
+    const { stopListening, cancelDeadline } = this.active
     this.active = undefined
-    clearTimeout(deadline)
+    cancelDeadline?.()
     stopListening()
     this.latestBuild.stop()
     this.dismissal.stop()
@@ -239,6 +221,10 @@ class AppUpdatesStore implements AppUpdates {
   }
 }
 
-export function createAppUpdatesStore(options: UpdateStoreOptions): AppUpdates {
-  return new AppUpdatesStore(options)
+/** The factory behind `createAppUpdates`. Tests inside core pass a fake environment. */
+export function createAppUpdatesStore(
+  options: AppUpdatesOptions,
+  env: Environment = createBrowserEnvironment(),
+): AppUpdates {
+  return new AppUpdatesStore(options, env)
 }

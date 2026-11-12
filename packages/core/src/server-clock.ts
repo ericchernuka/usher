@@ -1,3 +1,5 @@
+import type { Environment } from './environment'
+
 /** Date headers have one-second resolution, so smaller changes are rounding, not drift. */
 const HEADER_ROUNDING_MS = 2_000
 
@@ -6,17 +8,19 @@ const HEADER_ROUNDING_MS = 2_000
  * server's clock, anchored to monotonic time so a change to the user's clock
  * cannot move them. Until a server time has been observed, it is the local clock.
  */
-export function createServerClock() {
+export function createServerClock(
+  env: Pick<Environment, 'wallNow' | 'monotonicNow'>,
+) {
   let serverMinusMonotonic: number | undefined
 
   return {
     now: (): number =>
       serverMinusMonotonic === undefined
-        ? Date.now()
-        : serverMinusMonotonic + performance.now(),
+        ? env.wallNow()
+        : serverMinusMonotonic + env.monotonicNow(),
 
     observe(serverTime: number) {
-      const next = serverTime - performance.now()
+      const next = serverTime - env.monotonicNow()
 
       if (
         serverMinusMonotonic === undefined ||

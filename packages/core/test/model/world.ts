@@ -1,9 +1,9 @@
 import * as fc from 'fast-check'
+import type { Environment } from '../../src/environment'
 import { vi } from 'vitest'
+import { createFakeEnvironment } from '../fake-environment'
 import type { BuildFacts } from '../../src/types'
-import type { Clock } from '../clock'
-import { running } from '../fixtures'
-import { createFakeHost, createStore, type StoreOptions } from '../fake-host'
+import { createStore, running, type StoreOptions } from '../fixtures'
 
 const H = 3_600 * 1_000
 
@@ -198,7 +198,7 @@ interface DeliveredBuild {
   signal: AbortSignal | null | undefined
 }
 
-export function createWorld(s: Scenario, clock: Clock) {
+export function createWorld(s: Scenario) {
   const delivered: DeliveredBuild[] = []
 
   const world = {
@@ -211,7 +211,7 @@ export function createWorld(s: Scenario, clock: Clock) {
     flips: 0,
   }
 
-  const serverNow = () => Date.now() - world.jumped + s.skew
+  const serverNow = () => tab.now() - world.jumped + s.skew
 
   const respond = async (
     _input: RequestInfo | URL,
@@ -221,7 +221,7 @@ export function createWorld(s: Scenario, clock: Clock) {
 
     try {
       if (s.latency > 0) {
-        await answerAfter(s.latency, init?.signal)
+        await answerAfter(s.latency, init?.signal, tab.env)
       }
 
       return serve(init?.signal)
@@ -251,26 +251,30 @@ export function createWorld(s: Scenario, clock: Clock) {
     return response
   }
 
-  const host = createFakeHost({ fetch: respond })
+  const tab = createFakeEnvironment({ fetch: respond })
   vi.spyOn(console, 'warn').mockImplementation(() => {})
 
-  const store = createStore(host, {
+  const store = createStore(tab, {
     ...configs[s.config],
     reload: async () => false,
   })
 
-  return { world, store, serverNow, host, clock, delivered }
+  return { world, store, serverNow, tab, delivered }
 }
 
 export type World = ReturnType<typeof createWorld>
 
-function answerAfter(ms: number, signal: AbortSignal | null | undefined) {
+function answerAfter(
+  ms: number,
+  signal: AbortSignal | null | undefined,
+  env: Pick<Environment, 'startTimer'>,
+) {
   return new Promise<void>((resolve, reject) => {
-    const answer = setTimeout(resolve, ms)
+    const cancel = env.startTimer(resolve, ms)
     signal?.addEventListener(
       'abort',
       () => {
-        clearTimeout(answer)
+        cancel()
         reject(signal.reason)
       },
       { once: true },

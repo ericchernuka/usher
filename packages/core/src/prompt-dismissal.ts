@@ -1,5 +1,5 @@
 import * as v from 'valibot'
-import { listen, type BrowserEnvironment } from './browser'
+import type { Environment, StorageChange } from './environment'
 
 const StoredDismissal = v.pipe(
   v.string(),
@@ -21,31 +21,9 @@ function parse(raw: string | null): number | undefined {
 const later = (a: number | undefined, b: number | undefined) =>
   a === undefined ? b : b === undefined ? a : Math.max(a, b)
 
-const StorageFields = v.object({
-  key: v.nullable(v.string()),
-  newValue: v.nullable(v.string()),
-})
-
-function readChange(event: Event, browser: BrowserEnvironment) {
-  try {
-    if (
-      !('storageArea' in event) ||
-      event.storageArea !== browser.localStorage
-    ) {
-      return undefined
-    }
-
-    const parsed = v.safeParse(StorageFields, event)
-
-    return parsed.success ? parsed.output : undefined
-  } catch {
-    return undefined
-  }
-}
-
 /**
  * The server time of the latest prompt dismissal, shared by every tab of the app
- * through localStorage. The latest dismissal wins. When storage is blocked, the
+ * through storage. The latest dismissal wins. When storage is blocked, the
  * dismissal still holds in this tab.
  *
  * The stored record is `{ "dismissedAt": <server time in ms> }` under
@@ -54,7 +32,7 @@ function readChange(event: Event, browser: BrowserEnvironment) {
  */
 export function createPromptDismissal(
   storageKey: string,
-  browser: BrowserEnvironment,
+  env: Pick<Environment, 'storage' | 'onStorageChange'>,
 ) {
   const key = `${storageKey}:prompt-dismissal`
   let dismissedAt: number | undefined
@@ -63,15 +41,13 @@ export function createPromptDismissal(
 
   function hydrate() {
     try {
-      const stored = parse(browser.localStorage.getItem(key))
+      const stored = parse(env.storage.getItem(key))
       dismissedAt = unsynced ? later(dismissedAt, stored) : stored
     } catch {}
   }
 
-  function onStorage(event: Event, onChange: () => void) {
-    const change = readChange(event, browser)
-
-    if (!change || (change.key !== null && change.key !== key)) {
+  function onStorage(change: StorageChange, onChange: () => void) {
+    if (change.key !== null && change.key !== key) {
       return
     }
 
@@ -89,9 +65,7 @@ export function createPromptDismissal(
     /** Read what other tabs left in storage and follow their changes. */
     start(onChange: () => void) {
       hydrate()
-      stopListening = listen(browser.window, 'storage', event =>
-        onStorage(event, onChange),
-      )
+      stopListening = env.onStorageChange(change => onStorage(change, onChange))
     },
 
     stop() {
@@ -103,7 +77,7 @@ export function createPromptDismissal(
       dismissedAt = at
 
       try {
-        browser.localStorage.setItem(key, JSON.stringify({ dismissedAt }))
+        env.storage.setItem(key, JSON.stringify({ dismissedAt }))
         unsynced = false
       } catch {
         unsynced = true

@@ -1,21 +1,18 @@
 import { test as base, vi } from 'vitest'
-import type { AppUpdates } from '../src/app-updates'
-import type { BuildFacts } from '../src/types'
-import { installClock } from './clock'
-import { createFakeHost, createStore, type StoreOptions } from './fake-host'
+import { createAppUpdatesStore, type AppUpdates } from '../src/app-updates'
+import type { AppUpdatesOptions, BuildFacts } from '../src/types'
+import { runningBuild } from './build-info.stub'
+import { createFakeEnvironment, type FakeEnvironment } from './fake-environment'
+import { serverClock, VERSION_URL } from './mocks/handlers'
 import { recordRequests } from './requests'
 
 export { describe, expect } from 'vitest'
 
-export const HOUR = 3_600 * 1_000
 export const SECOND = 1_000
 export const MINUTE = 60 * SECOND
+export const HOUR = 60 * MINUTE
 
-export const running: BuildFacts = {
-  version: 'aaa',
-  commitTime: '2026-11-11T15:00:00.000Z',
-  buildTime: '2026-11-11T15:00:00.000Z',
-}
+export const running: BuildFacts = runningBuild
 
 export const newer: BuildFacts = {
   ...running,
@@ -31,19 +28,31 @@ export const older: BuildFacts = {
 
 export const DISMISSAL_KEY = 'app-version:prompt-dismissal'
 
+export type StoreOptions = Partial<Omit<AppUpdatesOptions, 'running'>>
+
+export function createStore(
+  tab: FakeEnvironment,
+  options: StoreOptions = {},
+): AppUpdates {
+  return createAppUpdatesStore(
+    { running, versionUrl: VERSION_URL, ...options },
+    tab.env,
+  )
+}
+
 export const test = base
-  .extend('clock', { auto: true }, ({}, { onCleanup }) => {
-    const clock = installClock()
+  .extend('tab', ({}, { onCleanup }) => {
+    const tab = createFakeEnvironment()
+    serverClock.now = tab.now
     onCleanup(() => {
-      clock.dispose()
-      vi.unstubAllGlobals()
+      serverClock.now = Date.now
+      vi.restoreAllMocks()
     })
 
-    return clock
+    return tab
   })
-  .extend('host', ({ clock }) => createFakeHost({ fetch: clock.fetch }))
   .extend('requests', () => recordRequests())
-  .extend('app', ({ host, clock }, { onCleanup }) => {
+  .extend('app', ({ tab }, { onCleanup }) => {
     const stops: Array<() => void> = []
     onCleanup(() => stops.splice(0).forEach(stop => stop()))
 
@@ -55,14 +64,15 @@ export const test = base
 
     return {
       create: (options: StoreOptions = {}): AppUpdates =>
-        createStore(host, options),
+        createStore(tab, options),
       subscribe: (store: AppUpdates, listener: () => void = () => {}) =>
         track(store.subscribe(listener)),
       track,
+      /** A minute later the tab regains focus, which triggers a check. */
       async poll() {
-        vi.advanceTimersByTime(MINUTE)
-        host.focus()
-        await clock.waitForResponse()
+        await tab.runFor(MINUTE)
+        tab.focus()
+        await tab.waitForResponse()
       },
     }
   })

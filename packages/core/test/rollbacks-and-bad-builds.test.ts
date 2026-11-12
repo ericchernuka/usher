@@ -5,12 +5,12 @@ import { HOUR, running, describe, expect, newer, older, test } from './fixtures'
 describe('a rollback', () => {
   test('given the server redeploys an older commit, then the tab is urgent at once', async ({
     app,
-    clock,
+    tab,
   }) => {
     server.use(serveBuild(older))
     const store = app.create()
     app.subscribe(store)
-    await clock.waitForResponse()
+    await tab.waitForResponse()
 
     expect(store.getState()).toMatchObject({
       attention: 'urgent',
@@ -21,12 +21,12 @@ describe('a rollback', () => {
 
   test('given the tab learned its build is bad, when a fix ships, then it stays urgent as a rollback', async ({
     app,
-    clock,
+    tab,
   }) => {
     server.use(serveBuild(older))
     const store = app.create()
     app.subscribe(store)
-    await clock.waitForResponse()
+    await tab.waitForResponse()
 
     server.use(serveBuild(newer))
     await app.poll()
@@ -42,14 +42,14 @@ describe('a rollback', () => {
 describe('a forced update', () => {
   test('given the same version is rebuilt with a cutoff after our build, then the tab is forced', async ({
     app,
-    clock,
+    tab,
   }) => {
     server.use(
       serveBuild({ ...running, forceUpdateBefore: '2026-11-11T15:30:00.000Z' }),
     )
     const store = app.create()
     app.subscribe(store)
-    await clock.waitForResponse()
+    await tab.waitForResponse()
 
     expect(store.getState()).toMatchObject({
       attention: 'urgent',
@@ -59,7 +59,7 @@ describe('a forced update', () => {
 
   test('given a cutoff older than our build, then it does not apply', async ({
     app,
-    clock,
+    tab,
   }) => {
     server.use(
       serveBuild({
@@ -71,7 +71,7 @@ describe('a forced update', () => {
     )
     const store = app.create()
     app.subscribe(store)
-    await clock.waitForResponse()
+    await tab.waitForResponse()
 
     expect(store.getState()).toMatchObject({
       attention: 'passive',

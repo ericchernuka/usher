@@ -1,5 +1,12 @@
-import { HOUR, MINUTE, SECOND, describe, expect, test } from './fixtures'
-import type { StoreOptions } from './fake-host'
+import {
+  HOUR,
+  MINUTE,
+  SECOND,
+  describe,
+  expect,
+  test,
+  type StoreOptions,
+} from './fixtures'
 
 describe('validating options', () => {
   test.for<{ name: string; options: StoreOptions; message: RegExp }>([

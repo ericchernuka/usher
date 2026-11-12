@@ -141,7 +141,7 @@ export default defineConfig({
     },
     {
       files: [
-        'packages/core/test/clock.ts',
+        'packages/core/test/fake-environment.ts',
         'packages/core/test/model.test.ts',
       ],
       rules: { 'no-await-in-loop': 'off' },

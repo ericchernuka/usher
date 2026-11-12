@@ -16,13 +16,13 @@ import {
 describe('showing and hiding', () => {
   test('given an outdated build past the prompt threshold, then the surface is shown once per change and hidden when caught up', async ({
     app,
-    clock,
+    tab,
   }) => {
-    clock.setSystemTime('2026-11-12T04:00:00Z')
+    tab.setSystemTime('2026-11-12T04:00:00Z')
     server.use(serveBuild(newer))
     const ui = fakeSurface()
     app.track(connectUpdateSurface(app.create(), ui.surface))
-    await clock.waitForResponse()
+    await tab.waitForResponse()
 
     expect(ui.log).toEqual(['show:prompt'])
 
@@ -37,7 +37,7 @@ describe('showing and hiding', () => {
 
   test('given a fix ships for a rollback, when the surface is already up, then it is not shown again', async ({
     app,
-    clock,
+    tab,
   }) => {
     server.use(serveBuild(older))
     const shows: string[] = []
@@ -47,7 +47,7 @@ describe('showing and hiding', () => {
         hide: () => {},
       }),
     )
-    await clock.waitForResponse()
+    await tab.waitForResponse()
 
     server.use(serveBuild({ ...older, version: 'older-still' }))
     await app.poll()
@@ -57,13 +57,13 @@ describe('showing and hiding', () => {
 
   test('given the surface is up, when the app disconnects, then it hides and polling stops', async ({
     app,
-    clock,
+    tab,
     requests,
   }) => {
     server.use(serveBuild(older))
     const ui = fakeSurface()
     const disconnect = connectUpdateSurface(app.create(), ui.surface)
-    await clock.waitForResponse()
+    await tab.waitForResponse()
     disconnect()
     const checks = requests.length
     await app.poll()
@@ -74,38 +74,35 @@ describe('showing and hiding', () => {
 
   test("given refresh is wired to the toast's action, then it follows the store's refresh rules", async ({
     app,
-    clock,
-    host,
+    tab,
   }) => {
     server.use(serveBuild(older))
     const store = app.create()
     const removeBlocker = store.addRefreshBlocker(() => true)
     const ui = fakeSurface()
     app.track(connectUpdateSurface(store, ui.surface))
-    await clock.waitForResponse()
+    await tab.waitForResponse()
 
     await ui.open.refresh()
-    expect(host.navigations).toEqual([])
+    expect(tab.reloads).toBe(0)
 
     removeBlocker()
     await ui.open.refresh()
-    expect(host.navigations).toEqual([
-      { type: 'reload', url: host.location.href },
-    ])
+    expect(tab.reloads).toBe(1)
   })
 })
 
 describe('closing the surface', () => {
   test('given the user closes the toast, then the prompt is dismissed and a second close of the same notice is ignored', async ({
     app,
-    clock,
+    tab,
   }) => {
-    clock.setSystemTime('2026-11-12T04:00:00Z')
+    tab.setSystemTime('2026-11-12T04:00:00Z')
     server.use(serveBuild(newer))
     const store = app.create()
     const ui = fakeSurface()
     app.track(connectUpdateSurface(store, ui.surface))
-    await clock.waitForResponse()
+    await tab.waitForResponse()
     const notice = ui.open
 
     notice.close()
@@ -118,10 +115,9 @@ describe('closing the surface', () => {
 
   test('given the library fires onClose for our own hide, then the update is not treated as dismissed', async ({
     app,
-    clock,
-    host,
+    tab,
   }) => {
-    clock.setSystemTime('2026-11-12T04:00:00Z')
+    tab.setSystemTime('2026-11-12T04:00:00Z')
     server.use(serveBuild(newer))
     const store = app.create()
     let notice: UpdateNotice | undefined
@@ -138,24 +134,24 @@ describe('closing the surface', () => {
         },
       }),
     )
-    await clock.waitForResponse()
+    await tab.waitForResponse()
 
     server.use(serveBuild(running))
     await app.poll()
 
     expect(store.getState().attention).toBe('none')
-    expect(host.localStorage.getItem(DISMISSAL_KEY)).toBeNull()
+    expect(tab.storage.getItem(DISMISSAL_KEY)).toBeNull()
   })
 
   test('given an urgent notice, when the UI closes it anyway, then it is shown again as a new notice', async ({
     app,
-    clock,
+    tab,
   }) => {
     server.use(serveBuild(newer))
-    clock.setSystemTime('2026-11-12T16:00:00Z')
+    tab.setSystemTime('2026-11-12T16:00:00Z')
     const ui = fakeSurface()
     app.track(connectUpdateSurface(app.create(), ui.surface))
-    await clock.waitForResponse()
+    await tab.waitForResponse()
     const first = ui.open
 
     first.close()
@@ -171,7 +167,7 @@ describe('closing the surface', () => {
 
   test('given a surface that closes every urgent notice inside show(), then the connection stops at the pass limit with one error', async ({
     app,
-    clock,
+    tab,
   }) => {
     const error = vi.spyOn(console, 'error').mockImplementation(() => {})
     server.use(serveBuild(older))
@@ -186,7 +182,7 @@ describe('closing the surface', () => {
       }),
     )
 
-    await expect(clock.waitForResponse()).resolves.toBeUndefined()
+    await expect(tab.waitForResponse()).resolves.toBeUndefined()
 
     expect(shows).toBe(5)
     expect(error).toHaveBeenCalledTimes(1)
@@ -198,12 +194,12 @@ describe('closing the surface', () => {
 
   test('given a passive banner, when the user closes it, then it stays closed until the state changes', async ({
     app,
-    clock,
+    tab,
   }) => {
     server.use(serveBuild(newer))
     const ui = fakeSurface('passive')
     app.track(connectUpdateSurface(app.create(), ui.surface))
-    await clock.waitForResponse()
+    await tab.waitForResponse()
     expect(ui.log).toEqual(['show:passive'])
 
     ui.open.close()
@@ -218,13 +214,13 @@ describe('closing the surface', () => {
 
   test('given a banner at passive and a 14 h old build, when the user closes the prompt level, then the banner is not re-shown as passive', async ({
     app,
-    clock,
+    tab,
   }) => {
     server.use(serveBuild(newer))
-    clock.setSystemTime('2026-11-12T05:00:00Z')
+    tab.setSystemTime('2026-11-12T05:00:00Z')
     const ui = fakeSurface('passive')
     app.track(connectUpdateSurface(app.create(), ui.surface))
-    await clock.waitForResponse()
+    await tab.waitForResponse()
 
     ui.open.close()
     await app.poll()

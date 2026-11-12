@@ -36,7 +36,7 @@ describe('refreshing', () => {
 
   test("given the app supplies its own reload, then refresh delegates to it, and false or a throw means it didn't happen", async ({
     app,
-    host,
+    tab,
   }) => {
     const reload = vi.fn<() => Promise<boolean | undefined>>(async () => answer)
     let answer: boolean | undefined = false
@@ -47,7 +47,7 @@ describe('refreshing', () => {
 
     answer = undefined
     expect(await store.refresh()).toBe(true)
-    expect(host.navigations).toEqual([])
+    expect(tab.reloads).toBe(0)
 
     vi.spyOn(console, 'error').mockImplementation(() => {})
 
@@ -62,7 +62,7 @@ describe('refreshing', () => {
 
   test('given refresh blockers, then any one vetoes and removing it lifts the veto', async ({
     app,
-    host,
+    tab,
   }) => {
     const store = app.create()
     const removeForm = store.addRefreshBlocker(() => true)
@@ -73,8 +73,6 @@ describe('refreshing', () => {
     removeForm()
 
     expect(await store.refresh()).toBe(true)
-    expect(host.navigations).toEqual([
-      { type: 'reload', url: host.location.href },
-    ])
+    expect(tab.reloads).toBe(1)
   })
 })

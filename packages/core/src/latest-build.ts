@@ -1,4 +1,4 @@
-import { listen, type BrowserEnvironment } from './browser'
+import type { Environment } from './environment'
 import { isBuildFacts, type BuildFacts } from './types'
 
 /** Focus and visibility recheck at most this often. */
@@ -9,7 +9,7 @@ const MAX_TIMER_MS = 2 ** 31 - 1
 export interface LatestBuildOptions {
   versionUrl: string
   pollInterval: number
-  browser: BrowserEnvironment
+  env: Environment
   /** Told the server time of each response that carries a Date header. */
   clock: { observe(serverTime: number): void }
 }
@@ -18,7 +18,7 @@ interface Watching {
   onChange: () => void
   stopListening: Array<() => void>
   inFlight?: AbortController | undefined
-  poll?: ReturnType<typeof setTimeout> | undefined
+  cancelPoll?: (() => void) | undefined
 }
 
 interface Rejected {
@@ -43,8 +43,6 @@ async function readFacts(res: Response): Promise<BuildFacts | Rejected> {
   return isBuildFacts(body) ? body : { problem: 'JSON that is not build facts' }
 }
 
-const monotonicNow = () => performance.now()
-
 /**
  * Observes the serving deployment: polls `version.json` while the tab is visible,
  * rechecks on focus and visibility, and keeps the last valid build facts it saw.
@@ -62,17 +60,12 @@ class LatestBuild {
 
   get = () => this.latest
 
-  visible = () => this.options.browser.document.visibilityState === 'visible'
-
-  sinceCheck = () => monotonicNow() - this.lastCheck
+  sinceCheck = () => this.options.env.monotonicNow() - this.lastCheck
 
   checkUrl = () => {
-    const url = new URL(
-      this.options.versionUrl,
-      this.options.browser.document.baseURI,
-    )
-
-    url.searchParams.set('t', String(Date.now()))
+    const { env, versionUrl } = this.options
+    const url = new URL(versionUrl, env.baseUrl())
+    url.searchParams.set('t', String(env.wallNow()))
 
     return url.href
   }
@@ -82,16 +75,17 @@ class LatestBuild {
       return
     }
 
-    clearTimeout(this.watching.poll)
-    this.watching.poll = undefined
+    const { env, pollInterval } = this.options
+    this.watching.cancelPoll?.()
+    this.watching.cancelPoll = undefined
 
-    if (!this.visible()) {
+    if (!env.isVisible()) {
       return
     }
 
-    const due = this.lastCheck + this.options.pollInterval - monotonicNow()
+    const due = this.lastCheck + pollInterval - env.monotonicNow()
     const delay = Math.min(Math.max(0, due), MAX_TIMER_MS)
-    this.watching.poll = setTimeout(this.onPoll, delay)
+    this.watching.cancelPoll = env.startTimer(this.onPoll, delay)
   }
 
   onPoll = () => {
@@ -103,29 +97,34 @@ class LatestBuild {
   }
 
   recheck = () => {
-    if (this.visible() && this.sinceCheck() >= MIN_FOCUS_CHECK_GAP_MS) {
+    if (
+      this.options.env.isVisible() &&
+      this.sinceCheck() >= MIN_FOCUS_CHECK_GAP_MS
+    ) {
       void this.check()
     }
   }
 
   check = async () => {
-    if (!this.watching || !this.visible()) {
+    const { env } = this.options
+
+    if (!this.watching || !env.isVisible()) {
       return
     }
 
     this.watching.inFlight?.abort()
     const controller = new AbortController()
     this.watching.inFlight = controller
-    this.lastCheck = monotonicNow()
+    this.lastCheck = env.monotonicNow()
     this.schedulePoll()
 
-    const timeout = setTimeout(
+    const cancelTimeout = env.startTimer(
       () => controller.abort(new DOMException('timed out', 'TimeoutError')),
       FETCH_TIMEOUT_MS,
     )
 
     try {
-      const res = await this.options.browser.fetch(this.checkUrl(), {
+      const res = await env.fetch(this.checkUrl(), {
         cache: 'no-store',
         signal: controller.signal,
       })
@@ -137,7 +136,7 @@ class LatestBuild {
       }
     } catch {
     } finally {
-      clearTimeout(timeout)
+      cancelTimeout()
 
       if (this.watching?.inFlight === controller) {
         this.watching.inFlight = undefined
@@ -173,16 +172,16 @@ class LatestBuild {
   }
 
   start = (onChange: () => void) => {
-    const { document, window } = this.options.browser
+    const { env } = this.options
 
     this.watching = {
       onChange,
       stopListening: [
-        listen(document, 'visibilitychange', () => {
+        env.onVisibilityChange(() => {
           this.schedulePoll()
           this.recheck()
         }),
-        listen(window, 'focus', this.recheck),
+        env.onFocus(this.recheck),
       ],
     }
 
@@ -194,9 +193,9 @@ class LatestBuild {
       return
     }
 
-    const { stopListening, inFlight, poll } = this.watching
+    const { stopListening, inFlight, cancelPoll } = this.watching
     this.watching = undefined
-    clearTimeout(poll)
+    cancelPoll?.()
     inFlight?.abort()
     stopListening.forEach(stop => stop())
   }

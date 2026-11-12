@@ -79,11 +79,11 @@ export interface AppUpdatesOptions {
   /** How often, in milliseconds, a visible tab checks for a new build. Default 5 minutes, minimum 10 seconds. */
   pollInterval?: number
   /**
-   * The document load a refresh performs, once refresh blockers allow it.
+   * The page load a refresh performs, once refresh blockers allow it.
    * Return or resolve `false` when the reload did not happen. Default `location.reload()`.
    * Route it through your router to reuse its blockers; see the README recipe.
    */
   reload?: () => void | boolean | Promise<void | boolean>
-  /** localStorage key prefix; set one per app if apps share an origin. Default "app-version". */
+  /** Storage key prefix; set one per app if apps share an origin. Default "app-version". */
   storageKey?: string
 }

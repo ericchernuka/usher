@@ -1,6 +1,5 @@
 import * as fc from 'fast-check'
 import { describe, expect, it, vi } from 'vitest'
-import { installPlainClock } from './clock'
 import { DISMISSAL_KEY, HOUR, running } from './fixtures'
 import { aged, createWorld, random, rollbackThenFix } from './model/world'
 import type { Action, Scenario, World } from './model/world'
@@ -13,7 +12,7 @@ interface Run {
 
 function dismiss(w: World, r: Run) {
   const before = w.store.getState()
-  const stored = w.host.localStorage.getItem(DISMISSAL_KEY)
+  const stored = w.tab.storage.getItem(DISMISSAL_KEY)
   const dismissed = w.store.dismiss()
 
   if (before.attention !== 'prompt') {
@@ -27,7 +26,7 @@ function dismiss(w: World, r: Run) {
       w.world.config === 'promptSnooze' ? w.serverNow() + HOUR : Infinity
   } else {
     expect(w.store.getState()).toBe(before)
-    expect(w.host.localStorage.getItem(DISMISSAL_KEY)).toBe(stored)
+    expect(w.tab.storage.getItem(DISMISSAL_KEY)).toBe(stored)
   }
 }
 
@@ -41,13 +40,12 @@ async function tabAction(
 ) {
   switch (a.type) {
     case 'otherTabClear':
-      w.host.localStorage.removeItem(DISMISSAL_KEY)
-      w.host.storageEvent(null)
+      w.tab.otherTabClears()
       r.promptQuietUntil = -Infinity
 
       return
     case 'otherTabSet':
-      w.host.otherTabSets(
+      w.tab.otherTabSets(
         DISMISSAL_KEY,
         JSON.stringify({ dismissedAt: w.serverNow() }),
       )
@@ -58,13 +56,13 @@ async function tabAction(
 
       return
     case 'resubscribe':
-      await w.clock.runFor(a.gap)
+      await w.tab.advance(a.gap)
       r.stop = w.store.subscribe(() => {})
 
       return
     case 'clockJump':
       w.world.jumped += a.ms
-      vi.setSystemTime(Date.now() + a.ms)
+      w.tab.setSystemTime(w.tab.now() + a.ms)
 
       return
   }
@@ -73,18 +71,18 @@ async function tabAction(
 function action(a: Action, w: World, r: Run) {
   switch (a.type) {
     case 'advance':
-      return w.clock.runFor(a.ms)
+      return w.tab.advance(a.ms)
     case 'serve':
       w.world.served = a.build
 
       return
     case 'focus':
-      w.host.focus()
+      w.tab.focus()
 
       return
     case 'visibility':
       w.world.visible = a.visible
-      w.host.setVisibility(a.visible ? 'visible' : 'hidden')
+      w.tab.setVisibility(a.visible ? 'visible' : 'hidden')
 
       return
     case 'dismissed':
@@ -125,13 +123,12 @@ function invariants(w: World, r: Run) {
 
   if (!w.world.visible) {
     const timersPerCheck = w.world.latency > 0 ? 2 : 1
-    expect(w.clock.pendingStoreTimers()).toBe(w.world.inFlight * timersPerCheck)
+    expect(w.tab.pendingTimers()).toBe(w.world.inFlight * timersPerCheck)
   }
 }
 
 async function run(scenario: Scenario) {
-  const clock = installPlainClock()
-  const w = createWorld(scenario, clock)
+  const w = createWorld(scenario)
 
   const r: Run = {
     stop: w.store.subscribe(() => {}),
@@ -146,12 +143,12 @@ async function run(scenario: Scenario) {
       }
 
       await action(a, w, r)
-      await clock.flush()
+      await w.tab.flush()
       invariants(w, r)
     }
   } finally {
     r.stop()
-    clock.dispose()
+    vi.restoreAllMocks()
   }
 }
 

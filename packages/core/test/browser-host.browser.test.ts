@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createAppUpdatesStore } from '../src/app-updates'
 import { createAppUpdates } from '../src/index'
 import type { BuildFacts } from '../src/types'
 import { captureNavigations } from './navigation'
@@ -51,7 +50,7 @@ describe('the store on the real browser', () => {
   })
 
   it('given a tab that stays open, when it regains focus after a minute, then it checks again and finds the new build', async () => {
-    const updates = createAppUpdatesStore({
+    const updates = createAppUpdates({
       running,
       versionUrl: '/version.json',
     })
@@ -82,7 +81,7 @@ describe('the store on the real browser', () => {
       ),
     )
 
-    const updates = createAppUpdatesStore({
+    const updates = createAppUpdates({
       running,
       versionUrl: '/version.json',
     })
@@ -100,10 +99,35 @@ describe('the store on the real browser', () => {
     stop()
   })
 
+  it('given sessionStorage is cleared, then a localStorage dismissal is not undone', async () => {
+    vi.setSystemTime(new Date('2026-11-12T04:00:00Z'))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn<typeof fetch>(async () =>
+        Response.json({
+          ...running,
+          version: 'new',
+          commitTime: '2026-11-12T00:00:00Z',
+        }),
+      ),
+    )
+    const updates = createAppUpdates({ running, versionUrl: '/version.json' })
+    const stop = updates.subscribe(() => {})
+    await vi.waitFor(() => expect(updates.getState().attention).toBe('prompt'))
+    expect(updates.dismiss()).toBe(true)
+
+    window.dispatchEvent(
+      new StorageEvent('storage', { key: null, storageArea: sessionStorage }),
+    )
+
+    expect(updates.getState().attention).toBe('passive')
+    stop()
+  })
+
   it('given a chunk error, then the library does not prevent it or reload', () => {
     const navigations = captureNavigations()
 
-    const updates = createAppUpdatesStore({
+    const updates = createAppUpdates({
       running,
       versionUrl: '/version.json',
     })
