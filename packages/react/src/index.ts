@@ -23,16 +23,17 @@ export function useAppUpdates<T>(
 ): T
 export function useAppUpdates<T>(
   store: AppUpdates,
-  selector: (state: UpdateState) => T = identity as never,
-): T {
+  selector?: (state: UpdateState) => T,
+): T | UpdateState {
   const snapshot = () => {
     const state = store.getState()
-    const value = selector(state)
+    const value = selector ? selector(state) : identity(state)
 
     // Dev-only footgun check: a selector that builds a new object loops useSyncExternalStore.
     if (
       import.meta.env?.DEV &&
       !warnedUnstableSelector &&
+      selector &&
       !Object.is(value, selector(state))
     ) {
       warnedUnstableSelector = true
@@ -62,10 +63,11 @@ export function useReloadBlocker(
 ): void {
   useEffect(() => {
     if (shouldBlock === false) {
-      return
+      return undefined
     }
+
     return store.addReloadBlocker(
-      typeof shouldBlock === 'function' ? shouldBlock : () => true,
+      shouldBlock === true ? () => true : shouldBlock,
     )
   }, [store, shouldBlock])
 }

@@ -16,7 +16,7 @@ export interface Serve {
 
 /** `/version.json` as a CDN serves it: JSON, uncacheable, stamped with the server's date. */
 export function versionHandler(
-  body: object,
+  body: import('msw').JsonBodyType,
   { status = 200, date, skewMs = 0, once = false }: Serve = {},
 ): HttpHandler {
   return http.get(

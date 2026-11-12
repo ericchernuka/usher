@@ -8,8 +8,10 @@ export const serveBuild = (build: VersionInfo, options?: Serve): HttpHandler =>
   versionHandler(build, options)
 
 /** The server answers 200 with something that isn't a build. */
-export const serveRaw = (body: object, options?: Serve): HttpHandler =>
-  versionHandler(body, options)
+export const serveRaw = (
+  body: import('msw').JsonBodyType,
+  options?: Serve,
+): HttpHandler => versionHandler(body, options)
 
 /** The server errors, e.g. a deploy in progress. */
 export const serveError = (

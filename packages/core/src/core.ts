@@ -3,7 +3,8 @@
 import { ms, resolveEscalation } from './duration'
 import { createEngine } from './engine'
 import { browserHost, type Host } from './host'
-import { createMachine, isolate } from './machine'
+import { createMachine } from './machine'
+import { isolate } from './callbacks'
 import { createReloads, type ReloadBlocker } from './reloads'
 import { createSnoozes } from './snoozes'
 import type {
@@ -81,7 +82,15 @@ function pollMs(value: Duration = '5m'): number {
   if (result < MIN_POLL_MS) {
     throw new Error(`[app-version] pollEvery must be at least "10s"`)
   }
+
   return result
+}
+
+/** Snapshot first: a listener may (un)subscribe while we notify. */
+function notifyAll(listeners: ReadonlySet<{ listener: () => void }>) {
+  for (const entry of Array.from(listeners)) {
+    isolate('listener', entry.listener)
+  }
 }
 
 export function createAppUpdatesCore(o: CoreOptions): AppUpdates {
@@ -101,12 +110,7 @@ export function createAppUpdatesCore(o: CoreOptions): AppUpdates {
     escalation: resolveEscalation(o.escalation), // validates eagerly: bad config throws here
     snoozes,
     ...(o.onAttentionChange && { onAttentionChange: o.onAttentionChange }),
-    notify: () => {
-      // Snapshot: a listener may (un)subscribe while we notify.
-      for (const entry of Array.from(listeners)) {
-        isolate('listener', entry.listener)
-      }
-    },
+    notify: () => notifyAll(listeners),
   })
 
   const engine = createEngine({
@@ -125,22 +129,7 @@ export function createAppUpdatesCore(o: CoreOptions): AppUpdates {
 
   return {
     getState: machine.getState,
-    subscribe(listener) {
-      const entry = { listener } // a token per call, so the same function can subscribe twice
-      listeners.add(entry)
-
-      if (listeners.size === 1) {
-        engine.start()
-      }
-      return () => {
-        if (!listeners.delete(entry)) {
-          return
-        }
-        if (listeners.size === 0) {
-          engine.stop()
-        }
-      }
-    },
+    subscribe: subscribeTo(listeners, engine),
     addReloadBlocker: reloads.addBlocker,
     refresh: () =>
       reloads.request({ reason: 'refresh', href: host.location.href }),
@@ -150,7 +139,32 @@ export function createAppUpdatesCore(o: CoreOptions): AppUpdates {
       if (dismissed) {
         engine.reschedule()
       }
+
       return dismissed
     },
+  }
+}
+
+function subscribeTo(
+  listeners: Set<{ listener: () => void }>,
+  engine: ReturnType<typeof createEngine>,
+) {
+  return (listener: () => void) => {
+    const entry = { listener } // a token per call, so the same function can subscribe twice
+    listeners.add(entry)
+
+    if (listeners.size === 1) {
+      engine.start()
+    }
+
+    return () => {
+      if (!listeners.delete(entry)) {
+        return
+      }
+
+      if (listeners.size === 0) {
+        engine.stop()
+      }
+    }
   }
 }

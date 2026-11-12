@@ -120,6 +120,7 @@ export function createSnoozes(storageKey: string, host: Host) {
       if (!isOurArea(e, host)) {
         return false
       }
+
       if (e.key === null || (e.key === key && e.newValue === null)) {
         memory = {} // storage cleared or our key removed: un-snooze
 
@@ -129,11 +130,13 @@ export function createSnoozes(storageKey: string, host: Host) {
       if (e.key !== key || e.newValue === null) {
         return false
       }
+
       const incoming = parse(e.newValue)
 
       if (incoming) {
         memory = later(memory, incoming)
       }
+
       return true
     },
 

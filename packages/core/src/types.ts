@@ -68,7 +68,7 @@ export interface ReasonsByAttention {
 
 export type AttentionChangeReason = ReasonsByAttention[keyof ReasonsByAttention]
 
-type Behind = Exclude<Attention, 'none'>
+export type Behind = Exclude<Attention, 'none'>
 
 /** One update state, as a union: impossible combinations (e.g. none + "dismiss") can't be expressed. */
 export type UpdateState =
@@ -88,7 +88,7 @@ export type UpdateState =
 /** Where a change came from, for telemetry: one user dismiss shows up as "user" once, "other-tab" elsewhere. */
 export type ChangeSource = 'check' | 'time' | 'user' | 'other-tab'
 
-interface DetailsFor<A extends Attention> {
+export interface DetailsFor<A extends Attention> {
   /** Same as the first argument; narrow on it to narrow `reason`. */
   attention: A
   reason: ReasonsByAttention[A]

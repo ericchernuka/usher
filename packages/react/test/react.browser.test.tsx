@@ -5,12 +5,13 @@ import { configure } from 'vitest-browser-react/pure'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   connectPrompt,
+  PROMPT_ID,
   createAppUpdates,
   defaultCopy,
   type AppUpdates,
 } from '@app-version/core'
 import { useAppUpdates, useReloadBlocker } from '../src/index'
-import { captureNavigations } from './navigation'
+import { captureNavigations } from '../../core/test/navigation'
 
 configure({ reactStrictMode: true })
 
@@ -48,7 +49,12 @@ describe('useAppUpdates', () => {
       const attention = useAppUpdates(updates, s => s.attention)
 
       return attention === 'none' ? null : (
-        <button data-attention={attention} onClick={updates.dismiss} />
+        <button
+          type="button"
+          aria-label="Dismiss update"
+          data-attention={attention}
+          onClick={updates.dismiss}
+        />
       )
     }
 
@@ -107,11 +113,7 @@ describe('useAppUpdates selector check', () => {
     await ok.unmount()
 
     function Worse() {
-      try {
-        useAppUpdates(updates, s => ({ a: s.attention }))
-      } catch {
-        /* React may also throw on the resulting loop */
-      }
+      useAppUpdates(updates, s => ({ a: s.attention }))
 
       return null
     }
@@ -213,45 +215,53 @@ function connectBaseUIToast(
         priority: p.attention === 'urgent' ? 'high' : 'low',
         title: defaultCopy(p).title,
         description: defaultCopy(p).description,
-        actionProps: { children: defaultCopy(p).action, onClick: p.refresh },
-        onClose: p.dismiss,
+        actionProps: {
+          children: defaultCopy(p).action,
+          onClick: () => p.refresh(),
+        },
+        onClose: () => p.dismiss(),
       }),
-    hide: () => toastManager.close('app-update'),
+    hide: () => toastManager.close(PROMPT_ID),
   })
 }
 
+function Toasts() {
+  const { toasts, close } = Toast.useToastManager()
+
+  return (
+    <>
+      {toasts
+        .filter(t => t.transitionStatus !== 'ending') // closed, waiting on an exit animation
+        .map(t => (
+          <button
+            type="button"
+            key={t.id}
+            data-type={t.type}
+            onClick={() => close(t.id)}
+          >
+            {t.title}
+          </button>
+        ))}
+    </>
+  )
+}
+
+async function setup(updates: AppUpdates) {
+  const toastManager = Toast.createToastManager()
+  const disconnect = connectBaseUIToast(updates, toastManager)
+
+  const view = await render(
+    <Toast.Provider toastManager={toastManager}>
+      <Toasts />
+    </Toast.Provider>,
+  )
+
+  const toast = view.getByRole('button')
+
+  return { ...view, toast, disconnect }
+}
+
 describe('Base UI recipe', () => {
-  function Toasts() {
-    const { toasts, close } = Toast.useToastManager()
-
-    return (
-      <>
-        {toasts
-          .filter(t => t.transitionStatus !== 'ending') // closed, waiting on an exit animation
-          .map(t => (
-            <output key={t.id} data-type={t.type} onClick={() => close(t.id)}>
-              {t.title}
-            </output>
-          ))}
-      </>
-    )
-  }
-
-  async function setup(updates: AppUpdates) {
-    const toastManager = Toast.createToastManager()
-    const disconnect = connectBaseUIToast(updates, toastManager)
-
-    const view = await render(
-      <Toast.Provider toastManager={toastManager}>
-        <Toasts />
-      </Toast.Provider>,
-    )
-
-    const toast = view.getByRole('status')
-
-    return { ...view, toast, disconnect }
-  }
-
   it('shows the toast outside React and dismisses on close', async () => {
     const updates = createAppUpdates({ idleFor: '0s' })
     const { toast, unmount, disconnect } = await setup(updates)

@@ -6,6 +6,7 @@
 // happen even when fetches fail. Hidden tabs have no wake timer (an in-flight fetch keeps
 // its own timeout until it settles).
 import type { Host, StorageChange } from './host'
+import * as v from 'valibot'
 import { isVersionInfo } from './policy'
 import type { createMachine, Context } from './machine'
 import type { createReloads } from './reloads'
@@ -44,14 +45,17 @@ async function readResponse(res: Response, signal: AbortSignal) {
   if (!res.ok) {
     return undefined
   }
+
   const body: unknown = await res.json()
 
   if (signal.aborted) {
     return undefined
   }
+
   if (!isVersionInfo(body)) {
     return console.warn('[app-version] ignoring malformed version.json', body)
   }
+
   // Cross-origin responses need `Access-Control-Expose-Headers: Date` for this; else no correction.
   const serverDate = Date.parse(res.headers.get('date') ?? '')
 
@@ -61,72 +65,104 @@ async function readResponse(res: Response, signal: AbortSignal) {
   }
 }
 
-export function createEngine(deps: EngineDeps) {
-  const { machine, host } = deps
-  const visible = () => host.document.visibilityState === 'visible'
-  let running: Running | undefined
-  let lastCheck = -Infinity
-  let lastInput = -Infinity
+const StorageFields = v.object({
+  key: v.nullable(v.string()),
+  newValue: v.nullable(v.string()),
+})
 
-  const sinceCheck = () => tick() - lastCheck
+function readStorageChange(
+  event: Event,
+  host: Host,
+): StorageChange | undefined {
+  try {
+    const storageArea = host.localStorage
 
-  const context = (source: ChangeSource): Context => ({
+    if (!('storageArea' in event) || event.storageArea !== storageArea) {
+      return undefined
+    }
+
+    const parsed = v.safeParse(StorageFields, event)
+
+    return parsed.success ? { ...parsed.output, storageArea } : undefined
+  } catch {
+    return undefined // Storage access can be denied by browser settings.
+  }
+}
+
+class Engine {
+  readonly deps: EngineDeps
+
+  constructor(deps: EngineDeps) {
+    this.deps = deps
+  }
+  visible = () => this.deps.host.document.visibilityState === 'visible'
+
+  running: Running | undefined
+
+  lastCheck = -Infinity
+
+  lastInput = -Infinity
+
+  sinceCheck = () => tick() - this.lastCheck
+
+  context = (source: ChangeSource): Context => ({
     now: Date.now(),
-    gateOpen: visible() && tick() - lastInput >= deps.idleMs,
+    gateOpen: this.visible() && tick() - this.lastInput >= this.deps.idleMs,
     source,
   })
 
-  /** Feed facts to the machine, then recompute the timer. The one path for every input. */
-  function evaluate(
+  evaluate = (
     source: ChangeSource,
-    latest: VersionInfo | undefined = machine.getState().latest,
-  ) {
-    machine.apply(latest, context(source))
-    reschedule()
+    latest: VersionInfo | undefined = this.deps.machine.getState().latest,
+  ) => {
+    this.deps.machine.apply(latest, this.context(source))
+    this.reschedule()
   }
 
-  function reschedule() {
-    if (!running) {
+  reschedule = () => {
+    if (!this.running) {
       return
     }
-    clearTimeout(running.wake)
-    running.wake = undefined
 
-    if (!visible()) {
+    clearTimeout(this.running.wake)
+    this.running.wake = undefined
+
+    if (!this.visible()) {
       return
     } // hidden: no timer; visibilitychange brings us back
 
-    const ctx = context('time')
-    const { deadlines, held } = machine.pending(ctx)
+    const ctx = this.context('time')
+    const { deadlines, held } = this.deps.machine.pending(ctx)
     const t = tick()
 
     const delays = [
-      lastCheck + deps.pollMs - t,
+      this.lastCheck + this.deps.pollMs - t,
       ...deadlines.map(d => d - ctx.now),
-      ...(held ? [lastInput + deps.idleMs - t] : []),
+      ...(held ? [this.lastInput + this.deps.idleMs - t] : []),
     ]
 
     const delay = Math.min(Math.max(0, Math.min(...delays)), MAX_TIMER_MS)
-    running.wake = setTimeout(onWake, delay)
+    this.running.wake = setTimeout(this.onWake, delay)
   }
 
-  function onWake() {
-    evaluate('time') // thresholds and snooze expiry don't depend on the network
+  onWake = () => {
+    this.evaluate('time') // thresholds and snooze expiry don't depend on the network
 
-    if (sinceCheck() >= deps.pollMs) {
-      void check()
+    if (this.sinceCheck() >= this.deps.pollMs) {
+      void this.check()
     }
   }
 
-  async function check() {
-    if (!running || !visible()) {
+  check = async () => {
+    if (!this.running || !this.visible()) {
       return
     }
-    running.inFlight?.abort() // newest check wins; a stale response can never land
+
+    this.running.inFlight?.abort() // newest check wins; a stale response can never land
     const controller = new AbortController()
-    running.inFlight = controller
-    lastCheck = tick()
-    reschedule() // the next poll counts from now, whatever triggered this check
+    this.running.inFlight = controller
+    this.lastCheck = tick()
+    this.reschedule() // the next poll counts from now, whatever triggered this check
 
     const timeout = setTimeout(
       () => controller.abort(new DOMException('timed out', 'TimeoutError')),
@@ -134,87 +170,105 @@ export function createEngine(deps: EngineDeps) {
     )
 
     try {
-      const res = await host.fetch(`${deps.url}?t=${Date.now()}`, {
-        cache: 'no-store',
-        signal: controller.signal,
-      })
+      const res = await this.deps.host.fetch(
+        `${this.deps.url}?t=${Date.now()}`,
+        {
+          cache: 'no-store',
+          signal: controller.signal,
+        },
+      )
 
       const result = await readResponse(res, controller.signal)
 
       if (!result) {
         return
       }
-      machine.observeServerTime(result.serverTime, tick())
-      evaluate('check', result.latest)
+
+      this.deps.machine.observeServerTime(result.serverTime, tick())
+      this.evaluate('check', result.latest)
     } catch {
       /* aborted, timed out, offline or mid-deploy: the timer still evaluates */
     } finally {
       clearTimeout(timeout)
 
-      if (running?.inFlight === controller) {
-        running.inFlight = undefined
+      if (this.running?.inFlight === controller) {
+        this.running.inFlight = undefined
       }
     }
   }
 
-  /** Record input time only; the timer re-checks idleness, so there's no work per keystroke. */
-  function markInput() {
-    lastInput = tick()
+  markInput = () => {
+    this.lastInput = tick()
   }
 
-  function listen(
+  listen = (
     target: EventTarget,
-    type: string,
+    [type, opts]: readonly [string, AddEventListenerOptions?],
     fn: EventListener,
-    opts?: AddEventListenerOptions,
-  ) {
+  ) => {
     target.addEventListener(type, fn, opts)
-    running?.cleanups.push(() => target.removeEventListener(type, fn, opts))
+    this.running?.cleanups.push(() =>
+      target.removeEventListener(type, fn, opts),
+    )
   }
 
-  function start() {
-    running = { cleanups: [] }
-    deps.snoozes.hydrate()
-    listen(host.document, 'visibilitychange', () => {
-      evaluate('time') // releases a held raise when visible; clears the timer when hidden
+  listenInputs = () => {
+    this.listen(
+      this.deps.host.window,
+      ['keydown', { capture: true, passive: true }],
+      this.markInput,
+    )
+    this.listen(
+      this.deps.host.window,
+      ['pointerdown', { capture: true, passive: true }],
+      this.markInput,
+    )
+    this.listen(this.deps.host.window, ['storage'], e => {
+      const change = readStorageChange(e, this.deps.host)
 
-      if (visible() && sinceCheck() >= MIN) {
-        void check()
+      if (change && this.deps.snoozes.onStorage(change)) {
+        this.evaluate('other-tab')
       }
     })
-    listen(host.window, 'focus', () => {
-      if (sinceCheck() >= MIN) {
-        void check()
+  }
+
+  start = () => {
+    this.running = { cleanups: [] }
+    this.deps.snoozes.hydrate()
+    this.listen(this.deps.host.document, ['visibilitychange'], () => {
+      this.evaluate('time') // releases a held raise when visible; clears the timer when hidden
+
+      if (this.visible() && this.sinceCheck() >= MIN) {
+        void this.check()
       }
     })
-    listen(host.window, 'keydown', markInput, { capture: true, passive: true })
-    listen(host.window, 'pointerdown', markInput, {
-      capture: true,
-      passive: true,
-    })
-    listen(host.window, 'storage', e => {
-      // SAFETY: the browser dispatches a StorageEvent for 'storage', which has these fields.
-      const change = e as Event & StorageChange
-
-      if (deps.snoozes.onStorage(change)) {
-        evaluate('other-tab')
+    this.listen(this.deps.host.window, ['focus'], () => {
+      if (this.sinceCheck() >= MIN) {
+        void this.check()
       }
     })
+    this.listenInputs()
 
-    if (deps.reloadOnChunkError) {
-      listen(host.window, 'vite:preloadError', deps.reloads.onChunkError)
+    if (this.deps.reloadOnChunkError) {
+      this.listen(
+        this.deps.host.window,
+        ['vite:preloadError'],
+        this.deps.reloads.onChunkError,
+      )
     }
-    const navigate = deps.subscribeToNavigation
+
+    const navigate = this.deps.subscribeToNavigation
 
     if (navigate) {
-      running.cleanups.push(
+      this.running.cleanups.push(
         navigate(to => {
-          if (!machine.isBehind()) {
+          if (!this.deps.machine.isBehind()) {
             return
           }
-          void deps.reloads.request({
+
+          void this.deps.reloads.request({
             reason: 'navigate',
-            href: to?.href ?? host.location.href,
+            href: to?.href ?? this.deps.host.location.href,
           })
         }),
       )
@@ -222,25 +276,23 @@ export function createEngine(deps: EngineDeps) {
 
     // Time passed while unsubscribed: release what was held on what we already know,
     // rather than waiting for the check to land (or a whole poll if it fails).
-    evaluate('time')
-    void check() // no-op while hidden; visibilitychange triggers the first check
+    this.evaluate('time')
+    void this.check() // no-op while hidden; visibilitychange triggers the first check
   }
 
-  function stop() {
-    if (!running) {
+  stop = () => {
+    if (!this.running) {
       return
     }
-    const { cleanups, inFlight, wake } = running
-    running = undefined
+
+    const { cleanups, inFlight, wake } = this.running
+    this.running = undefined
     clearTimeout(wake)
     inFlight?.abort()
     cleanups.forEach(cleanup => cleanup())
   }
+}
 
-  return {
-    start,
-    stop,
-    context,
-    reschedule,
-  }
+export function createEngine(deps: EngineDeps) {
+  return new Engine(deps)
 }

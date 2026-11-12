@@ -15,14 +15,39 @@ const LastChunkReload = v.fallback(
   0,
 )
 
-export function createReloads(options: {
-  reload?: ReloadFn
-  storageKey: string
-  host: Host
-}) {
-  const { host } = options
+/** The registered blockers and the one question asked of them. */
+function createBlockers() {
+  const blockers = new Set<{ blocker: ReloadBlocker }>()
 
-  const defaultReload: ReloadFn = ({ href }) => {
+  return {
+    add: (blocker: ReloadBlocker) => {
+      const entry = { blocker }
+      blockers.add(entry)
+
+      return () => void blockers.delete(entry)
+    },
+    blocked(details: ReloadDetails): boolean {
+      for (const { blocker } of blockers) {
+        try {
+          if (blocker(details)) {
+            return true
+          }
+        } catch (error) {
+          console.error('[app-version] reload blocker threw', error)
+
+          return true // a broken blocker errs on the side of keeping the user's work
+        }
+      }
+
+      return false
+    },
+  }
+}
+
+/** Reload the page in place, or navigate to another href. */
+const reloadInPlace =
+  (host: Host): ReloadFn =>
+  ({ href }) => {
     if (href === host.location.href) {
       host.location.reload()
     } else {
@@ -30,45 +55,70 @@ export function createReloads(options: {
     }
   }
 
-  const blockers = new Set<{ blocker: ReloadBlocker }>()
-  let inFlight: Promise<boolean> | undefined
-
-  function blocked(details: ReloadDetails): boolean {
-    for (const { blocker } of blockers) {
-      try {
-        if (blocker(details)) {
-          return true
-        }
-      } catch (error) {
-        console.error('[app-version] reload blocker threw', error)
-
-        return true // a broken blocker errs on the side of keeping the user's work
-      }
-    }
+async function perform(
+  reload: ReloadFn,
+  details: ReloadDetails,
+): Promise<boolean> {
+  try {
+    return (await reload(details)) !== false
+  } catch (error) {
+    console.error('[app-version] reload threw', error)
 
     return false
   }
+}
 
-  async function perform(details: ReloadDetails): Promise<boolean> {
-    try {
-      return (await (options.reload ?? defaultReload)(details)) !== false
-    } catch (error) {
-      console.error('[app-version] reload threw', error)
+/**
+ * Whether a chunk-error reload may go ahead, recording the attempt if so. Reading or writing
+ * sessionStorage can throw; with no loop guard, the answer is no.
+ */
+function claimChunkReload(
+  host: Host,
+  flag: string,
+  vetoed: () => boolean,
+): boolean {
+  try {
+    const last = v.parse(LastChunkReload, host.sessionStorage.getItem(flag))
 
+    if (Date.now() - last < CHUNK_RELOAD_GUARD_MS) {
+      return false // just reloaded: let the app see it
+    }
+
+    if (vetoed()) {
       return false
     }
+
+    host.sessionStorage.setItem(flag, String(Date.now()))
+
+    return true
+  } catch {
+    return false // no sessionStorage, no loop guard: don't risk a reload loop
   }
+}
+
+export interface ReloadsOptions {
+  reload?: ReloadFn
+  storageKey: string
+  host: Host
+}
+
+export function createReloads({ reload, storageKey, host }: ReloadsOptions) {
+  const blockers = createBlockers()
+  const performReload = reload ?? reloadInPlace(host)
+  let inFlight: Promise<boolean> | undefined
 
   /** Blockers first (synchronously), then the app's reload. Concurrent requests share one. */
   function request(details: ReloadDetails): Promise<boolean> {
     if (inFlight) {
       return inFlight
     }
-    if (blocked(details)) {
+
+    if (blockers.blocked(details)) {
       return Promise.resolve(false)
     }
+
     // Nothing else sets `inFlight` while one is pending, so it is always this attempt.
-    const attempt = perform(details).finally(() => {
+    const attempt = perform(performReload, details).finally(() => {
       inFlight = undefined
     })
 
@@ -82,38 +132,20 @@ export function createReloads(options: {
     if (e.defaultPrevented) {
       return
     } // the app recovered on its own; don't reload over it
-    const flag = `${options.storageKey}:chunk-reload`
 
-    try {
-      const last = v.parse(LastChunkReload, host.sessionStorage.getItem(flag))
+    const claimed = claimChunkReload(
+      host,
+      `${storageKey}:chunk-reload`,
+      () =>
+        !!inFlight ||
+        blockers.blocked({ reason: 'chunk-error', href: host.location.href }),
+    )
 
-      if (Date.now() - last < CHUNK_RELOAD_GUARD_MS) {
-        return // just reloaded: let the app see it
-      }
-
-      if (
-        inFlight ||
-        blocked({ reason: 'chunk-error', href: host.location.href })
-      ) {
-        return
-      }
-      host.sessionStorage.setItem(flag, String(Date.now()))
-    } catch {
-      return // no sessionStorage, no loop guard: don't risk a reload loop
+    if (claimed) {
+      e.preventDefault()
+      host.location.reload()
     }
-
-    e.preventDefault()
-    host.location.reload()
   }
 
-  return {
-    request,
-    onChunkError,
-    addBlocker(blocker: ReloadBlocker) {
-      const entry = { blocker }
-      blockers.add(entry)
-
-      return () => void blockers.delete(entry)
-    },
-  }
+  return { request, onChunkError, addBlocker: blockers.add }
 }

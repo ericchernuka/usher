@@ -1,6 +1,7 @@
 import type { AppUpdates } from './core'
 import type {
   Attention,
+  Behind,
   ReasonsByAttention,
   UpdateState,
   VersionInfo,
@@ -15,9 +16,7 @@ const rank: Record<Attention, number> = {
 
 export const PROMPT_ID = 'app-update'
 
-type Behind = Exclude<Attention, 'none'>
-
-interface PromptBase {
+export interface PromptBase {
   /** Stable id: upsert your toast/banner by it. */
   readonly id: typeof PROMPT_ID
   readonly latest: VersionInfo
@@ -72,152 +71,178 @@ function safely(label: string, fn: () => void) {
   }
 }
 
-export function connectPrompt(
-  updates: AppUpdates,
-  { minAttention = 'prompt', show, hide }: PromptAdapter,
-): () => void {
-  // What the adapter's UI currently is. `key` = attention:reason it reflects.
-  type View =
-    | { kind: 'hidden' }
-    | { kind: 'shown'; handle: Prompt; key: string }
-    | { kind: 'closed'; key: string } // closed by the user; stays closed while the key matches
+type View =
+  | { kind: 'hidden' }
+  | { kind: 'shown'; handle: Prompt; key: string }
+  | { kind: 'closed'; key: string }
 
-  let view: View = { kind: 'hidden' }
-  let dismissing = false
+class PromptConnection {
+  readonly updates: AppUpdates
+  readonly minAttention: Behind
+  readonly show: (prompt: Prompt) => void
+  readonly hide: () => void
+  constructor(updates: AppUpdates, adapter: PromptAdapter) {
+    this.updates = updates
+    this.minAttention = adapter.minAttention ?? 'prompt'
+    this.show = prompt => adapter.show(prompt)
+    this.hide = () => adapter.hide()
+  }
+  view: View = { kind: 'hidden' }
 
-  // A dismiss from inside show() must not hide() mid-show (that orphans the UI): defer it.
-  let hideAfterStep = false
+  dismissing = false
 
-  function closeAfterDismiss(key: string) {
-    view = { kind: 'closed', key } // set first: hide() may fire onClose → stale dismiss
+  hideAfterStep = false
 
-    if (syncing) {
-      hideAfterStep = true
+  closeAfterDismiss = (key: string) => {
+    this.view = { kind: 'closed', key } // set first: hide() may fire onClose → stale dismiss
+
+    if (this.syncing) {
+      this.hideAfterStep = true
     } else {
-      safely('hide', hide)
+      safely('hide', this.hide)
     }
   }
 
-  function step() {
-    if (dismissing) {
+  step = () => {
+    if (this.dismissing) {
       return
     } // closing on the dismissed state happens right after
-    const state = updates.getState()
+
+    const state = this.updates.getState()
 
     if (
       state.attention === 'none' ||
-      rank[state.attention] < rank[minAttention]
+      rank[state.attention] < rank[this.minAttention]
     ) {
-      const wasShown = view.kind === 'shown'
-      view = { kind: 'hidden' } // set first: our own hide must not read as a user dismiss
+      const wasShown = this.view.kind === 'shown'
+      this.view = { kind: 'hidden' } // set first: our own hide must not read as a user dismiss
 
       if (wasShown) {
-        safely('hide', hide)
+        safely('hide', this.hide)
       }
+
       return
     }
 
     // Re-show only when attention or reason changes; a newer `latest` alone isn't news.
     const key = keyOf(state)
 
-    if (view.kind !== 'hidden' && view.key === key) {
+    if (this.view.kind !== 'hidden' && this.view.key === key) {
       return
     }
 
-    const prompt = Object.freeze({
+    const prompt = this.makePrompt(state, key)
+
+    // Record it as shown only once show() succeeded; a throwing show() retries on the next change.
+    const previous = this.view
+    this.view = { kind: 'shown', handle: prompt, key }
+
+    if (!safely('show', () => this.show(prompt))) {
+      this.view = previous.kind === 'shown' ? { kind: 'hidden' } : previous
+    }
+  }
+
+  makePrompt = (
+    state: Exclude<UpdateState, { attention: 'none' }>,
+    key: string,
+  ): Prompt => {
+    const prompt: Prompt = Object.freeze({
+      ...state,
       id: PROMPT_ID,
-      attention: state.attention,
-      reason: state.reason,
-      latest: state.latest,
-      refresh: () => updates.refresh(),
+
+      refresh: () => this.updates.refresh(),
       dismiss: () => {
-        if (view.kind !== 'shown' || view.handle !== prompt) {
+        if (this.view.kind !== 'shown' || this.view.handle !== prompt) {
           return
         } // stale handle
 
         if (prompt.attention === 'passive') {
-          return closeAfterDismiss(key)
+          return this.closeAfterDismiss(key)
         } // nothing to snooze
+
         // Pause steps while the store updates, then close on whatever it actually published.
-        dismissing = true
+        this.dismissing = true
         let dismissed = false
 
         try {
-          dismissed = updates.dismiss()
+          dismissed = this.updates.dismiss()
         } finally {
-          dismissing = false
+          this.dismissing = false
         }
 
         if (dismissed) {
-          return closeAfterDismiss(keyOf(updates.getState()))
+          return this.closeAfterDismiss(keyOf(this.updates.getState()))
         }
-        view = { kind: 'hidden' } // refused or not applicable: show the current state again
-        sync()
+
+        this.view = { kind: 'hidden' } // refused or not applicable: show the current state again
+        this.sync()
       },
-    }) as Prompt
+    })
 
-    // Record it as shown only once show() succeeded; a throwing show() retries on the next change.
-    const previous = view
-    view = { kind: 'shown', handle: prompt, key }
-
-    if (!safely('show', () => show(prompt))) {
-      view = previous.kind === 'shown' ? { kind: 'hidden' } : previous
-    }
+    return prompt
   }
 
-  // Re-entrancy guard: a sync triggered from inside show()/hide() runs after the current
-  // step, so hide() never interleaves with show(). Capped, so a pathological adapter
-  // (show() → dismiss() → app always cancels) can't spin forever.
-  const MAX_PASSES = 5
-  let syncing = false
-  let again = false
+  MAX_PASSES = 5
 
-  function sync() {
-    if (syncing) {
-      again = true
+  syncing = false
+
+  again = false
+
+  sync = () => {
+    if (this.syncing) {
+      this.again = true
 
       return
     }
 
-    syncing = true
+    this.syncing = true
 
     try {
       let passes = 0
 
       do {
-        again = false
-        step()
+        this.again = false
+        this.step()
 
-        if (hideAfterStep) {
-          hideAfterStep = false
-          safely('hide', hide)
+        if (this.hideAfterStep) {
+          this.hideAfterStep = false
+          safely('hide', this.hide)
         }
-      } while (again && ++passes < MAX_PASSES)
+      } while (this.again && ++passes < this.MAX_PASSES)
 
-      if (again) {
+      if (this.again) {
         console.error(
           '[app-version] connectPrompt: adapter keeps re-triggering updates; stopped after',
-          MAX_PASSES,
+          this.MAX_PASSES,
         )
       }
-      again = false
+
+      this.again = false
     } finally {
-      syncing = false
+      this.syncing = false
     }
   }
+  connect = () => {
+    const unsubscribe = this.updates.subscribe(this.sync)
+    this.sync()
 
-  const unsubscribe = updates.subscribe(sync)
-  sync()
+    return () => {
+      unsubscribe()
+      const wasShown = this.view.kind === 'shown'
+      this.view = { kind: 'hidden' }
 
-  return () => {
-    unsubscribe()
-    const wasShown = view.kind === 'shown'
-    view = { kind: 'hidden' }
-
-    if (wasShown) {
-      safely('hide', hide)
+      if (wasShown) {
+        safely('hide', this.hide)
+      }
     }
   }
+}
+
+export function connectPrompt(
+  updates: AppUpdates,
+  adapter: PromptAdapter,
+): () => void {
+  return new PromptConnection(updates, adapter).connect()
 }
 
 export interface PromptCopy {

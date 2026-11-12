@@ -26,7 +26,7 @@ class FakeStorageEvent extends Event implements StorageChange {
   }
 }
 
-export class MemoryStorage implements StorageLike {
+class MemoryStorage implements StorageLike {
   readonly #items = new Map<string, string>()
   getItem(key: string) {
     return this.#items.get(key) ?? null
@@ -43,21 +43,27 @@ export class MemoryStorage implements StorageLike {
 }
 
 /** A navigation the page tried to make: `assign` is a push, `reload` a reload. */
-export interface Navigation {
-  type: 'push' | 'reload'
-  url: string
+
+interface MutableVisibility {
+  visibilityState: DocumentVisibilityState
 }
 
 export function createFakeHost(options: { fetch?: typeof fetch } = {}) {
-  const navigations: Navigation[] = []
-  const localStorage = new MemoryStorage()
-  const sessionStorage = new MemoryStorage()
+  const navigations: Array<{ type: 'push' | 'reload'; url: string }> = []
+
+  const localStorage: StorageLike & Pick<Storage, 'removeItem' | 'clear'> =
+    new MemoryStorage()
+
+  const sessionStorage: StorageLike & Pick<Storage, 'removeItem' | 'clear'> =
+    new MemoryStorage()
+
   const windowTarget = new EventTarget()
   const documentTarget = new EventTarget()
 
-  const visibility: { visibilityState: DocumentVisibilityState } = {
+  const visibility: MutableVisibility = {
     visibilityState: 'visible',
   }
+
   const doc = Object.assign(documentTarget, visibility)
 
   const location = {
@@ -143,7 +149,7 @@ export function createFakeHost(options: { fetch?: typeof fetch } = {}) {
 
 export type FakeHost = ReturnType<typeof createFakeHost>
 
-export const stubBuild = appVersion
+const stubBuild = appVersion
 
 /** The store under test, on the fake host and the MSW-served version URL. */
 export function createStore(

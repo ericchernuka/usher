@@ -44,7 +44,7 @@ function setup() {
 describe('TanStack Router reload recipe', () => {
   it('a router blocker (as useBlocker registers) stops the reload', async () => {
     const { router, appUpdates } = setup()
-    const blockerFn = vi.fn(() => true)
+    const blockerFn = vi.fn<() => boolean>(() => true)
     const unblock = router.history.block({ blockerFn })
     expect(await appUpdates.refresh()).toBe(false)
     expect(blockerFn).toHaveBeenCalled()
@@ -61,7 +61,9 @@ describe('TanStack Router reload recipe', () => {
   it("blockers that compare pathnames don't block reloads (current === next)", async () => {
     const { router, appUpdates } = setup()
 
-    const blockerFn = vi.fn(
+    const blockerFn = vi.fn<
+      NonNullable<Parameters<typeof router.history.block>[0]>['blockerFn']
+    >(
       ({ currentLocation, nextLocation }) =>
         currentLocation.pathname !== nextLocation.pathname,
     )

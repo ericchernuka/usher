@@ -12,7 +12,14 @@ export function ms(value: Duration, label: string): number {
       `[app-version] ${label}: "${value}" is not a duration like "30s", "5m", "12h" or "2d"`,
     )
   }
-  return Number(match[1]) * UNIT_MS[match[2] as keyof typeof UNIT_MS]
+
+  const unit = match[2]
+
+  if (unit !== 's' && unit !== 'm' && unit !== 'h' && unit !== 'd') {
+    throw new Error(`[app-version] invalid duration unit: ${unit}`)
+  }
+
+  return Number(match[1]) * UNIT_MS[unit]
 }
 
 /** A level resolved to milliseconds. `snoozeMs` undefined means "until the next level". */
@@ -41,6 +48,7 @@ function level(
   if (config === false) {
     return undefined
   }
+
   const chosen = config ?? fallback
   const afterMs = ms(chosen.after, `escalation.${name}.after`)
 
@@ -52,6 +60,7 @@ function level(
   if (snoozeMs !== undefined && snoozeMs <= 0) {
     throw new Error(`[app-version] escalation.${name}.snooze must be positive`)
   }
+
   return { afterMs, snoozeMs }
 }
 

@@ -13,6 +13,11 @@ import { describe, expect, it, vi } from 'vitest'
 import { appVersion, type SkewProtectionAdapter } from '@app-version/core/vite'
 import { cloudflarePages, cloudflareWorkers } from '../src/index'
 
+const assetsHtml = () =>
+  new Response('<!doctype html>', {
+    headers: { 'content-type': 'text/html' },
+  })
+
 async function buildFixture(
   skewProtection: SkewProtectionAdapter,
   base = '/',
@@ -23,6 +28,7 @@ async function buildFixture(
   if (customLogger) {
     mkdirSync(join(root, 'functions'))
   }
+
   writeFileSync(
     join(root, 'index.html'),
     `<script type="module" src="/main.js"></script>`,
@@ -51,6 +57,7 @@ function fakeEnv(files: Record<string, string>, r2: Record<string, string>) {
             headers: { 'content-type': 'text/javascript' },
           })
         }
+
         return new Response('<!doctype html>', {
           headers: { 'content-type': 'text/html' },
         }) // SPA fallback, 200
@@ -61,6 +68,7 @@ function fakeEnv(files: Record<string, string>, r2: Record<string, string>) {
         if (!(key in r2)) {
           return null
         }
+
         return {
           body: r2[key],
           httpEtag: '"etag"',
@@ -73,7 +81,12 @@ function fakeEnv(files: Record<string, string>, r2: Record<string, string>) {
 }
 
 type Worker = {
-  default: { fetch(req: Request, env: unknown): Promise<Response> }
+  default: {
+    fetch(
+      req: Request,
+      env: import('../src/edge-handler.mjs').AssetEnvironment,
+    ): Promise<Response>
+  }
 }
 
 describe('skewProtection: pages', () => {
@@ -150,18 +163,20 @@ describe('skewProtection: workers', () => {
     const worker: Worker = await import(pathToFileURL(file).href)
     const env = fakeEnv({}, {})
 
+    const customEnv = {
+      ...env,
+      CHUNKS: {
+        get: async () => ({
+          body: 'old',
+          httpEtag: '"e"',
+          writeHttpMetadata() {},
+        }),
+      },
+    }
+
     const res = await worker.default.fetch(
       new Request('https://app.test/assets/x.js'),
-      {
-        ...env,
-        CHUNKS: {
-          get: async () => ({
-            body: 'old',
-            httpEtag: '"e"',
-            writeHttpMetadata() {},
-          }),
-        },
-      },
+      customEnv,
     )
 
     expect(await res.text()).toBe('old')
@@ -217,11 +232,6 @@ describe('edge handler', () => {
     expect(res.status).toBe(404)
   })
 
-  const assetsHtml = () =>
-    new Response('<!doctype html>', {
-      headers: { 'content-type': 'text/html' },
-    })
-
   const options = { base: '/', binding: 'BUILD_CACHE' }
 
   it('passes non-GET requests straight through', async () => {
@@ -258,7 +268,7 @@ describe('edge handler', () => {
 
   it('answers HEAD from R2 metadata without opening the body', async () => {
     const { serveAsset } = await import('../src/edge-handler.mjs')
-    const get = vi.fn()
+    const get = vi.fn<() => void>()
 
     const env = {
       ASSETS: { fetch: async () => assetsHtml() },
@@ -287,7 +297,7 @@ describe('edge handler', () => {
 
     const env = {
       ASSETS: { fetch: async () => new Response('current', { status: 200 }) },
-      BUILD_CACHE: { get: vi.fn() },
+      BUILD_CACHE: { get: vi.fn<() => void>() },
     }
 
     const res = await serveAsset(

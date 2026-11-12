@@ -89,9 +89,11 @@ function evidence(i: PolicyInput): { reason: Bad; key: string } | undefined {
   if (cutoff > Date.parse(i.current.builtAt)) {
     return { reason: 'forced', key: `forced:${cutoff}` }
   }
+
   if (Date.parse(i.latest.commitTime) < Date.parse(i.current.commitTime)) {
     return { reason: 'rollback', key: 'rollback' }
   }
+
   return undefined
 }
 
@@ -102,6 +104,7 @@ function detectBad(i: PolicyInput): KnownBad | undefined {
   if (!fresh || i.knownBad?.evidence.includes(fresh.key)) {
     return i.knownBad
   }
+
   return {
     reason: fresh.reason,
     evidence: [...(i.knownBad?.evidence ?? []), fresh.key],
@@ -184,14 +187,17 @@ function candidates(
   if (bad) {
     list.push({ attention: 'urgent', reason: bad.reason })
   }
+
   const { prompt, urgent } = i.escalation
 
   if (urgent && ageMs >= urgent.afterMs) {
     list.push({ attention: 'urgent', reason: 'expired' })
   }
+
   if (prompt && ageMs >= prompt.afterMs) {
     list.push({ attention: 'prompt', reason: 'stale' })
   }
+
   return list
 }
 
@@ -199,6 +205,7 @@ function isMuted(level: Level, m: ReturnType<typeof mutes>): boolean {
   if (level.reason === 'rollback' || level.reason === 'forced') {
     return m.bad
   }
+
   return level.attention === 'urgent' ? m.urgent : m.prompt
 }
 
@@ -224,10 +231,15 @@ function deadlines(i: PolicyInput): number[] {
     badUntil,
   ]
 
-  return server
-    .filter((t): t is number => typeof t === 'number' && Number.isFinite(t))
-    .map(t => t - i.clockOffset) // to the client clock
-    .filter(t => t > i.now)
+  return server.flatMap(t => {
+    if (t === undefined || !Number.isFinite(t)) {
+      return []
+    }
+
+    const clientTime = t - i.clockOffset
+
+    return clientTime > i.now ? [clientTime] : []
+  })
 }
 
 export function decide(i: PolicyInput): Decision {

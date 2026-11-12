@@ -34,6 +34,7 @@ export async function serveAsset(request, env, { base, binding }) {
   if (request.method !== 'GET' && request.method !== 'HEAD') {
     return current
   }
+
   if (!isMissing(current)) {
     return current
   }
@@ -51,6 +52,7 @@ export async function serveAsset(request, env, { base, binding }) {
     if (current.status === 404) {
       return current
     }
+
     await release() // never answer a JS/CSS request with the SPA's HTML
 
     return new Response('Not found', { status: 404 })
@@ -68,5 +70,6 @@ export async function serveAsset(request, env, { base, binding }) {
   if (!old) {
     return new Response('Not found', { status: 404 })
   }
+
   return assetResponse(old)
 }

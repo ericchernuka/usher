@@ -2,7 +2,8 @@
 // skew) and event sequences (time, deploys, flapping builds, rollbacks, outages, visibility,
 // typing, other tabs, dismissals, vetoes, reloads, resubscribes, clock jumps), and checks
 // the state machine's invariants after every step.
-import fc from 'fast-check'
+import * as v from 'valibot'
+import * as fc from 'fast-check'
 import { describe, expect, it, vi } from 'vitest'
 import { installPlainClock } from './clock'
 import type { AttentionChangeReason, UpdateState } from '../src/types'
@@ -91,9 +92,9 @@ function changeViolations(
 
   const change = { w, previous, next, raise }
 
-  return changeRules
-    .filter(([violated]) => violated(change))
-    .map(([, message]) => message(change))
+  return changeRules.flatMap(([violated, message]) =>
+    violated(change) ? [message(change)] : [],
+  )
 }
 
 /** Listener-side invariants, recorded (the store isolates listener errors) and asserted after each step. */
@@ -129,6 +130,7 @@ function dismissStep({ world, store, serverNow, host }: World) {
   if (ok && before.reason === 'stale' && ONE_PROMPT.has(world.config)) {
     world.promptAcked = true
   }
+
   if (ok && before.reason === 'expired') {
     world.urgentQuietUntil = serverNow() + urgentSnoozeMs(world.config)
   }
@@ -138,9 +140,19 @@ function otherTabSet(
   a: Extract<Action, { type: 'otherTabSet' }>,
   { serverNow, host }: World,
 ) {
-  const stored = JSON.parse(
-    host.host.localStorage.getItem(SNOOZE_KEY) ?? '{}',
-  ) as Record<string, unknown>
+  const stored = v.parse(
+    v.object({
+      promptAt: v.optional(v.number()),
+      urgentAt: v.optional(v.number()),
+      bad: v.optional(
+        v.record(
+          v.string(),
+          v.object({ evidence: v.array(v.string()), until: v.number() }),
+        ),
+      ),
+    }),
+    JSON.parse(host.host.localStorage.getItem(SNOOZE_KEY) ?? '{}'),
+  )
 
   const at = serverNow()
 
@@ -162,13 +174,15 @@ type Handler<T extends Action['type']> = (
   a: Extract<Action, { type: T }>,
   w: World,
   r: Run,
-) => unknown
+) => void | boolean | Promise<void | boolean>
 
 interface Run {
   stop: () => void
 }
 
-const handlers: { [T in Action['type']]: Handler<T> } = {
+type HandlerMap = { [T in Action['type']]: Handler<T> }
+
+const handlers: HandlerMap = {
   advance: (a, { clock }) => clock.runFor(a.ms),
   serve: (a, { world }) => void (world.served = a.build),
   focus: (_a, { host }) => void host.focus(),
@@ -201,6 +215,49 @@ const handlers: { [T in Action['type']]: Handler<T> } = {
   },
 }
 
+function dispatch(a: Action, w: World, r: Run) {
+  switch (a.type) {
+    case 'advance':
+      return handlers.advance(a, w, r)
+    case 'serve':
+      return handlers.serve(a, w, r)
+    case 'focus':
+      return handlers.focus(a, w, r)
+    case 'visibility':
+      return handlers.visibility(a, w, r)
+    case 'input':
+      return handlers.input(a, w, r)
+    case 'dismiss':
+      return handlers.dismiss(a, w, r)
+    default:
+      return dispatchTab(a, w, r)
+  }
+}
+
+function dispatchTab(
+  a: Exclude<
+    Action,
+    { type: 'advance' | 'serve' | 'focus' | 'visibility' | 'input' | 'dismiss' }
+  >,
+  w: World,
+  r: Run,
+) {
+  switch (a.type) {
+    case 'otherTabClear':
+      return handlers.otherTabClear(a, w, r)
+    case 'otherTabSet':
+      return handlers.otherTabSet(a, w, r)
+    case 'veto':
+      return handlers.veto(a, w, r)
+    case 'refresh':
+      return handlers.refresh(a, w, r)
+    case 'resubscribe':
+      return handlers.resubscribe(a, w, r)
+    case 'clockJump':
+      return handlers.clockJump(a, w, r)
+  }
+}
+
 /** State-side invariants after every step. */
 function checkInvariants(
   { world, store, clock }: World,
@@ -221,13 +278,7 @@ function checkInvariants(
     world.visible || clock.pendingStoreTimers() === world.inFlight * perCheck,
     'timer while hidden',
   ).toBe(true)
-  const rose = rank[s.attention] > rank[before.attention]
-  expect(!(vetoedThroughout && rose), 'raised despite veto').toBe(true)
-  const idle = performance.now() - world.lastInput >= IDLE_MS
-  expect(
-    !(s.reason === 'waiting' && world.visible && idle),
-    'stuck waiting while idle and visible',
-  ).toBe(true)
+  checkGate(world, s, { before, vetoedThroughout })
   world.badSeen ||= s.reason === 'rollback' || s.reason === 'forced'
 
   // Once known bad, never shown as merely new/stale while behind.
@@ -246,6 +297,23 @@ function checkInvariants(
   ).toBe(true)
 }
 
+function checkGate(
+  world: World['world'],
+  s: UpdateState,
+  {
+    before,
+    vetoedThroughout,
+  }: { before: UpdateState; vetoedThroughout: boolean },
+) {
+  const rose = rank[s.attention] > rank[before.attention]
+  expect(!(vetoedThroughout && rose), 'raised despite veto').toBe(true)
+  const idle = performance.now() - world.lastInput >= IDLE_MS
+  expect(
+    !(s.reason === 'waiting' && world.visible && idle),
+    'stuck waiting while idle and visible',
+  ).toBe(true)
+}
+
 async function run(scenario: Scenario) {
   const clock = installPlainClock()
   const w = createWorld(scenario, clock)
@@ -255,7 +323,7 @@ async function run(scenario: Scenario) {
     for (const a of scenario.actions) {
       const before = w.store.getState()
       const vetoBefore = w.world.veto
-      await (handlers[a.type] as Handler<Action['type']>)(a, w, r)
+      await dispatch(a, w, r)
       await clock.settle()
       checkInvariants(w, before, vetoBefore && w.world.veto)
     }
@@ -293,5 +361,7 @@ describe('state machine invariants under random worlds', () => {
         { type: 'resubscribe', gap: 6_000 }, // idle by the time they resubscribe
       ],
     },
-  ] satisfies Scenario[])('hold for pinned scenario %#', run)
+  ] satisfies Scenario[])('hold for pinned scenario %#', async scenario => {
+    await run(scenario)
+  })
 })

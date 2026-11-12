@@ -1,6 +1,6 @@
 // The simulated world for model-based tests: builds, a server with its own clock (skew,
 // 1 s Date headers), the user's clock (which can jump), tabs, and the actions over them.
-import fc from 'fast-check'
+import * as fc from 'fast-check'
 import { vi } from 'vitest'
 import type { Escalation, VersionInfo } from '../../src/types'
 import type { Clock } from '../clock'
@@ -39,9 +39,9 @@ const builds = {
   },
 } satisfies Record<string, VersionInfo>
 
-type Build = keyof typeof builds
+export type Build = keyof typeof builds
 
-type Served = Build | 'offline' | 'malformed' | { flap: [Build, Build] }
+export type Served = Build | 'offline' | 'malformed' | { flap: [Build, Build] }
 
 const configs = {
   default: {},
@@ -108,14 +108,16 @@ const duration = fc.oneof(
 
 const t = <T extends Action['type']>(type: T) => fc.constant(type)
 
+const visibilityAction = fc.record({
+  type: t('visibility'),
+  visible: fc.boolean(),
+})
+
 const action: fc.Arbitrary<Action> = fc.oneof(
   { weight: 5, arbitrary: fc.record({ type: t('advance'), ms: duration }) },
   { weight: 3, arbitrary: fc.record({ type: t('serve'), build: served }) },
   { weight: 2, arbitrary: fc.record({ type: t('focus') }) },
-  {
-    weight: 1,
-    arbitrary: fc.record({ type: t('visibility'), visible: fc.boolean() }),
-  },
+  { weight: 1, arbitrary: visibilityAction },
   { weight: 2, arbitrary: fc.record({ type: t('input') }) },
   { weight: 3, arbitrary: fc.record({ type: t('dismiss') }) },
   { weight: 1, arbitrary: fc.record({ type: t('otherTabClear') }) },
@@ -156,7 +158,16 @@ export interface Scenario {
 
 const scenario = (actions: fc.Arbitrary<Action[]>): fc.Arbitrary<Scenario> =>
   fc.record({
-    config: fc.constantFrom(...(Object.keys(configs) as ConfigName[])),
+    config: fc.constantFrom(
+      ...([
+        'default',
+        'noPrompt',
+        'noUrgent',
+        'promptSnooze',
+        'off',
+        'fast',
+      ] satisfies ConfigName[]),
+    ),
     skew: fc.oneof(fc.constant(0), fc.integer({ min: -3 * H, max: 3 * H })),
     // Responses landing late found a real bug (held raises not released on resubscribe).
     latency: fc.constantFrom(0, 0, 300, 5_000, 35_000),
@@ -171,16 +182,21 @@ export const random = scenario(fc.array(action, { maxLength: 60 }))
 export const rollbackThenFix = scenario(
   fc
     .tuple(noise, noise, fc.constantFrom<Build>('newer', 'newest', 'current'))
-    .map(([a, b, fix]): Action[] => [
-      { type: 'serve', build: 'older' },
-      { type: 'focus' },
-      { type: 'advance', ms: 61_000 },
-      ...a,
-      { type: 'serve', build: fix },
-      { type: 'advance', ms: 61_000 },
-      { type: 'focus' },
-      ...b,
-    ]),
+    .map(([a, b, fix]): Action[] =>
+      Array.of<Action>(
+        { type: 'serve', build: 'older' },
+        { type: 'focus' },
+        { type: 'advance', ms: 61_000 },
+      ).concat(
+        a,
+        [
+          { type: 'serve', build: fix },
+          { type: 'advance', ms: 61_000 },
+          { type: 'focus' },
+        ],
+        b,
+      ),
+    ),
 )
 
 /** Age-based escalation: wait into a level, dismiss, wait into the next, dismiss. */
@@ -192,19 +208,21 @@ export const aged = scenario(
       fc.integer({ min: 6 * H, max: 14 * H }),
       noise,
     )
-    .map(([first, a, second, b]): Action[] => [
-      { type: 'serve', build: 'newer' },
-      { type: 'focus' },
-      { type: 'advance', ms: first },
-      { type: 'dismiss' },
-      ...a,
-      { type: 'advance', ms: second },
-      { type: 'dismiss' },
-      ...b,
-    ]),
+    .map(([first, a, second, b]): Action[] =>
+      Array.of<Action>(
+        { type: 'serve', build: 'newer' },
+        { type: 'focus' },
+        { type: 'advance', ms: first },
+        { type: 'dismiss' },
+      ).concat(a, [{ type: 'advance', ms: second }, { type: 'dismiss' }], b),
+    ),
 )
 
 /** The world the store runs in, plus what the invariants need to remember. */
+function initialServed(): Served {
+  return 'current'
+}
+
 export function createWorld(s: Scenario, clock: Clock) {
   const world = {
     config: s.config,
@@ -217,14 +235,14 @@ export function createWorld(s: Scenario, clock: Clock) {
     inFlight: 0, // checks the server hasn't answered yet
     promptAcked: false,
     urgentQuietUntil: -Infinity, // server clock
-    served: 'current' as Served,
+    served: initialServed(),
     flips: 0,
-    offers: [] as Array<{
+    offers: new Array<{
       attention: string
       reason: string
       accepted: boolean
-    }>,
-    violations: [] as string[],
+    }>(),
+    violations: new Array<string>(),
   }
 
   const serverNow = () => Date.now() - world.jumped + s.skew
@@ -240,6 +258,7 @@ export function createWorld(s: Scenario, clock: Clock) {
       if (s.latency > 0) {
         await answerAfter(s.latency, init?.signal)
       }
+
       return serve()
     } finally {
       world.inFlight--
@@ -252,11 +271,13 @@ export function createWorld(s: Scenario, clock: Clock) {
     if (choice === 'offline') {
       throw new TypeError('offline')
     }
+
     if (choice === 'malformed') {
       return Response.json({})
     }
+
     const name =
-      typeof choice === 'string' ? choice : choice.flap[world.flips++ % 2]!
+      choice instanceof Object ? choice.flap[world.flips++ % 2]! : choice
 
     const headers = { date: new Date(serverNow()).toUTCString() } // 1 s resolution, like real servers
 
@@ -274,6 +295,7 @@ export function createWorld(s: Scenario, clock: Clock) {
       if (world.veto && d.cancelable) {
         d.cancel()
       }
+
       world.offers.push({
         attention,
         reason: d.reason,

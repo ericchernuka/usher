@@ -17,8 +17,8 @@ const MAX_NETWORK_TURNS = 50
  * Only timers set by `src/` run on fake time.
  */
 export interface Clock {
-  settle: () => Promise<unknown>
-  runFor: (ms: number) => Promise<unknown>
+  settle: () => Promise<void>
+  runFor: (ms: number) => Promise<void>
   setSystemTime: (time: string | number | Date) => void
   pendingStoreTimers: () => number
   dispose: () => void
@@ -39,8 +39,12 @@ export function installPlainClock(start = '2026-11-11T16:00:00Z'): Clock {
   vi.setSystemTime(new Date(start))
 
   return {
-    settle: () => vi.advanceTimersByTimeAsync(0),
-    runFor: ms => vi.advanceTimersByTimeAsync(ms),
+    settle: async () => {
+      await vi.advanceTimersByTimeAsync(0)
+    },
+    runFor: async ms => {
+      await vi.advanceTimersByTimeAsync(ms)
+    },
     setSystemTime: time => vi.setSystemTime(time),
     pendingStoreTimers: () => vi.getTimerCount(),
     dispose() {
@@ -67,33 +71,35 @@ export function installClock(start = '2026-11-11T16:00:00Z'): Clock {
     vi.setSystemTime(new Date(start))
     const set = globalThis.setTimeout
     const clear = globalThis.clearTimeout
-    vi.spyOn(globalThis, 'setTimeout').mockImplementation(((
-      callback: (...args: unknown[]) => void,
-      ms?: number,
-      ...args: unknown[]
-    ) => {
-      if (!new Error().stack?.includes(SRC)) {
-        // Not the store's: the HTTP client's own timers keep real time, or they would
-        // tick thousands of times across a simulated day.
-        const id = realSet(callback, ms, ...args)
-        real.add(id)
+    vi.spyOn(globalThis, 'setTimeout').mockImplementation(
+      (
+        callback: (...args: unknown[]) => void,
+        ms?: number,
+        ...args: unknown[]
+      ) => {
+        if (!new Error().stack?.includes(SRC)) {
+          // Not the store's: the HTTP client's own timers keep real time, or they would
+          // tick thousands of times across a simulated day.
+          const id = realSet(callback, ms, ...args)
+          real.add(id)
+
+          return id
+        }
+
+        const id = set(
+          (...fired: unknown[]) => {
+            pending.delete(id)
+            callback(...fired)
+          },
+          ms,
+          ...args,
+        )
+
+        pending.set(id, performance.now() + (ms ?? 0))
 
         return id
-      }
-
-      const id = set(
-        (...fired: unknown[]) => {
-          pending.delete(id)
-          callback(...fired)
-        },
-        ms,
-        ...args,
-      )
-
-      pending.set(id, performance.now() + (ms ?? 0))
-
-      return id
-    }) as typeof setTimeout)
+      },
+    )
     vi.spyOn(globalThis, 'clearTimeout').mockImplementation(id => {
       if (real.delete(id)) {
         return realClear(id)

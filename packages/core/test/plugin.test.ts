@@ -1,7 +1,7 @@
 import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { build } from 'vite'
+import { build, createLogger } from 'vite'
 import { describe, expect, it, vi } from 'vitest'
 import { appVersion, resolveVersionInfo } from '../src/vite'
 
@@ -9,8 +9,13 @@ describe('resolveVersionInfo', () => {
   it('prefers env and normalizes dates', () => {
     const info = resolveVersionInfo(
       { commitTime: '2026-11-11T09:00:00-06:00' },
-      { GITHUB_SHA: 'abc123', APP_FORCE_UPDATE_BEFORE: '2026-11-11T10:00:00Z' },
-      new Date('2026-11-11T16:00:00Z'),
+      {
+        env: {
+          GITHUB_SHA: 'abc123',
+          APP_FORCE_UPDATE_BEFORE: '2026-11-11T10:00:00Z',
+        },
+        now: new Date('2026-11-11T16:00:00Z'),
+      },
     )
 
     expect(info).toEqual({
@@ -55,6 +60,7 @@ describe('appVersion plugin', () => {
     if (!js) {
       throw new Error('index.html has no script tag')
     }
+
     const bundle = readFileSync(join(root, 'dist', js), 'utf8')
     expect(bundle).toContain('sha-test')
     expect(bundle).toContain('/app/version.json')
@@ -63,13 +69,15 @@ describe('appVersion plugin', () => {
 
 describe('plugin and edge (first review #12)', () => {
   it('treats empty CI variables as missing and warns when commit time is unknown', async () => {
-    const warn = vi.fn()
+    const warn = vi.fn<() => void>()
 
     const info = resolveVersionInfo(
       {},
-      { APP_VERSION: '', GITHUB_SHA: 'abc', APP_COMMIT_TIME: '' },
-      new Date('2026-11-11T16:00:00Z'),
-      warn,
+      {
+        env: { APP_VERSION: '', GITHUB_SHA: 'abc', APP_COMMIT_TIME: '' },
+        now: new Date('2026-11-11T16:00:00Z'),
+        warn,
+      },
     )
 
     expect(info.version).toBe('abc')
@@ -77,7 +85,7 @@ describe('plugin and edge (first review #12)', () => {
     // This repo has .git, so commit time comes from git; simulate its absence via APP_COMMIT_TIME.
     const explicit = resolveVersionInfo(
       {},
-      { GITHUB_SHA: 'abc', APP_COMMIT_TIME: '2026-11-10T00:00:00Z' },
+      { env: { GITHUB_SHA: 'abc', APP_COMMIT_TIME: '2026-11-10T00:00:00Z' } },
     )
 
     expect(explicit.commitTime).toBe('2026-11-10T00:00:00.000Z')
@@ -89,7 +97,7 @@ describe('given a malformed timestamp', () => {
     expect(() =>
       resolveVersionInfo(
         {},
-        { GITHUB_SHA: 'abc', APP_COMMIT_TIME: 'last tuesday' },
+        { env: { GITHUB_SHA: 'abc', APP_COMMIT_TIME: 'last tuesday' } },
       ),
     ).toThrow(
       /APP_COMMIT_TIME must be an ISO 8601 timestamp, got "last tuesday"/,
@@ -100,7 +108,7 @@ describe('given a malformed timestamp', () => {
     expect(() =>
       resolveVersionInfo(
         { forceUpdateBefore: '2026-13-45' },
-        { GITHUB_SHA: 'abc', APP_COMMIT_TIME: '2026-11-10T00:00:00Z' },
+        { env: { GITHUB_SHA: 'abc', APP_COMMIT_TIME: '2026-11-10T00:00:00Z' } },
       ),
     ).toThrow(/forceUpdateBefore must be an ISO 8601 timestamp/)
   })
@@ -108,7 +116,7 @@ describe('given a malformed timestamp', () => {
   it('when a value is only whitespace, then it counts as unset', () => {
     const info = resolveVersionInfo(
       { version: '  ' },
-      { GITHUB_SHA: ' abc ', APP_COMMIT_TIME: '2026-11-10T00:00:00Z' },
+      { env: { GITHUB_SHA: ' abc ', APP_COMMIT_TIME: '2026-11-10T00:00:00Z' } },
     )
 
     expect(info.version).toBe('abc')
@@ -131,15 +139,15 @@ describe('dev server middleware', () => {
     const config = {
       base,
       root: '/',
-      build: { assetsDir: 'assets', outDir: 'dist' },
-      logger: { warn: () => {} },
+      build: { assetsDir: 'assets', outDir: 'dist', ssr: false },
+      logger: createLogger('silent'),
     }
 
-    ;(plugin.configResolved as (c: unknown) => void)(config)
+    plugin.configResolved(config)
 
     let handler: Handler | undefined
 
-    ;(plugin.configureServer as (s: unknown) => void)({
+    plugin.configureServer({
       middlewares: { use: (fn: Handler) => (handler = fn) },
     })
 
@@ -174,10 +182,10 @@ describe('dev server middleware', () => {
 describe('given no git and no environment', () => {
   it('when the version is resolved, then it falls back to a dev version and warns about the commit time', () => {
     vi.stubEnv('PATH', '/nonexistent') // `git` can't be found
-    const warn = vi.fn()
+    const warn = vi.fn<() => void>()
     const now = new Date('2026-11-11T16:00:00Z')
 
-    const info = resolveVersionInfo({}, {}, now, warn)
+    const info = resolveVersionInfo({}, { env: {}, now, warn })
 
     expect(info).toEqual({
       version: `dev-${now.getTime()}`,

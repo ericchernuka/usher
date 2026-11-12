@@ -1,8 +1,9 @@
+export interface AssetEnvironment {
+  ASSETS: { fetch(request: Request): Promise<Response> }
+}
+
 export function serveAsset(
   request: Request,
-  env: { ASSETS: { fetch(request: Request): Promise<Response> } } & Record<
-    string,
-    unknown
-  >,
+  env: AssetEnvironment,
   options: { base: string; binding: string },
 ): Promise<Response>

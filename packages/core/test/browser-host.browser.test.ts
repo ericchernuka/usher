@@ -6,6 +6,13 @@ import { createAppUpdates } from '../src/index'
 import type { VersionInfo } from '../src/types'
 import { captureNavigations } from './navigation'
 
+function fail() {
+  const event = new Event('vite:preloadError', { cancelable: true })
+  window.dispatchEvent(event)
+
+  return event.defaultPrevented
+}
+
 const current: VersionInfo = {
   version: 'aaa',
   commitTime: '2026-11-11T15:00:00.000Z',
@@ -112,13 +119,6 @@ describe('the store on the real browser', () => {
     const navigations = captureNavigations()
     const updates = createAppUpdatesCore({ current, url: '/version.json' })
     const stop = updates.subscribe(() => {})
-
-    const fail = () => {
-      const event = new Event('vite:preloadError', { cancelable: true })
-      window.dispatchEvent(event)
-
-      return event.defaultPrevented
-    }
 
     expect(fail()).toBe(true)
     expect(navigations).toEqual([{ type: 'reload', url: location.href }])

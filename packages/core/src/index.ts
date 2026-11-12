@@ -12,12 +12,15 @@ export {
   defaultCopy,
   PROMPT_ID,
   type Prompt,
+  type PromptBase,
   type PromptAdapter,
   type PromptCopy,
 } from './prompt'
 
 export type {
   Attention,
+  Behind,
+  DetailsFor,
   AttentionChangeDetails,
   AttentionChangeReason,
   ChangeSource,

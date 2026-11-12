@@ -12,6 +12,7 @@ afterEach(() => {
   for (const controller of active) {
     controller.abort()
   }
+
   active.clear()
 })
 

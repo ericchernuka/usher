@@ -236,7 +236,12 @@ describe('decide: deadlines', () => {
 describe('resolveEscalation', () => {
   it('validates durations and ordering', () => {
     expect(() =>
-      resolveEscalation({ prompt: { after: '12 hours' as never } }),
+      resolveEscalation({
+        prompt: {
+          // @ts-expect-error Invalid runtime input must be rejected.
+          after: '12 hours',
+        },
+      }),
     ).toThrow(/not a duration/)
     expect(() =>
       resolveEscalation({ prompt: { after: '24h' }, urgent: { after: '12h' } }),

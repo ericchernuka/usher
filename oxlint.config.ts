@@ -136,6 +136,14 @@ export default defineConfig({
   },
   overrides: [
     {
+      files: [
+        'packages/core/test/clock.ts',
+        'packages/core/test/model.test.ts',
+      ],
+      // Simulated events and timer steps depend on each preceding result.
+      rules: { 'no-await-in-loop': 'off' },
+    },
+    {
       // The libraries report misuse and recoverable failures as "[app-version] …" warnings.
       files: ['packages/*/src/**'],
       rules: { 'no-console': ['error', { allow: ['warn', 'error'] }] },
@@ -149,7 +157,7 @@ export default defineConfig({
         'max-nested-callbacks': 'off',
         'vitest/expect-expect': [
           'error',
-          { assertFunctionNames: ['expect', 'expect.*', 'fc.assert'] },
+          { assertFunctionNames: ['expect', 'expect.*', 'fc.assert', 'run'] },
         ],
       },
     },
