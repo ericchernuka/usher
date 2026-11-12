@@ -20,6 +20,7 @@
     "check:test": "turbo run coverage test:edge",
     "check:build": "turbo run build",
     "check:fallow": "fallow",
+    "check:pack": "node tools/check-pack.mjs",
     "coverage": "turbo run coverage && node tools/merge-coverage.mjs"
   },
   "devDependencies": {
