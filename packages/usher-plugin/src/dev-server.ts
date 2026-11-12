@@ -119,6 +119,15 @@ function deployMiddleware(
       return reply(res, 405, { type: 'text/plain', text: 'Use POST.' })
     }
 
+    // A browser sends JSON to another origin only after a preflight, which this
+    // server does not answer. So no page on another site can trigger a deploy.
+    if (!req.headers['content-type']?.startsWith('application/json')) {
+      return reply(res, 415, {
+        type: 'text/plain',
+        text: '[usher] send the deploy as Content-Type: application/json.',
+      })
+    }
+
     // Reading the body fails only when the client went away; close the connection.
     deploy(req, res, simulation).catch(() => res.destroy())
   }

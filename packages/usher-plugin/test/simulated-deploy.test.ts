@@ -197,6 +197,20 @@ describe('given devtools on the dev server', () => {
     expect(response.headers.get('allow')).toBe('POST')
   })
 
+  it('when the deploy is not sent as JSON, as a form on another site would send it, then it answers 415 and serves the same build', async () => {
+    const dev = await startServer({ base: '/', devtools: true })
+    const before = await dev.served()
+
+    const response = await fetch(`${dev.url}__usher/deploy`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: '{"mode":"force"}',
+    })
+
+    expect(response.status).toBe(415)
+    expect(await dev.served()).toEqual(before)
+  })
+
   it('when base is not the root, then the script in the page deploys through the endpoint under it', async () => {
     const dev = await startServer({ base: '/app/', devtools: true })
     const before = await dev.served()
