@@ -7,7 +7,6 @@ import {
   type Decision,
   type StickyUrgency,
 } from './attention'
-import { isolate } from './callbacks'
 import {
   createRefresh,
   type RefreshBlocker,
@@ -81,8 +80,16 @@ function sameState(next: UpdateState, current: UpdateState) {
 
 function notifyAll(listeners: ReadonlySet<{ listener: () => void }>) {
   for (const entry of Array.from(listeners)) {
-    if (listeners.has(entry)) {
-      isolate('listener', entry.listener)
+    if (!listeners.has(entry)) {
+      continue
+    }
+
+    const { listener } = entry
+
+    try {
+      listener()
+    } catch (error) {
+      console.error('[usher] listener threw', error)
     }
   }
 }
