@@ -1,5 +1,5 @@
 import { test as base, vi } from 'vitest'
-import { createAppUpdatesStore, type AppUpdates } from '../src/app-updates'
+import { AppUpdatesStore, type AppUpdates } from '../src/app-updates'
 import type { AppUpdatesOptions, BuildFacts } from '../src/types'
 import { runningBuild } from './build-info.stub'
 import { createFakeEnvironment, type FakeEnvironment } from './fake-environment'
@@ -35,7 +35,7 @@ export function createStore(
   tab: FakeEnvironment,
   options: StoreOptions = {},
 ): AppUpdates {
-  return createAppUpdatesStore(
+  return new AppUpdatesStore(
     { running, versionUrl: VERSION_URL, ...options },
     tab.env,
   )

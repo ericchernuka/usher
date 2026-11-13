@@ -48,7 +48,7 @@ async function readFacts(res: Response): Promise<BuildFacts | Rejected> {
       }
 }
 
-class LatestBuild {
+export class LatestBuild {
   readonly options: LatestBuildOptions
   latest: BuildFacts | undefined
   lastCheck: { monotonic: number; wall: number } | undefined
@@ -221,8 +221,4 @@ class LatestBuild {
 
     stopListening.forEach(stop => stop())
   }
-}
-
-export function createLatestBuild(options: LatestBuildOptions) {
-  return new LatestBuild(options)
 }
