@@ -1,4 +1,5 @@
-import { createAppUpdatesStore, type AppUpdates } from './app-updates'
+import { AppUpdatesStore, type AppUpdates } from './app-updates'
+import { createBrowserEnvironment } from './environment'
 import type { AppUpdatesOptions } from './types'
 
 export type { AppUpdates, RefreshBlocker, RefreshOutcome } from './app-updates'
@@ -24,5 +25,5 @@ export type {
  * there is at least one subscriber. Invalid options throw here, naming the option.
  */
 export function createAppUpdates(options: AppUpdatesOptions): AppUpdates {
-  return createAppUpdatesStore(options)
+  return new AppUpdatesStore(options, createBrowserEnvironment())
 }

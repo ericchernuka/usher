@@ -1,7 +1,7 @@
 import { resolveOptions, type Thresholds } from './options'
-import { createLatestBuild } from './latest-build'
+import { LatestBuild } from './latest-build'
 import { createServerClock } from './server-clock'
-import { createBrowserEnvironment, type Environment } from './environment'
+import type { Environment } from './environment'
 import {
   resolveAttention,
   type Decision,
@@ -94,14 +94,14 @@ interface Active {
   cancelDeadline?: (() => void) | undefined
 }
 
-class AppUpdatesStore implements AppUpdates {
+export class AppUpdatesStore implements AppUpdates {
   readonly running: BuildFacts
   readonly env: Environment
   readonly thresholds: Thresholds
   readonly clock: ReturnType<typeof createServerClock>
   readonly dismissal: ReturnType<typeof createPromptDismissal>
   readonly refreshes: ReturnType<typeof createRefresh>
-  readonly latestBuild: ReturnType<typeof createLatestBuild>
+  readonly latestBuild: LatestBuild
   readonly listeners = new Set<{ listener: () => void }>()
   state: UpdateState = { attention: 'none', reason: 'unknown' }
   stickyUrgency: StickyUrgency | undefined
@@ -116,7 +116,7 @@ class AppUpdatesStore implements AppUpdates {
     this.clock = createServerClock(env)
     this.dismissal = createPromptDismissal(resolved.storageKey, env)
     this.refreshes = createRefresh(options.reload ?? (() => env.reload()))
-    this.latestBuild = createLatestBuild({
+    this.latestBuild = new LatestBuild({
       versionUrl: resolved.versionUrl,
       pollInterval: resolved.pollInterval,
       env,
@@ -244,11 +244,4 @@ class AppUpdatesStore implements AppUpdates {
 
     return true
   }
-}
-
-export function createAppUpdatesStore(
-  options: AppUpdatesOptions,
-  env: Environment = createBrowserEnvironment(),
-): AppUpdates {
-  return new AppUpdatesStore(options, env)
 }
