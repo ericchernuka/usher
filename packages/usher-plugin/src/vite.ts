@@ -1,7 +1,11 @@
 import type { Plugin, ResolvedConfig, Rollup } from 'vite'
 import type { BuildFacts } from '@rndsqr/usher-core'
 import type { SkewProtectionAdapter } from './adapter'
-import { adapterFiles, writePrivateFiles } from './adapter-files'
+import {
+  planAdapterFiles,
+  writePrivateFiles,
+  type AdapterFilePlan,
+} from './adapter-files'
 import { resolveBuildFacts } from './build-facts'
 import { buildLayout, type BuildLayout } from './build-layout'
 import { serveDevelopment } from './dev-server'
@@ -63,17 +67,13 @@ function layoutOf(config: ResolvedConfig, fileName: string): BuildLayout {
 }
 
 function emitAdapterFiles(
-  context: Pick<Rollup.PluginContext, 'emitFile' | 'error'>,
-  files: ReturnType<typeof adapterFiles>,
+  context: Pick<Rollup.PluginContext, 'emitFile'>,
+  plan: AdapterFilePlan,
   config: ResolvedConfig,
 ) {
-  if (files.error) {
-    context.error(files.error)
-  }
+  plan.warnings.forEach(warning => config.logger.warn(warning))
 
-  files.warnings.forEach(warning => config.logger.warn(warning))
-
-  for (const file of files.clientFiles) {
+  for (const file of plan.clientFiles) {
     context.emitFile({
       type: 'asset',
       fileName: file.fileName,
@@ -91,6 +91,13 @@ export function usher(options: UsherPluginOptions = {}): Plugin {
   let config: ResolvedConfig
   let facts: BuildFacts
   let layout: BuildLayout
+
+  const adapterPlan = (adapter: SkewProtectionAdapter) =>
+    planAdapterFiles(adapter, {
+      layout,
+      root: config.root,
+      outDir: config.build.outDir,
+    })
 
   return {
     name: 'usher',
@@ -134,18 +141,14 @@ export function usher(options: UsherPluginOptions = {}): Plugin {
       })
 
       if (options.adapter) {
-        emitAdapterFiles(
-          this,
-          adapterFiles(options.adapter, config, layout),
-          config,
-        )
+        emitAdapterFiles(this, adapterPlan(options.adapter), config)
       }
     },
     writeBundle() {
       const adapter = options.adapter
 
       if (adapter && !isServerBuild(config, this)) {
-        writePrivateFiles(adapterFiles(adapter, config, layout).privateFiles)
+        writePrivateFiles(adapterPlan(adapter).privateFiles)
       }
     },
   }

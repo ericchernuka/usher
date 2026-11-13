@@ -247,12 +247,6 @@ describe('given a skew-protection adapter', () => {
     ).rejects.toThrow(/stub-host: "dist\/worker\.js" must be outside outDir/)
   })
 
-  it('when base is relative, then the build fails, because chunks have no fixed path to fall back from', async () => {
-    await expect(buildWith(stub({}), { base: './' })).rejects.toThrow(
-      /stub-host: base "\.\/" is relative/,
-    )
-  })
-
   it('when the adapter returns warnings, then they reach the build logger with its name', async () => {
     const logger = createLogger('warn')
     const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})

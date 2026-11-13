@@ -1,7 +1,6 @@
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, isAbsolute, relative, resolve } from 'node:path'
-import type { ResolvedConfig } from 'vite'
-import type { SkewProtectionAdapter } from './adapter'
+import type { GeneratedFile, SkewProtectionAdapter } from './adapter'
 import type { BuildLayout } from './build-layout'
 
 function isInside(directory: string, file: string) {
@@ -10,30 +9,59 @@ function isInside(directory: string, file: string) {
   return !path.startsWith('..') && !isAbsolute(path)
 }
 
-export function adapterFiles(
+/** Where a client build lands. It names no bundler. */
+export interface ClientOutput {
+  readonly layout: BuildLayout
+  /** Absolute project root. */
+  readonly root: string
+  /** The client output directory, absolute or relative to `root`. */
+  readonly outDir: string
+}
+
+export interface AdapterFilePlan {
+  /** To emit into the client output. */
+  readonly clientFiles: ReadonlyArray<GeneratedFile>
+  /** To write at `path`, which is always outside the client output. */
+  readonly privateFiles: ReadonlyArray<GeneratedFile & { path: string }>
+  /** To log, already prefixed with the adapter name. */
+  readonly warnings: ReadonlyArray<string>
+}
+
+/**
+ * Asks the adapter for its files and decides where each one goes. Throws when
+ * the adapter cannot work for this build: a relative base, or a private file
+ * that would be served.
+ */
+export function planAdapterFiles(
   adapter: SkewProtectionAdapter,
-  config: ResolvedConfig,
-  layout: BuildLayout,
-) {
-  if (!layout.paths) {
-    return {
-      clientFiles: [],
-      privateFiles: [],
-      warnings: [],
-      error: `[usher] ${adapter.name}: base "${config.base}" is relative, so chunks have no fixed URL path and asset fallback cannot route them. Use an absolute base such as "/", or a CDN URL.`,
-    }
+  output: ClientOutput,
+): AdapterFilePlan {
+  const fail = (problem: string): never => {
+    throw new Error(`[usher] ${adapter.name}: ${problem}`)
   }
 
-  const outDir = resolve(config.root, config.build.outDir)
-  const files = adapter.files({ ...layout.paths, root: config.root })
+  const paths =
+    output.layout.paths ??
+    fail(
+      'the base is relative, so chunks have no fixed URL path and asset fallback cannot route them. Use an absolute base such as "/", or a CDN URL.',
+    )
+
+  const files = adapter.files({ ...paths, root: output.root })
+  const outDir = resolve(output.root, output.outDir)
 
   const privateFiles = (files.privateFiles ?? []).map(file => ({
     fileName: file.fileName,
     source: file.source,
-    path: resolve(config.root, file.fileName),
+    path: resolve(output.root, file.fileName),
   }))
 
   const exposed = privateFiles.find(file => isInside(outDir, file.path))
+
+  if (exposed) {
+    fail(
+      `"${exposed.fileName}" must be outside outDir, or it is served as a public asset.`,
+    )
+  }
 
   return {
     clientFiles: files.clientFiles ?? [],
@@ -41,15 +69,10 @@ export function adapterFiles(
     warnings: (files.warnings ?? []).map(
       warning => `[usher] ${adapter.name}: ${warning}`,
     ),
-    error:
-      exposed &&
-      `[usher] ${adapter.name}: "${exposed.fileName}" must be outside outDir, or it is served as a public asset.`,
   }
 }
 
-export function writePrivateFiles(
-  files: ReadonlyArray<{ path: string; source: string }>,
-) {
+export function writePrivateFiles(files: AdapterFilePlan['privateFiles']) {
   for (const file of files) {
     mkdirSync(dirname(file.path), { recursive: true })
     writeFileSync(file.path, file.source)
