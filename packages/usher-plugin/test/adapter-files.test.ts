@@ -52,6 +52,7 @@ describe('planning adapter files', () => {
     { fileName: 'dist/nested/worker.js', outDir: 'dist' },
     { fileName: '/project/dist/worker.js', outDir: 'dist' },
     { fileName: 'out/../dist/worker.js', outDir: 'dist' },
+    { fileName: 'dist/..private/worker.js', outDir: 'dist' },
     { fileName: 'worker.js', outDir: '.' },
     { fileName: '/elsewhere/out/worker.js', outDir: '/elsewhere/out' },
   ])(
@@ -70,6 +71,7 @@ describe('planning adapter files', () => {
       path: '/project/distribution/worker.js',
     },
     { fileName: '../shared/worker.js', path: '/shared/worker.js' },
+    { fileName: '..private/worker.js', path: '/project/..private/worker.js' },
   ])(
     'given the private file $fileName, then it is planned at $path, outside the client output',
     ({ fileName, path }) => {

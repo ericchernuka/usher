@@ -1,12 +1,14 @@
 import { mkdirSync, writeFileSync } from 'node:fs'
-import { dirname, isAbsolute, relative, resolve } from 'node:path'
+import { dirname, isAbsolute, relative, resolve, sep } from 'node:path'
 import type { GeneratedFile, SkewProtectionAdapter } from './adapter'
 import type { BuildLayout } from './build-layout'
 
 function isInside(directory: string, file: string) {
   const path = relative(directory, file)
 
-  return !path.startsWith('..') && !isAbsolute(path)
+  const leaves = path === '..' || path.startsWith(`..${sep}`)
+
+  return !leaves && !isAbsolute(path)
 }
 
 /** Where a client build lands. It names no bundler. */
