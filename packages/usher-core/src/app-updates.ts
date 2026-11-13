@@ -1,10 +1,4 @@
-import {
-  resolvePollInterval,
-  resolveRunning,
-  resolveThresholds,
-  resolveVersionUrl,
-  type Thresholds,
-} from './options'
+import { resolveOptions, type Thresholds } from './options'
 import { createLatestBuild } from './latest-build'
 import { createServerClock } from './server-clock'
 import { createBrowserEnvironment, type Environment } from './environment'
@@ -115,15 +109,16 @@ class AppUpdatesStore implements AppUpdates {
   active: Active | undefined
 
   constructor(options: AppUpdatesOptions, env: Environment) {
-    this.running = resolveRunning(options.running)
+    const resolved = resolveOptions(options)
+    this.running = resolved.running
     this.env = env
-    this.thresholds = resolveThresholds(options)
+    this.thresholds = resolved
     this.clock = createServerClock(env)
-    this.dismissal = createPromptDismissal(options.storageKey ?? 'usher', env)
+    this.dismissal = createPromptDismissal(resolved.storageKey, env)
     this.refreshes = createRefresh(options.reload ?? (() => env.reload()))
     this.latestBuild = createLatestBuild({
-      versionUrl: resolveVersionUrl(options.versionUrl),
-      pollInterval: resolvePollInterval(options.pollInterval),
+      versionUrl: resolved.versionUrl,
+      pollInterval: resolved.pollInterval,
       env,
       clock: this.clock,
     })

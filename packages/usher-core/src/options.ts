@@ -1,9 +1,5 @@
 import * as valibot from 'valibot'
-import {
-  parseBuildFacts,
-  type AppUpdatesOptions,
-  type BuildFacts,
-} from './types'
+import { parseBuildFacts, type AppUpdatesOptions } from './types'
 
 const SECOND = 1_000
 const MINUTE = 60 * SECOND
@@ -14,108 +10,117 @@ const DEFAULT_URGENT_AFTER = 24 * HOUR
 const DEFAULT_POLL_INTERVAL = 5 * MINUTE
 const MIN_POLL_INTERVAL = 10 * SECOND
 
-export interface Thresholds {
-  promptAfter: number | undefined
-  urgentAfter: number | undefined
-  promptSnooze: number | undefined
+const notDuration = (name: string) => (issue: valibot.BaseIssue<unknown>) =>
+  `${name} must be a finite, non-negative number of milliseconds, got ${String(issue.input)}`
+
+function duration(name: string) {
+  const message = notDuration(name)
+
+  return valibot.pipe(
+    valibot.number(message),
+    valibot.finite(message),
+    valibot.minValue(0, message),
+  )
 }
 
-function fail(message: string): never {
-  throw new Error(`[usher] ${message}`)
-}
-
-function duration(name: string, value: number): number {
-  if (!Number.isFinite(value) || value < 0) {
-    fail(
-      `${name} must be a finite, non-negative number of milliseconds, got ${String(value)}`,
-    )
-  }
-
-  return value
-}
-
-function level(name: string, value: number | false | undefined) {
-  return value === false || value === undefined
-    ? undefined
-    : duration(name, value)
-}
-
-function snooze(value: number | undefined, promptAfter: number | undefined) {
-  if (value === undefined) {
-    return undefined
-  }
-
-  if (duration('promptSnooze', value) === 0) {
-    fail('promptSnooze must be positive')
-  }
-
-  if (promptAfter === undefined) {
-    fail('promptSnooze has no effect when promptAfter is false')
-  }
-
-  return value
-}
-
-export function resolveThresholds(
-  options: Pick<
-    AppUpdatesOptions,
-    'promptAfter' | 'urgentAfter' | 'promptSnooze'
-  >,
-): Thresholds {
-  const promptAfter = level(
-    'promptAfter',
-    options.promptAfter ?? DEFAULT_PROMPT_AFTER,
+function level(name: string, fallback: number) {
+  const off = valibot.pipe(
+    valibot.literal(false),
+    valibot.transform(() => undefined),
   )
 
-  const urgentAfter = level(
-    'urgentAfter',
-    options.urgentAfter ?? DEFAULT_URGENT_AFTER,
+  return valibot.nullish(
+    valibot.union([off, duration(name)], notDuration(name)),
+    fallback,
   )
-
-  if (
-    promptAfter !== undefined &&
-    urgentAfter !== undefined &&
-    urgentAfter <= promptAfter
-  ) {
-    fail(
-      `urgentAfter must be later than promptAfter, got urgentAfter ${urgentAfter} ms and promptAfter ${promptAfter} ms`,
-    )
-  }
-
-  return {
-    promptAfter,
-    urgentAfter,
-    promptSnooze: snooze(options.promptSnooze, promptAfter),
-  }
 }
 
-export function resolvePollInterval(value = DEFAULT_POLL_INTERVAL): number {
-  if (duration('pollInterval', value) < MIN_POLL_INTERVAL) {
-    fail(`pollInterval must be at least ${MIN_POLL_INTERVAL} ms (10 seconds)`)
-  }
+const versionUrlMessage = (issue: valibot.BaseIssue<unknown>) =>
+  `versionUrl must be the URL of version.json, got ${String(issue.input)}`
 
-  return value
-}
+const Options = valibot.pipe(
+  valibot.object({
+    running: valibot.pipe(
+      valibot.unknown(),
+      valibot.rawTransform(({ dataset, addIssue, NEVER }) => {
+        const parsed = parseBuildFacts(dataset.value)
 
-export function resolveRunning(running: BuildFacts): BuildFacts {
-  const parsed = parseBuildFacts(running)
+        if (parsed.success) {
+          return parsed.output
+        }
 
-  return parsed.success
-    ? parsed.output
-    : fail(
-        `running must be the running build's build facts: ${valibot.summarize(parsed.issues)}`,
-      )
-}
+        addIssue({
+          message: `running must be the running build's build facts: ${valibot.summarize(parsed.issues)}`,
+        })
 
-const VersionUrl = valibot.pipe(
-  valibot.string(),
-  valibot.check(value => URL.canParse(value, 'https://app.invalid')),
+        return NEVER
+      }),
+    ),
+    promptAfter: level('promptAfter', DEFAULT_PROMPT_AFTER),
+    urgentAfter: level('urgentAfter', DEFAULT_URGENT_AFTER),
+    promptSnooze: valibot.optional(
+      valibot.pipe(
+        duration('promptSnooze'),
+        valibot.gtValue(0, 'promptSnooze must be positive'),
+      ),
+    ),
+    versionUrl: valibot.pipe(
+      valibot.string(versionUrlMessage),
+      valibot.check(
+        value => URL.canParse(value, 'https://app.invalid'),
+        versionUrlMessage,
+      ),
+    ),
+    pollInterval: valibot.optional(
+      valibot.pipe(
+        duration('pollInterval'),
+        valibot.minValue(
+          MIN_POLL_INTERVAL,
+          `pollInterval must be at least ${MIN_POLL_INTERVAL} ms (10 seconds)`,
+        ),
+      ),
+      DEFAULT_POLL_INTERVAL,
+    ),
+    storageKey: valibot.optional(
+      valibot.string('storageKey must be a string'),
+      'usher',
+    ),
+  }),
+  valibot.partialCheck(
+    [['promptAfter'], ['urgentAfter']],
+    ({ promptAfter, urgentAfter }) =>
+      promptAfter === undefined ||
+      urgentAfter === undefined ||
+      urgentAfter > promptAfter,
+    issue =>
+      `urgentAfter must be later than promptAfter, got urgentAfter ${String(issue.input.urgentAfter)} ms and promptAfter ${String(issue.input.promptAfter)} ms`,
+  ),
+  valibot.partialCheck(
+    [['promptAfter'], ['promptSnooze']],
+    ({ promptAfter, promptSnooze }) =>
+      promptSnooze === undefined || promptAfter !== undefined,
+    'promptSnooze has no effect when promptAfter is false',
+  ),
 )
 
-export function resolveVersionUrl(versionUrl: string): string {
-  const parsed = valibot.safeParse(VersionUrl, versionUrl)
+/**
+ * Options with every default applied and every rule checked. `reload` is not
+ * here: its default is the environment's, so the store reads it.
+ */
+export type ResolvedOptions = valibot.InferOutput<typeof Options>
 
-  return parsed.success
-    ? parsed.output
-    : fail(`versionUrl must be the URL of version.json, got ${versionUrl}`)
+export type Thresholds = Pick<
+  ResolvedOptions,
+  'promptAfter' | 'urgentAfter' | 'promptSnooze'
+>
+
+/** Throws an error that names the option when one is invalid. */
+export function resolveOptions(options: AppUpdatesOptions): ResolvedOptions {
+  const parsed = valibot.safeParse(Options, options, { abortEarly: true })
+
+  if (!parsed.success) {
+    throw new Error(`[usher] ${parsed.issues[0].message}`)
+  }
+
+  return parsed.output
 }
