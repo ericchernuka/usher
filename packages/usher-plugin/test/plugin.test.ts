@@ -11,7 +11,6 @@ import { join } from 'node:path'
 import { build, createLogger, createServer, type InlineConfig } from 'vite'
 import { describe, expect, it, vi } from 'vitest'
 import { resolveBuildFacts } from '../src/build-facts'
-import { versionMiddleware } from '../src/dev-server'
 import type { SkewProtectionAdapter, SkewProtectionFiles } from '../src/adapter'
 import { usher } from '../src/vite'
 
@@ -122,7 +121,7 @@ it('warns that a relative base resolves the version file from the page URL', asy
   )
 })
 
-it('serves the version file from the dev server, uncached', async () => {
+async function startDevServer(base = '/') {
   const root = mkdtempSync(join(tmpdir(), 'usher-dev-'))
   writeFileSync(join(root, 'index.html'), '<main>App</main>')
 
@@ -130,20 +129,51 @@ it('serves the version file from the dev server, uncached', async () => {
     root,
     logLevel: 'silent',
     server: { port: 0, host: '127.0.0.1' },
+    base,
     plugins: [
       usher({ version: 'sha-dev', commitTime: '2026-11-11T09:00:00Z' }),
     ],
   })
 
-  try {
-    await server.listen()
-    const res = await fetch(`${server.resolvedUrls?.local[0]}version.json`)
+  await server.listen()
 
-    expect(res.headers.get('cache-control')).toBe('no-store')
-    expect(await res.json()).toMatchObject({ version: 'sha-dev' })
-  } finally {
-    await server.close()
-  }
+  return { server, origin: new URL(server.resolvedUrls?.local[0] ?? '').origin }
+}
+
+describe('given the dev server', () => {
+  it('when the version file is requested, then it is served uncached', async () => {
+    const { server, origin } = await startDevServer()
+
+    try {
+      const res = await fetch(`${origin}/version.json`)
+
+      expect(res.headers.get('cache-control')).toBe('no-store')
+      expect(await res.json()).toMatchObject({ version: 'sha-dev' })
+    } finally {
+      await server.close()
+    }
+  })
+
+  it.each([
+    ['/app/', '/app/version.json?t=1', '/version.json'],
+    ['./', '/version.json?t=1', '/deep/route/version.json'],
+    ['https://cdn.example.com/app/', '/app/version.json', '/version.json'],
+  ])(
+    'when base is %s, then %s is the version file and %s is not',
+    async (base, hit, miss) => {
+      const { server, origin } = await startDevServer(base)
+
+      try {
+        const served = await fetch(origin + hit)
+        const other = await fetch(origin + miss)
+
+        expect(await served.json()).toMatchObject({ version: 'sha-dev' })
+        expect(other.headers.get('content-type')).not.toContain('json')
+      } finally {
+        await server.close()
+      }
+    },
+  )
 })
 
 const stub = (files: SkewProtectionFiles): SkewProtectionAdapter => ({
@@ -215,6 +245,12 @@ describe('given a skew-protection adapter', () => {
         stub({ privateFiles: [{ fileName: 'dist/worker.js', source: '' }] }),
       ),
     ).rejects.toThrow(/stub-host: "dist\/worker\.js" must be outside outDir/)
+  })
+
+  it('when base is relative, then the build fails, because chunks have no fixed path to fall back from', async () => {
+    await expect(buildWith(stub({}), { base: './' })).rejects.toThrow(
+      /stub-host: base "\.\/" is relative/,
+    )
   })
 
   it('when the adapter returns warnings, then they reach the build logger with its name', async () => {
@@ -305,42 +341,6 @@ describe('given a malformed timestamp', () => {
     )
 
     expect(info.version).toBe('abc')
-  })
-})
-
-function devHandler(base: string) {
-  const handler = versionMiddleware(base, 'version.json', () => ({
-    version: 'sha-dev',
-    commitTime: '2026-11-11T09:00:00.000Z',
-    buildTime: '2026-11-11T09:00:00.000Z',
-  }))
-
-  return (url?: string) => {
-    let body: string | undefined
-    let passed = false
-    handler(
-      url === undefined ? {} : { url },
-      { setHeader: () => {}, end: sent => (body = sent) },
-      () => (passed = true),
-    )
-
-    return passed ? 'next' : JSON.parse(body!).version
-  }
-}
-
-describe('dev server middleware', () => {
-  it.each([
-    ['/', '/version.json', '/assets/version.json'],
-    ['/app/', '/app/version.json?t=1', '/version.json'],
-    ['https://cdn.example.com/app/', '/app/version.json', '/version.json'],
-    ['./', '/deep/route/version.json', '/version.jsonx'],
-  ])('base %s serves %s and passes %s through', (base, hit, miss) => {
-    const request = devHandler(base)
-    expect(request(hit)).toBe('sha-dev')
-    expect(request(miss)).toBe('next')
-  })
-  it('given a request without a url, then the middleware passes it through', () => {
-    expect(devHandler('/')()).toBe('next')
   })
 })
 
