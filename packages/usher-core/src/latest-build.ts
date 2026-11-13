@@ -48,12 +48,12 @@ async function readFacts(res: Response): Promise<BuildFacts | Rejected> {
 }
 
 export class LatestBuild {
-  readonly options: LatestBuildOptions
-  readonly poll: ReturnType<typeof createVisibleTimer>
-  latest: BuildFacts | undefined
-  lastCheck: { monotonic: number; wall: number } | undefined
-  warned = false
-  watching: Watching | undefined
+  private readonly options: LatestBuildOptions
+  private readonly poll: ReturnType<typeof createVisibleTimer>
+  private latest: BuildFacts | undefined
+  private lastCheck: { monotonic: number; wall: number } | undefined
+  private warned = false
+  private watching: Watching | undefined
 
   constructor(options: LatestBuildOptions) {
     this.options = options
@@ -67,7 +67,7 @@ export class LatestBuild {
    * while the device sleeps, so the wall clock counts too; whichever says more
    * time has passed wins, and a wrong guess costs one extra request.
    */
-  sinceCheck = () => {
+  private sinceCheck = () => {
     const { env } = this.options
 
     return this.lastCheck
@@ -78,7 +78,7 @@ export class LatestBuild {
       : Infinity
   }
 
-  checkUrl = () => {
+  private checkUrl = () => {
     const { env, versionUrl } = this.options
     const url = new URL(versionUrl, env.baseUrl())
     url.searchParams.set('t', String(env.wallNow()))
@@ -86,13 +86,13 @@ export class LatestBuild {
     return url.href
   }
 
-  schedulePoll = () => {
+  private schedulePoll = () => {
     if (this.watching) {
       this.poll.arm(this.options.pollInterval - this.sinceCheck())
     }
   }
 
-  onPoll = () => {
+  private onPoll = () => {
     if (this.sinceCheck() >= this.options.pollInterval) {
       void this.check()
     } else {
@@ -100,7 +100,7 @@ export class LatestBuild {
     }
   }
 
-  recheck = () => {
+  private recheck = () => {
     if (
       this.options.env.isVisible() &&
       this.sinceCheck() >= MIN_FOCUS_CHECK_GAP_MS
@@ -109,12 +109,12 @@ export class LatestBuild {
     }
   }
 
-  resume = () => {
+  private resume = () => {
     this.schedulePoll()
     this.recheck()
   }
 
-  check = async () => {
+  private check = async () => {
     const { env } = this.options
 
     if (!this.watching || !env.isVisible()) {
@@ -153,7 +153,7 @@ export class LatestBuild {
     }
   }
 
-  accept = (res: Response, facts: BuildFacts | Rejected) => {
+  private accept = (res: Response, facts: BuildFacts | Rejected) => {
     if ('problem' in facts) {
       return this.warnOnce(facts.problem)
     }
@@ -169,7 +169,7 @@ export class LatestBuild {
     this.watching?.onChange()
   }
 
-  warnOnce = (problem: string) => {
+  private warnOnce = (problem: string) => {
     if (this.warned) {
       return
     }
