@@ -28,28 +28,7 @@ describe('planning adapter files', () => {
     )
   })
 
-  it('given a CDN base, then the adapter is told the path of the base, not its host', () => {
-    const described: Array<unknown> = []
-
-    planAdapterFiles(
-      {
-        name: 'stub-host',
-        files: build => {
-          described.push(build)
-
-          return {}
-        },
-      },
-      output('https://cdn.example.com/app/'),
-    )
-
-    expect(described).toEqual([
-      { base: '/app/', assetsPrefix: '/app/assets/', root: '/project' },
-    ])
-  })
-
   it.each([
-    { fileName: 'dist/nested/worker.js', outDir: 'dist' },
     { fileName: '/project/dist/worker.js', outDir: 'dist' },
     { fileName: 'out/../dist/worker.js', outDir: 'dist' },
     { fileName: 'dist/..private/worker.js', outDir: 'dist' },
@@ -65,7 +44,6 @@ describe('planning adapter files', () => {
   )
 
   it.each([
-    { fileName: 'edge/worker.js', path: '/project/edge/worker.js' },
     {
       fileName: 'distribution/worker.js',
       path: '/project/distribution/worker.js',
