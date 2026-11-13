@@ -1,10 +1,10 @@
 import * as valibot from 'valibot'
 import type { Environment } from './environment'
 import { parseBuildFacts, type BuildFacts } from './types'
+import { createVisibleTimer } from './visible-timer'
 
 const MIN_FOCUS_CHECK_GAP_MS = 60_000
 const FETCH_TIMEOUT_MS = 30_000
-const MAX_TIMER_MS = 2 ** 31 - 1
 
 export interface LatestBuildOptions {
   versionUrl: string
@@ -17,7 +17,6 @@ interface Watching {
   onChange: () => void
   stopListening: Array<() => void>
   inFlight?: AbortController | undefined
-  cancelPoll?: (() => void) | undefined
 }
 
 interface Rejected {
@@ -50,6 +49,7 @@ async function readFacts(res: Response): Promise<BuildFacts | Rejected> {
 
 export class LatestBuild {
   readonly options: LatestBuildOptions
+  readonly poll: ReturnType<typeof createVisibleTimer>
   latest: BuildFacts | undefined
   lastCheck: { monotonic: number; wall: number } | undefined
   warned = false
@@ -57,6 +57,7 @@ export class LatestBuild {
 
   constructor(options: LatestBuildOptions) {
     this.options = options
+    this.poll = createVisibleTimer(options.env, this.onPoll)
   }
 
   get = () => this.latest
@@ -86,21 +87,9 @@ export class LatestBuild {
   }
 
   schedulePoll = () => {
-    if (!this.watching) {
-      return
+    if (this.watching) {
+      this.poll.arm(this.options.pollInterval - this.sinceCheck())
     }
-
-    const { env, pollInterval } = this.options
-    this.watching.cancelPoll?.()
-    this.watching.cancelPoll = undefined
-
-    if (!env.isVisible()) {
-      return
-    }
-
-    const due = pollInterval - this.sinceCheck()
-    const delay = Math.min(Math.max(0, due), MAX_TIMER_MS)
-    this.watching.cancelPoll = env.startTimer(this.onPoll, delay)
   }
 
   onPoll = () => {
@@ -210,9 +199,9 @@ export class LatestBuild {
       return
     }
 
-    const { stopListening, inFlight, cancelPoll } = this.watching
+    const { stopListening, inFlight } = this.watching
     this.watching = undefined
-    cancelPoll?.()
+    this.poll.cancel()
 
     if (inFlight) {
       inFlight.abort()

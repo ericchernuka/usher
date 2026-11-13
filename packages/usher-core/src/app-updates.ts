@@ -13,6 +13,7 @@ import {
   type RefreshOutcome,
 } from './refresh'
 import { createPromptDismissal } from './prompt-dismissal'
+import { createVisibleTimer } from './visible-timer'
 import {
   BUILD_FACT_NAMES,
   type AppUpdatesOptions,
@@ -94,13 +95,6 @@ function notifyAll(listeners: ReadonlySet<{ listener: () => void }>) {
   }
 }
 
-const MAX_TIMER_MS = 2 ** 31 - 1
-
-interface Active {
-  stopListening: () => void
-  cancelDeadline?: (() => void) | undefined
-}
-
 export class AppUpdatesStore implements AppUpdates {
   readonly running: BuildFacts
   readonly env: Environment
@@ -109,11 +103,12 @@ export class AppUpdatesStore implements AppUpdates {
   readonly dismissal: ReturnType<typeof createPromptDismissal>
   readonly refreshes: ReturnType<typeof createRefresh>
   readonly latestBuild: LatestBuild
+  readonly deadline: ReturnType<typeof createVisibleTimer>
   readonly listeners = new Set<{ listener: () => void }>()
   state: UpdateState = { attention: 'none', reason: 'unknown' }
   stickyUrgency: StickyUrgency | undefined
   outdatedSince: number | undefined
-  active: Active | undefined
+  stopListening: (() => void) | undefined
 
   constructor(options: AppUpdatesOptions, env: Environment) {
     const resolved = resolveOptions(options)
@@ -121,6 +116,7 @@ export class AppUpdatesStore implements AppUpdates {
     this.env = env
     this.thresholds = resolved
     this.clock = createServerClock(env)
+    this.deadline = createVisibleTimer(env, this.evaluate)
     this.dismissal = createPromptDismissal(resolved.storageKey, env)
     this.refreshes = createRefresh(options.reload ?? (() => env.reload()))
     this.latestBuild = new LatestBuild({
@@ -163,19 +159,15 @@ export class AppUpdatesStore implements AppUpdates {
   }
 
   scheduleDeadline = (nextAt: number | undefined) => {
-    if (!this.active) {
+    if (!this.stopListening) {
       return
     }
 
-    this.active.cancelDeadline?.()
-    this.active.cancelDeadline = undefined
-
-    if (nextAt === undefined || !this.env.isVisible()) {
-      return
+    if (nextAt === undefined) {
+      this.deadline.cancel()
+    } else {
+      this.deadline.arm(nextAt - this.clock.now())
     }
-
-    const delay = Math.min(Math.max(0, nextAt - this.clock.now()), MAX_TIMER_MS)
-    this.active.cancelDeadline = this.env.startTimer(this.evaluate, delay)
   }
 
   publish = (next: UpdateState) => {
@@ -188,23 +180,20 @@ export class AppUpdatesStore implements AppUpdates {
   }
 
   start = () => {
-    this.active = {
-      stopListening: this.env.onVisibilityChange(this.evaluate),
-    }
+    this.stopListening = this.env.onVisibilityChange(this.evaluate)
     this.dismissal.start(this.evaluate)
     this.latestBuild.start(this.evaluate)
     this.evaluate()
   }
 
   stop = () => {
-    if (!this.active) {
+    if (!this.stopListening) {
       return
     }
 
-    const { stopListening, cancelDeadline } = this.active
-    this.active = undefined
-    cancelDeadline?.()
-    stopListening()
+    this.stopListening()
+    this.stopListening = undefined
+    this.deadline.cancel()
     this.latestBuild.stop()
     this.dismissal.stop()
   }
