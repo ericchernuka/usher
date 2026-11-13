@@ -1,10 +1,9 @@
 import type { HtmlTagDescriptor } from 'vite'
 import { DEPLOY_PATH } from './dev-server'
+import type { DeployMode } from './simulated-deploy'
 
 export function installDevtools(endpoint: string): void {
-  async function deploy(
-    request: { mode?: 'advance' | 'force' | 'rollback' | 'reset' } = {},
-  ) {
+  async function deploy(request: { mode?: DeployMode } = {}) {
     const response = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

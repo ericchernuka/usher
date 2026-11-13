@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import { text } from 'node:stream/consumers'
 import * as valibot from 'valibot'
 import type { Connect } from 'vite'
 import type { BuildFacts } from '@rndsqr/usher-core'
@@ -10,60 +11,8 @@ import {
 
 export const DEPLOY_PATH = '__usher/deploy'
 
-const isCdnBase = (base: string) => /^https?:/.test(base)
-
-export const isRelativeBase = (base: string) =>
-  !base.startsWith('/') && !isCdnBase(base)
-
-export const pathBase = (base: string) =>
-  isCdnBase(base) ? new URL(base).pathname : base
-
-function isRequestFor(base: string, path: string, url: string | undefined) {
-  const requested = url?.split('?')[0] ?? ''
-
-  return isRelativeBase(base)
-    ? requested.endsWith(`/${path}`)
-    : requested === `${pathBase(base)}${path}`
-}
-
-export function versionMiddleware(
-  base: string,
-  fileName: string,
-  served: () => BuildFacts,
-): (
-  req: { url?: string | undefined },
-  res: {
-    setHeader(name: string, value: string): void
-    end(body: string): void
-  },
-  next: () => void,
-) => void {
-  return (req, res, next) => {
-    if (!isRequestFor(base, fileName, req.url)) {
-      return next()
-    }
-
-    res.setHeader('Content-Type', 'application/json')
-    res.setHeader('Cache-Control', 'no-store')
-    res.end(JSON.stringify(served()))
-  }
-}
-
-const DeployRequest = valibot.pipe(
-  valibot.string(),
-  valibot.parseJson(),
-  valibot.object({ mode: valibot.picklist(DEPLOY_MODES) }),
-)
-
-async function readBody(req: IncomingMessage) {
-  let body = ''
-
-  for await (const chunk of req) {
-    body += String(chunk)
-  }
-
-  return body
-}
+const isRequestFor = (path: string, req: IncomingMessage) =>
+  req.url?.split('?')[0] === path
 
 function reply(
   res: ServerResponse,
@@ -76,12 +25,34 @@ function reply(
   res.end(body.text)
 }
 
+function versionMiddleware(
+  path: string,
+  served: () => BuildFacts,
+): Connect.NextHandleFunction {
+  return (req, res, next) => {
+    if (!isRequestFor(path, req)) {
+      return next()
+    }
+
+    reply(res, 200, {
+      type: 'application/json',
+      text: JSON.stringify(served()),
+    })
+  }
+}
+
+const DeployRequest = valibot.pipe(
+  valibot.string(),
+  valibot.parseJson(),
+  valibot.object({ mode: valibot.picklist(DEPLOY_MODES) }),
+)
+
 async function deploy(
   req: IncomingMessage,
   res: ServerResponse,
   simulation: DeploySimulation,
 ) {
-  const request = valibot.safeParse(DeployRequest, await readBody(req))
+  const request = valibot.safeParse(DeployRequest, await text(req))
 
   if (!request.success) {
     return reply(res, 400, {
@@ -97,11 +68,11 @@ async function deploy(
 }
 
 function deployMiddleware(
-  base: string,
+  path: string,
   simulation: DeploySimulation,
 ): Connect.NextHandleFunction {
   return (req, res, next) => {
-    if (!isRequestFor(base, DEPLOY_PATH, req.url)) {
+    if (!isRequestFor(path, req)) {
       return next()
     }
 
@@ -125,6 +96,10 @@ function deployMiddleware(
 }
 
 export interface DevServing {
+  /**
+   * The dev server's base. Vite resolves it to an absolute path there, whatever
+   * was configured: a relative base becomes "/" and a CDN base keeps its path.
+   */
   base: string
   fileName: string
   facts: BuildFacts
@@ -138,10 +113,10 @@ export function serveDevelopment(
   const simulation = createDeploySimulation(serving.facts)
 
   middlewares.use(
-    versionMiddleware(serving.base, serving.fileName, simulation.served),
+    versionMiddleware(serving.base + serving.fileName, simulation.served),
   )
 
   if (serving.devtools) {
-    middlewares.use(deployMiddleware(serving.base, simulation))
+    middlewares.use(deployMiddleware(serving.base + DEPLOY_PATH, simulation))
   }
 }

@@ -42,6 +42,10 @@ _Avoid_: Build age, session age.
 **Chunk**:
 A content-hashed JavaScript or CSS asset that a tab can request after its initial page load.
 
+**Build layout**:
+The URL paths a build is served under: its base, its assets prefix, and the URL of its version file. A relative base has a version URL but no fixed paths.
+_Avoid_: Public path.
+
 **Skew protection**:
 Continued availability of previously shipped chunks across deployments.
 _Avoid_: Forced refresh.

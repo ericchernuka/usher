@@ -2,7 +2,7 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, isAbsolute, relative, resolve } from 'node:path'
 import type { ResolvedConfig } from 'vite'
 import type { SkewProtectionAdapter } from './adapter'
-import { pathBase } from './dev-server'
+import type { BuildLayout } from './build-layout'
 
 function isInside(directory: string, file: string) {
   const path = relative(directory, file)
@@ -13,15 +13,19 @@ function isInside(directory: string, file: string) {
 export function adapterFiles(
   adapter: SkewProtectionAdapter,
   config: ResolvedConfig,
+  layout: BuildLayout,
 ) {
-  const base = pathBase(config.base)
-  const outDir = resolve(config.root, config.build.outDir)
+  if (!layout.paths) {
+    return {
+      clientFiles: [],
+      privateFiles: [],
+      warnings: [],
+      error: `[usher] ${adapter.name}: base "${config.base}" is relative, so chunks have no fixed URL path and asset fallback cannot route them. Use an absolute base such as "/", or a CDN URL.`,
+    }
+  }
 
-  const files = adapter.files({
-    base,
-    assetsPrefix: `${base}${config.build.assetsDir}/`,
-    root: config.root,
-  })
+  const outDir = resolve(config.root, config.build.outDir)
+  const files = adapter.files({ ...layout.paths, root: config.root })
 
   const privateFiles = (files.privateFiles ?? []).map(file => ({
     fileName: file.fileName,

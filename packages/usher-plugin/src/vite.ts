@@ -3,7 +3,8 @@ import type { BuildFacts } from '@rndsqr/usher-core'
 import type { SkewProtectionAdapter } from './adapter'
 import { adapterFiles, writePrivateFiles } from './adapter-files'
 import { resolveBuildFacts } from './build-facts'
-import { isRelativeBase, serveDevelopment } from './dev-server'
+import { buildLayout, type BuildLayout } from './build-layout'
+import { serveDevelopment } from './dev-server'
 import { devtoolsTags } from './devtools'
 
 export interface UsherPluginOptions {
@@ -45,8 +46,21 @@ function isServerBuild(config: ResolvedConfig, hook: HookEnvironment) {
   )
 }
 
-const relativeBaseWarning = (base: string, fileName: string) =>
-  `[usher] base "${base}" is relative; ${fileName} is resolved from the page URL.`
+function layoutOf(config: ResolvedConfig, fileName: string): BuildLayout {
+  const layout = buildLayout({
+    base: config.base,
+    assetsDir: config.build.assetsDir,
+    fileName,
+  })
+
+  if (!layout.paths) {
+    config.logger.warn(
+      `[usher] base "${config.base}" is relative; ${fileName} is resolved from the page URL.`,
+    )
+  }
+
+  return layout
+}
 
 function emitAdapterFiles(
   context: Pick<Rollup.PluginContext, 'emitFile' | 'error'>,
@@ -76,6 +90,7 @@ export function usher(options: UsherPluginOptions = {}): Plugin {
   const fileName = options.fileName ?? 'version.json'
   let config: ResolvedConfig
   let facts: BuildFacts
+  let layout: BuildLayout
 
   return {
     name: 'usher',
@@ -85,9 +100,7 @@ export function usher(options: UsherPluginOptions = {}): Plugin {
         warn: message => resolved.logger.warn(message),
       })
 
-      if (isRelativeBase(config.base)) {
-        config.logger.warn(relativeBaseWarning(config.base, fileName))
-      }
+      layout = layoutOf(config, fileName)
     },
     resolveId: id => (id === VIRTUAL_ID ? RESOLVED_ID : undefined),
     load(id) {
@@ -95,7 +108,7 @@ export function usher(options: UsherPluginOptions = {}): Plugin {
         return undefined
       }
 
-      return `export const runningBuild = ${JSON.stringify(facts)};\nexport const versionUrl = ${JSON.stringify(config.base + fileName)};\n`
+      return `export const runningBuild = ${JSON.stringify(facts)};\nexport const versionUrl = ${JSON.stringify(layout.versionUrl)};\n`
     },
     configureServer(server) {
       serveDevelopment(server.middlewares, {
@@ -121,14 +134,18 @@ export function usher(options: UsherPluginOptions = {}): Plugin {
       })
 
       if (options.adapter) {
-        emitAdapterFiles(this, adapterFiles(options.adapter, config), config)
+        emitAdapterFiles(
+          this,
+          adapterFiles(options.adapter, config, layout),
+          config,
+        )
       }
     },
     writeBundle() {
       const adapter = options.adapter
 
       if (adapter && !isServerBuild(config, this)) {
-        writePrivateFiles(adapterFiles(adapter, config).privateFiles)
+        writePrivateFiles(adapterFiles(adapter, config, layout).privateFiles)
       }
     },
   }
