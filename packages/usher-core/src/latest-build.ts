@@ -1,6 +1,6 @@
 import * as valibot from 'valibot'
 import type { Environment } from './environment'
-import { parseBuildFacts, type BuildFacts } from './types'
+import { parseBuildFacts, type BuildFacts } from './build-facts'
 import { createVisibleTimer } from './visible-timer'
 
 const MIN_FOCUS_CHECK_GAP_MS = 60_000

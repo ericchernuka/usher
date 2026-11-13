@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseBuildFacts } from '../src/types'
+import { parseBuildFacts } from '../src/build-facts'
 
 import { running } from './fixtures'
 

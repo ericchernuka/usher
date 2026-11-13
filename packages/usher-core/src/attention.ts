@@ -1,11 +1,16 @@
+import {
+  isForcedUpdate,
+  isRollback,
+  isSuperseded,
+  supersededAt,
+  type Builds,
+} from './build-facts'
 import type { Thresholds } from './options'
-import type { BuildFacts, UpdateState } from './types'
+import type { UpdateState } from './types'
 
 export type StickyUrgency = 'rollback' | 'forced'
 
-export interface AttentionInput {
-  running: BuildFacts
-  latest: BuildFacts
+export interface AttentionInput extends Builds {
   now: number
   stickyUrgency: StickyUrgency | undefined
   outdatedSince: number | undefined
@@ -21,18 +26,11 @@ export interface Decision {
 }
 
 function detectSticky(input: AttentionInput): StickyUrgency | undefined {
-  const cutoff = Date.parse(input.latest.forceUpdateBuiltBefore ?? '')
-
-  if (
-    cutoff > Date.parse(input.running.buildTime) &&
-    cutoff <= Date.parse(input.latest.buildTime)
-  ) {
+  if (isForcedUpdate(input)) {
     return 'forced'
   }
 
-  if (
-    Date.parse(input.latest.commitTime) < Date.parse(input.running.commitTime)
-  ) {
+  if (isRollback(input)) {
     return 'rollback'
   }
 
@@ -47,17 +45,9 @@ function promptUntil(input: AttentionInput): number | undefined {
 }
 
 function outdatedSince(input: AttentionInput): number | undefined {
-  if (input.latest.version === input.running.version) {
-    return undefined
-  }
-
-  return (
-    input.outdatedSince ??
-    Math.max(
-      Date.parse(input.running.buildTime),
-      Date.parse(input.latest.buildTime),
-    )
-  )
+  return isSuperseded(input)
+    ? (input.outdatedSince ?? supersededAt(input))
+    : undefined
 }
 
 interface Outdated {

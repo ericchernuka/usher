@@ -1,29 +1,4 @@
-import * as valibot from 'valibot'
-
-const Timestamp = valibot.pipe(valibot.string(), valibot.isoTimestamp())
-
-const BuildFactsSchema = valibot.object({
-  /** Source version the build came from, usually a commit SHA. Separate builds can share one. */
-  version: valibot.pipe(valibot.string(), valibot.nonEmpty()),
-  /** Commit time (ISO). Orders builds: lower than the running tab's = rollback. */
-  commitTime: Timestamp,
-  /** When the build ran (ISO). A tab is outdated from the build time of the first build that supersedes its own. */
-  buildTime: Timestamp,
-  /**
-   * Tabs whose build ran before this time (ISO) must update. It is a build time,
-   * not a deadline, and it cannot be later than this build's own `buildTime`.
-   * Set via APP_FORCE_UPDATE_BUILT_BEFORE.
-   */
-  forceUpdateBuiltBefore: valibot.exactOptional(Timestamp),
-})
-
-/** Build facts shared by the running build and the serving deployment. */
-export type BuildFacts = valibot.InferOutput<typeof BuildFactsSchema>
-
-export const BUILD_FACT_NAMES = valibot.keyof(BuildFactsSchema).options
-
-/** Reads build facts from untrusted input. Fields the schema does not know are dropped. */
-export const parseBuildFacts = valibot.safeParser(BuildFactsSchema)
+import type { BuildFacts } from './build-facts'
 
 /**
  * How loudly the app should signal an update. Each surface picks its own threshold:

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createAppUpdates } from '../src/index'
-import type { BuildFacts } from '../src/types'
+import type { BuildFacts } from '../src/build-facts'
 import { captureNavigations } from './navigation'
 
 const running: BuildFacts = {

@@ -10,10 +10,11 @@ export {
   type UpdateSurface,
 } from './update-surface'
 
+export type { BuildFacts } from './build-facts'
+
 export type {
   AppUpdatesOptions,
   Attention,
-  BuildFacts,
   UpdateReason,
   UpdateState,
 } from './types'
