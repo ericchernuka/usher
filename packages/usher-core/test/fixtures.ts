@@ -1,6 +1,7 @@
 import { test as base, vi } from 'vitest'
 import { AppUpdatesStore, type AppUpdates } from '../src/app-updates'
-import type { AppUpdatesOptions, BuildFacts } from '../src/types'
+import type { BuildFacts } from '../src/build-facts'
+import type { AppUpdatesOptions } from '../src/types'
 import { runningBuild } from './build-info.stub'
 import { createFakeEnvironment, type FakeEnvironment } from './fake-environment'
 import { serverClock, VERSION_URL } from './mocks/handlers'

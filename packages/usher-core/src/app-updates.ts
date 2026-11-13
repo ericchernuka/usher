@@ -14,12 +14,8 @@ import {
 } from './refresh'
 import { createPromptDismissal } from './prompt-dismissal'
 import { createVisibleTimer } from './visible-timer'
-import {
-  BUILD_FACT_NAMES,
-  type AppUpdatesOptions,
-  type BuildFacts,
-  type UpdateState,
-} from './types'
+import { sameBuildFacts, type BuildFacts } from './build-facts'
+import type { AppUpdatesOptions, UpdateState } from './types'
 
 export type { RefreshBlocker, RefreshOutcome } from './refresh'
 
@@ -74,9 +70,7 @@ function sameState(next: UpdateState, current: UpdateState) {
     return nextLatest === currentLatest
   }
 
-  return BUILD_FACT_NAMES.every(
-    fact => nextLatest[fact] === currentLatest[fact],
-  )
+  return sameBuildFacts(nextLatest, currentLatest)
 }
 
 function notifyAll(listeners: ReadonlySet<{ listener: () => void }>) {

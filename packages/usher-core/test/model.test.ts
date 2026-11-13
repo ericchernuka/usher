@@ -1,5 +1,5 @@
 import * as fc from 'fast-check'
-import type { BuildFacts } from '../src/types'
+import type { BuildFacts } from '../src/build-facts'
 import { describe, expect, it, vi } from 'vitest'
 import { DISMISSAL_KEY, HOUR, running } from './fixtures'
 import { aged, createWorld, random, rollbackThenFix } from './model/world'

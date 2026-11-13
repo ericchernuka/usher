@@ -2,7 +2,7 @@ import * as fc from 'fast-check'
 import type { Environment } from '../../src/environment'
 import { vi } from 'vitest'
 import { createFakeEnvironment } from '../fake-environment'
-import type { BuildFacts } from '../../src/types'
+import type { BuildFacts } from '../../src/build-facts'
 import { createStore, running, type StoreOptions } from '../fixtures'
 
 const HOUR = 3_600 * 1_000

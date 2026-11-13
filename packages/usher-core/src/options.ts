@@ -1,5 +1,6 @@
 import * as valibot from 'valibot'
-import { parseBuildFacts, type AppUpdatesOptions } from './types'
+import { parseBuildFacts } from './build-facts'
+import type { AppUpdatesOptions } from './types'
 
 const SECOND = 1_000
 const MINUTE = 60 * SECOND
