@@ -427,7 +427,24 @@ describe('a version file that is missing or misrouted', () => {
     expect(warn).toHaveBeenLastCalledWith(expect.stringContaining('HTTP 503'))
   })
 
-  test('given the network is down, then the tab does not warn', async ({
+  test('given the version request fails outright, then the tab warns once and names the URL', async ({
+    app,
+    tab,
+  }) => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    server.use(serveNetworkError())
+    app.subscribe(app.create())
+    await tab.waitForResponse()
+
+    expect(warn).toHaveBeenCalledTimes(1)
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringMatching(
+        /^\[usher\] https:\/\/app\.test\/version\.json .*request failed/,
+      ),
+    )
+  })
+
+  test('given the version request fails on every poll, then the tab warns once', async ({
     app,
     tab,
   }) => {
@@ -436,6 +453,39 @@ describe('a version file that is missing or misrouted', () => {
     app.subscribe(app.create())
     await tab.waitForResponse()
     await app.poll()
+    await app.poll()
+
+    expect(warn).toHaveBeenCalledTimes(1)
+  })
+
+  test('given a check is superseded by a newer one, then the aborted check does not warn', async ({
+    app,
+    tab,
+  }) => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    server.use(serveHang({ once: true }), serveBuild(newer))
+    const store = app.create({ pollInterval: 10 * SECOND })
+    app.subscribe(store)
+    await tab.flush()
+    await tab.runFor(10 * SECOND)
+    await tab.waitForResponse()
+
+    expect(store.getState().attention).toBe('passive')
+    expect(warn).not.toHaveBeenCalled()
+  })
+
+  test('given a check is aborted as the tab becomes hidden, then the tab does not warn', async ({
+    app,
+    tab,
+  }) => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+      tab.setVisibility('hidden')
+
+      throw new DOMException('aborted', 'AbortError')
+    })
+    app.subscribe(app.create())
+    await tab.flush()
 
     expect(warn).not.toHaveBeenCalled()
   })
