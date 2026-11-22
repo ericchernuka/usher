@@ -16,9 +16,8 @@ export const serveError = (
 ): HttpHandler =>
   versionHandler({ error: 'unavailable' }, { ...options, status })
 
-export const serveNetworkError = (
-  options: { once?: boolean } = {},
-): HttpHandler => http.get(VERSION_URL, () => HttpResponse.error(), options)
+export const serveNetworkError = (): HttpHandler =>
+  http.get(VERSION_URL, () => HttpResponse.error())
 
 export const serveHang = (options: { once?: boolean } = {}): HttpHandler =>
   http.get(VERSION_URL, () => new Promise<never>(() => {}), options)

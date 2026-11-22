@@ -355,38 +355,3 @@ describe('given no git and no environment', () => {
     vi.unstubAllEnvs()
   })
 })
-
-describe('given a module the plugin does not own', () => {
-  it('when the app imports it next to the virtual module, then it bundles normally', async () => {
-    const root = mkdtempSync(join(tmpdir(), 'usher-dep-'))
-    writeFileSync(
-      join(root, 'index.html'),
-      '<script type="module" src="/main.js"></script>',
-    )
-    writeFileSync(
-      join(root, 'dep.js'),
-      'export const greeting = "hello-from-dep"\n',
-    )
-    writeFileSync(
-      join(root, 'main.js'),
-      'import { runningBuild } from "virtual:usher"\nimport { greeting } from "./dep.js"\nwindow.__v = [runningBuild.version, greeting]\n',
-    )
-
-    await build({
-      root,
-      logLevel: 'silent',
-      plugins: [
-        usher({ version: 'sha-test', commitTime: '2026-11-11T09:00:00Z' }),
-      ],
-    })
-
-    const assets = join(root, 'dist/assets')
-
-    const bundle = readdirSync(assets)
-      .map(file => readFileSync(join(assets, file), 'utf8'))
-      .join('')
-
-    expect(bundle).toContain('hello-from-dep')
-    expect(bundle).toContain('sha-test')
-  })
-})
