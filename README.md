@@ -219,7 +219,7 @@ Every problem also carries `versionUrl`. The handler runs once per outage, and a
 
 ### Refresh and unsaved work
 
-Refresh blockers decide whether a refresh can proceed. They run synchronously, in the order they were added, and a blocker that returns `true` or throws blocks the refresh. In React, `useRefreshBlocker(appUpdates.refresh, isDirty)` registers one for as long as the component is mounted.
+Refresh blockers decide whether a refresh can proceed. They run synchronously, in the order they were added, and a blocker that returns `true` or throws blocks the refresh. In React, `useRefreshBlocker(appUpdates.refresh, isDirty)` registers one while the component's effects are active. React removes the effects of a component inside a hidden `<Activity>`, so a draft that should block while hidden needs its blocker registered outside that boundary, or with `appUpdates.refresh.addBlocker`.
 
 `refresh.run()` resolves with what happened:
 
@@ -314,7 +314,7 @@ Give urgent notices no timeout. A toast library that closes one on its own timer
 
 `disconnect()` hides the surface and removes its subscription. A surface that throws is isolated and retried on the next state change.
 
-Every notice also carries `closable`, which is `false` at urgent, and `announce`, which says how a screen reader should hear it: `off` at passive, `polite` at prompt, `assertive` at urgent. Pass `announce` to a toast library that owns its live region.
+A notice's `latest` is the build that was latest when the notice was made, and a notice is only replaced when attention or reason changes; read the update state for the current one. Every notice also carries `closable`, which is `false` at urgent, and `announce`, which says how a screen reader should hear it: `off` at passive, `polite` at prompt, `assertive` at urgent. Pass `announce` to a toast library that owns its live region.
 
 ### A notice in React
 
@@ -334,7 +334,7 @@ import { UpdateNotice } from '@rndsqr/react-usher'
 </UpdateNotice.Root>
 ```
 
-`Root` renders its element only while there is a notice, with `data-attention` and `data-reason` for styling. `Refresh` is disabled, with `data-refreshing`, while a refresh is in flight. `Close` renders nothing at urgent. A part's own `onClick` runs before the part acts. The parts ship no wording and no styles, never move focus, and never close on a timer. The notice is deferred, like the update state, so its arrival never blocks input and can be animated with a view transition.
+`Root` renders its element only while there is a notice, with `data-attention` and `data-reason` for styling. `Refresh` is disabled, with `data-refreshing`, while a refresh is in flight. `Close` renders nothing at urgent. A part's own `onClick` runs before the part acts. The parts ship no wording and no styles, never move focus, and never close on a timer.
 
 To decide what a press on `Refresh` does, give it an `action`. It receives the refresh to call and runs in a transition, as React's Action props do, and the button stays disabled until it settles:
 
@@ -351,9 +351,9 @@ To decide what a press on `Refresh` does, give it an `action`. It receives the r
 </UpdateNotice.Refresh>
 ```
 
-An action has to settle. React keeps every transition pending until all Actions complete, so one that never resolves holds the app's other pending states too.
+An action has to settle. React keeps overlapping transitions in the same root pending until all their Actions complete, so one that never resolves holds the app's other pending states too. A press without an `action` starts no transition.
 
-`Root` also announces the notice. The package keeps one `status` and one `alert` region per document, visually hidden, and puts the wording of each notice into the one that matches `announce`, so a screen reader hears a prompt politely and an urgent notice assertively. The wording is the text inside `Root` without buttons, links and anything hidden from the page or from assistive technology. It is announced again when it changes or is revealed. Notices with the same wording are announced once, however many `Root`s show them.
+`Root` also announces the notice. The package keeps one `status` and one `alert` region per document, visually hidden, and adds the wording of each notice to the one that matches `announce`, so a screen reader hears a prompt politely and an urgent notice assertively. The wording is the text inside `Root` that is seen on the page, without buttons, links and anything hidden from assistive technology. It is announced again when it changes or is revealed, and notices with the same wording are announced once, however many `Root`s show them. `Root` notices changes inside itself, a change of its own size, and `hidden` or `aria-hidden` anywhere above it. A style rule elsewhere that reveals part of a notice without changing its size is not seen until the next change.
 
 ## Testing update UI
 
