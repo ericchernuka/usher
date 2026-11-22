@@ -529,6 +529,7 @@ describe('a version file that is missing or misrouted', () => {
     const stop = createStore(tab, { onCheckProblem }).state.subscribe(() => {})
     await tab.waitForResponse()
 
+    expect(onCheckProblem).toHaveBeenCalledTimes(1)
     expect(onCheckProblem).toHaveBeenCalledWith({
       kind: 'not-json',
       versionUrl: VERSION_URL,
