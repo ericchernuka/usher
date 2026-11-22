@@ -214,6 +214,9 @@ importers:
       '@rndsqr/react-usher':
         specifier: workspace:*
         version: link:../../../packages/react-usher
+      '@rndsqr/usher-core':
+        specifier: workspace:*
+        version: link:../../../packages/usher-core
       '@rndsqr/usher-plugin':
         specifier: workspace:*
         version: link:../../../packages/usher-plugin
@@ -251,6 +254,9 @@ importers:
       '@rndsqr/react-usher':
         specifier: workspace:*
         version: link:../../../packages/react-usher
+      '@rndsqr/usher-core':
+        specifier: workspace:*
+        version: link:../../../packages/usher-core
       '@rndsqr/usher-plugin':
         specifier: workspace:*
         version: link:../../../packages/usher-plugin

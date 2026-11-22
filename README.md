@@ -504,6 +504,8 @@ await __USHER_DEVTOOLS__.deploy({ mode: 'rollback' })
 await __USHER_DEVTOOLS__.deploy({ mode: 'reset' })
 ```
 
+The example apps under `examples/react/` put the same four modes on buttons, next to the update state, an update notice and a draft that blocks a refresh. Run one with `pnpm --filter usher-example-react-cloudflare-pages dev`.
+
 The dev server then serves different build facts from the version URL. The tab still runs the real build, so:
 
 - `advance` serves a new version built now from the same commit. The tab is outdated, and attention follows the app's thresholds counted from now.

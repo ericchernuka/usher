@@ -152,6 +152,12 @@ export default defineConfig({
       rules: { 'max-lines-per-function': 'off' },
     },
     {
+      files: ['examples/**/devtools.ts'],
+      rules: {
+        'no-underscore-dangle': ['error', { allow: ['__USHER_DEVTOOLS__'] }],
+      },
+    },
+    {
       files: ['packages/*/src/**'],
       rules: { 'no-console': ['error', { allow: ['warn', 'error'] }] },
     },
