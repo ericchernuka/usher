@@ -84,6 +84,45 @@ test('given a notice read declaratively, then it says how to present itself and 
   expect(notice.get()).toBeUndefined()
 })
 
+test('given a passive notice was closed and its reader left, when the tab catches up and falls behind again, then a returning reader sees the notice', async () => {
+  const tab = createTestTab()
+  const updates = createAppUpdates({ running, versionUrl }, tab)
+  const notice = createUpdateNotice(updates, { minAttention: 'passive' })
+  const stopState = updates.state.subscribe(() => {})
+
+  const deploy = () =>
+    tab.deploy({ ...newer, buildTime: new Date(tab.now()).toISOString() })
+
+  deploy()
+  const leave = notice.subscribe(() => {})
+  await tab.advance(5 * 60_000)
+  notice.get()?.close()
+  expect(notice.get()).toBeUndefined()
+  leave()
+
+  tab.deploy(running)
+  await tab.advance(5 * 60_000)
+  deploy()
+  await tab.advance(5 * 60_000)
+  const stop = notice.subscribe(() => {})
+
+  expect(notice.get()).toMatchObject({ attention: 'passive' })
+  stop()
+  stopState()
+})
+
+test('given overlapping advances, then time moves by their sum, and an advance that is not a duration is refused', async () => {
+  const tab = createTestTab()
+  const start = tab.now()
+
+  await Promise.all([tab.advance(30_000), tab.advance(60_000)])
+
+  expect(tab.now() - start).toBe(90_000)
+  expect(() => tab.advance(Number.NaN)).toThrow(
+    /advance needs a finite, non-negative number of milliseconds, got NaN/,
+  )
+})
+
 test('given a tab from another copy of the library, then creating the app fails saying how to fix it', () => {
   const foreign: Tab = JSON.parse('{}')
 

@@ -132,6 +132,7 @@ class Notices implements NoticeStore {
 
   #stop = () => {
     this.#unsubscribe?.()
+    this.#closed = undefined
     this.#shown = undefined
   }
 

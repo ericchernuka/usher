@@ -6,13 +6,17 @@ import { createTabIn, type Tab } from './tab'
 export interface TestTab extends Tab {
   /** Build facts every later version check gets */
   deploy(build: BuildFacts): void
-  /** Virtual time moved forward, running the checks and timers that fall due */
+  /**
+   * Virtual time moved forward, running the checks and timers that fall due,
+   * with overlapping calls run one after another
+   */
   advance(ms: number): Promise<void>
 }
 
 /** Create a test tab to pass as the second argument to `createAppUpdates` */
 export function createTestTab(): TestTab {
   let served: BuildFacts | undefined
+  let queue = Promise.resolve()
 
   const fake = createFakeEnvironment({
     fetch: async () => {
@@ -30,9 +34,20 @@ export function createTestTab(): TestTab {
     deploy(build: BuildFacts) {
       served = build
     },
-    async advance(ms: number) {
-      await fake.waitForResponse()
-      await fake.runFor(ms)
+    advance(ms: number) {
+      if (!Number.isFinite(ms) || ms < 0) {
+        throw new Error(
+          `[usher] advance needs a finite, non-negative number of milliseconds, got ${ms}`,
+        )
+      }
+
+      const advanced = queue
+        .then(fake.waitForResponse)
+        .then(() => fake.runFor(ms))
+
+      queue = advanced.catch(() => {})
+
+      return advanced
     },
   })
 }

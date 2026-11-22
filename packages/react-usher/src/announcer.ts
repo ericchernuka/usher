@@ -5,96 +5,130 @@ const UNSEEN =
 
 const SKIPPED = 'button, a, [role="button"], [aria-hidden="true"], [hidden]'
 
-type Priority = 'polite' | 'assertive'
+const PRIORITIES = ['polite', 'assertive'] as const
 
-interface Regions {
-  polite: HTMLElement
-  assertive: HTMLElement
-  owner: string | undefined
+interface Region {
+  element: HTMLElement
+  said: ReadonlyArray<string>
   pending: ReturnType<typeof setTimeout> | undefined
 }
 
-let current: Regions | undefined
+interface Announcer {
+  claims: Map<Element, { priority: 'polite' | 'assertive'; text: string }>
+  polite: Region
+  assertive: Region
+}
 
-function region(role: string, priority: Priority) {
-  const element = document.createElement('div')
-  element.setAttribute('role', role)
+const announcers = new WeakMap<Document, Announcer>()
+
+function region(doc: Document, priority: 'polite' | 'assertive'): Region {
+  const element = doc.createElement('div')
+  element.setAttribute('role', priority === 'polite' ? 'status' : 'alert')
   element.setAttribute('aria-live', priority)
   element.setAttribute('aria-atomic', 'true')
   element.dataset['usherAnnouncer'] = priority
   element.style.cssText = UNSEEN
-  document.body.append(element)
+  doc.body.append(element)
 
-  return element
+  return { element, said: [], pending: undefined }
 }
 
-function regions(): Regions {
-  if (current?.polite.isConnected && current.assertive.isConnected) {
-    return current
+function announcerIn(doc: Document): Announcer {
+  const found = announcers.get(doc)
+
+  if (
+    found?.polite.element.isConnected &&
+    found.assertive.element.isConnected
+  ) {
+    return found
   }
 
-  current?.polite.remove()
-  current?.assertive.remove()
+  found?.polite.element.remove()
+  found?.assertive.element.remove()
 
-  current = {
-    polite: region('status', 'polite'),
-    assertive: region('alert', 'assertive'),
-    owner: undefined,
-    pending: undefined,
+  const announcer: Announcer = {
+    claims: found?.claims ?? new Map(),
+    polite: region(doc, 'polite'),
+    assertive: region(doc, 'assertive'),
   }
 
-  return current
+  announcers.set(doc, announcer)
+
+  return announcer
 }
 
-export function prepareAnnouncements() {
-  regions()
+function settle(announcer: Announcer) {
+  for (const priority of PRIORITIES) {
+    const target = announcer[priority]
+
+    const wanted = Array.from(
+      new Set(
+        Array.from(announcer.claims.values()).flatMap(claimed =>
+          claimed.priority === priority ? [claimed.text] : [],
+        ),
+      ),
+    )
+
+    if (wanted.length > 0 && wanted.every(text => target.said.includes(text))) {
+      continue
+    }
+
+    clearTimeout(target.pending)
+    target.element.replaceChildren()
+    target.said = wanted
+
+    target.pending =
+      wanted.length > 0
+        ? setTimeout(
+            () => target.element.replaceChildren(wanted.join(' ')),
+            SETTLE_MS,
+          )
+        : undefined
+  }
 }
 
-function silence(found: Regions) {
-  clearTimeout(found.pending)
-  found.polite.replaceChildren()
-  found.assertive.replaceChildren()
+export function prepareAnnouncements(doc: Document) {
+  announcerIn(doc)
 }
 
-export function announce(
-  owner: string,
+export function claim(
+  container: Element,
   priority: 'polite' | 'assertive',
   text: string,
 ) {
-  const found = regions()
-  silence(found)
-  found.owner = owner
-
-  found.pending = setTimeout(
-    () => found[priority].replaceChildren(text),
-    SETTLE_MS,
-  )
+  const announcer = announcerIn(container.ownerDocument)
+  announcer.claims.set(container, { priority, text })
+  settle(announcer)
 }
 
-export function withdraw(owner: string) {
-  if (current?.owner === owner) {
-    silence(current)
-    current.owner = undefined
+export function release(container: Element) {
+  const announcer = announcers.get(container.ownerDocument)
+
+  if (announcer?.claims.delete(container)) {
+    settle(announcer)
   }
 }
 
-export function spoken(container: Element) {
-  const unseen =
-    container.closest('[aria-hidden="true"], [hidden]') !== null ||
-    ('checkVisibility' in container && !container.checkVisibility())
+const rendered = (element: Element) =>
+  !('checkVisibility' in element) || element.checkVisibility()
 
-  if (unseen) {
+export function spoken(container: Element) {
+  if (container.closest('[aria-hidden="true"], [hidden]')) {
     return ''
   }
 
-  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT)
+  const walker = container.ownerDocument.createTreeWalker(
+    container,
+    NodeFilter.SHOW_TEXT,
+  )
+
   const words: string[] = []
 
   while (walker.nextNode()) {
-    const node = walker.currentNode
+    const parent = walker.currentNode.parentElement
 
-    if (node instanceof Text && !node.parentElement?.closest(SKIPPED)) {
-      words.push(node.data)
+    if (parent && !parent.closest(SKIPPED) && rendered(parent)) {
+      words.push(walker.currentNode.nodeValue ?? '')
     }
   }
 

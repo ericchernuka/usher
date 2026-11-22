@@ -330,7 +330,7 @@ describe('UpdateNotice', () => {
     await view.unmount()
   })
 
-  it('given a part has its own onClick, then it runs before the action, and preventing default takes the action over', async () => {
+  it('given a part has its own onClick, then it runs and the part still acts', async () => {
     const { updates, view } = await outdated(13)
     const clicked = vi.fn<() => void>()
     const run = vi.spyOn(updates.refresh, 'run')
@@ -342,9 +342,7 @@ describe('UpdateNotice', () => {
             <UpdateNotice.Refresh onClick={clicked}>
               Refresh
             </UpdateNotice.Refresh>
-            <UpdateNotice.Close onClick={event => event.preventDefault()}>
-              Keep
-            </UpdateNotice.Close>
+            <UpdateNotice.Close onClick={clicked}>Close</UpdateNotice.Close>
           </>
         )}
       </UpdateNotice.Root>,
@@ -354,8 +352,41 @@ describe('UpdateNotice', () => {
     expect(clicked).toHaveBeenCalledTimes(1)
     expect(run).toHaveBeenCalledTimes(1)
 
-    await view.getByRole('button', { name: 'Keep' }).click()
-    expect(updates.state.get().attention).toBe('prompt')
+    await view.getByRole('button', { name: 'Close' }).click()
+    expect(clicked).toHaveBeenCalledTimes(2)
+    expect(updates.state.get().reason).toBe('dismissed')
+    await view.unmount()
+  })
+
+  it('given refresh has an action, then the action decides whether to refresh, and the button is disabled until it settles', async () => {
+    const { updates, view } = await outdated(13)
+    const confirmed = Promise.withResolvers<boolean>()
+    const run = vi.spyOn(updates.refresh, 'run')
+
+    await view.rerender(
+      <UpdateNotice.Root updates={updates}>
+        {() => (
+          <UpdateNotice.Refresh
+            action={async refresh => {
+              if (await confirmed.promise) {
+                await refresh()
+              }
+            }}
+          >
+            Refresh
+          </UpdateNotice.Refresh>
+        )}
+      </UpdateNotice.Root>,
+    )
+
+    const button = view.getByRole('button', { name: 'Refresh' })
+    await button.click()
+    await expect.element(button).toBeDisabled()
+    expect(run).not.toHaveBeenCalled()
+
+    confirmed.resolve(false)
+    await expect.element(button).toBeEnabled()
+    expect(run).not.toHaveBeenCalled()
     await view.unmount()
   })
 
