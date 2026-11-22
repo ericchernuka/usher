@@ -6,8 +6,14 @@ import {
   type UpdateNoticeOptions,
 } from './update-notice'
 
+/** The app's imperative presentation of attention, such as a toast library */
 export interface UpdateSurface extends UpdateNoticeOptions {
+  /**
+   * Creation or replacement of the UI, called once per change of attention
+   * or reason and retried on the next state change when it throws
+   */
   show(notice: UpdateNotice): void
+  /** Removal of the UI, safe to call when nothing is showing */
   hide(): void
 }
 
@@ -108,6 +114,7 @@ class SurfaceConnection {
   }
 }
 
+/** Drive an imperative surface from the app's updates and return the disconnect */
 export function connectUpdateSurface(
   updates: AppUpdates,
   surface: UpdateSurface,

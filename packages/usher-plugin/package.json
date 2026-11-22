@@ -21,20 +21,21 @@
     "coverage": "vitest run --coverage"
   },
   "dependencies": {
-    "@rndsqr/usher-core": "workspace:*",
     "valibot": "^1.5.0"
   },
   "peerDependencies": {
+    "@rndsqr/usher-core": "workspace:^",
     "vite": "^5.0.0 || ^6.0.0 || ^7.0.0 || ^8.0.0"
   },
   "devDependencies": {
+    "@rndsqr/usher-core": "workspace:*",
     "@types/node": "^26.6.6",
     "@vitest/browser-playwright": "^5.1.0",
     "@vitest/coverage-v8": "^5.1.0",
     "playwright": "^1.65.0",
     "tsdown": "^0.23.7",
     "typescript": "^7.0.2",
-    "vitest": "^5.1.0",
-    "vite": "^8.3.6"
+    "vite": "^8.3.6",
+    "vitest": "^5.1.0"
   }
 }

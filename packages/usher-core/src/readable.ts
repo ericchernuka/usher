@@ -1,5 +1,11 @@
+/** One fact an app can read and subscribe to */
 export interface Readable<Value> {
+  /** Current value, the same object until it changes */
   get: () => Value
+  /**
+   * Listener registration that returns its own removal, and that keeps
+   * timers and requests running only while at least one listener remains
+   */
   subscribe: (listener: () => void) => () => void
 }
 

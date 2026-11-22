@@ -18,14 +18,13 @@
     "test": "vitest run",
     "coverage": "vitest run --coverage --project browser && vitest run --project webkit"
   },
-  "dependencies": {
-    "@rndsqr/usher-core": "workspace:*"
-  },
   "peerDependencies": {
+    "@rndsqr/usher-core": "workspace:^",
     "react": "^18.0.0 || ^19.0.0"
   },
   "devDependencies": {
     "@guidepup/virtual-screen-reader": "^0.33.0",
+    "@rndsqr/usher-core": "workspace:*",
     "@rndsqr/usher-plugin": "workspace:*",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",

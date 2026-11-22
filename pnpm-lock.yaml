@@ -290,14 +290,13 @@ importers:
         version: 8.3.6(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)
 
   packages/react-usher:
-    dependencies:
-      '@rndsqr/usher-core':
-        specifier: workspace:*
-        version: link:../usher-core
     devDependencies:
       '@guidepup/virtual-screen-reader':
         specifier: ^0.33.0
         version: 0.33.0
+      '@rndsqr/usher-core':
+        specifier: workspace:*
+        version: link:../usher-core
       '@rndsqr/usher-plugin':
         specifier: workspace:*
         version: link:../usher-plugin
@@ -413,13 +412,13 @@ importers:
 
   packages/usher-plugin:
     dependencies:
-      '@rndsqr/usher-core':
-        specifier: workspace:*
-        version: link:../usher-core
       valibot:
         specifier: ^1.5.0
         version: 1.5.0(typescript@7.0.2)
     devDependencies:
+      '@rndsqr/usher-core':
+        specifier: workspace:*
+        version: link:../usher-core
       '@types/node':
         specifier: ^26.6.6
         version: 26.6.6

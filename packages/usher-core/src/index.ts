@@ -32,6 +32,10 @@ export {
 
 export { connectUpdateSurface, type UpdateSurface } from './update-surface'
 
+/**
+ * Create the app's updates without side effects, throwing an error that names
+ * the option when one is invalid
+ */
 export function createAppUpdates(
   options: AppUpdatesOptions,
   tab: Tab = createTab(),
