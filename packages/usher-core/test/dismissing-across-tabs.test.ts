@@ -22,7 +22,7 @@ describe('reading what other tabs left in storage', () => {
       app.subscribe(store)
       await tab.waitForResponse()
 
-      expect(store.getState()).toMatchObject({
+      expect(store.state.get()).toMatchObject({
         attention: 'prompt',
         reason: 'outdated',
       })
@@ -40,11 +40,11 @@ describe('hearing from other tabs while running', () => {
     const store = app.create()
     app.subscribe(store)
     await tab.waitForResponse()
-    store.dismiss()
+    store.state.dismiss()
 
     tab.otherTabSets(DISMISSAL_KEY, '{oops')
 
-    expect(store.getState()).toMatchObject({
+    expect(store.state.get()).toMatchObject({
       attention: 'passive',
       reason: 'dismissed',
     })
@@ -61,18 +61,18 @@ describe('dismissing for every tab', () => {
     app.subscribe(store)
     await tab.waitForResponse()
     await tab.runFor(12 * HOUR)
-    expect(store.getState().attention).toBe('prompt')
+    expect(store.state.get().attention).toBe('prompt')
 
     tab.otherTabSets(DISMISSAL_KEY, JSON.stringify({ dismissedAt: tab.now() }))
 
-    expect(store.getState()).toMatchObject({
+    expect(store.state.get()).toMatchObject({
       attention: 'passive',
       reason: 'dismissed',
     })
     await tab.runFor(10 * HOUR)
-    expect(store.getState().attention).toBe('passive')
+    expect(store.state.get().attention).toBe('passive')
     await tab.runFor(2 * HOUR)
-    expect(store.getState().attention).toBe('urgent')
+    expect(store.state.get().attention).toBe('urgent')
   })
 })
 
@@ -90,7 +90,7 @@ describe('dismissals that do not apply here', () => {
     tab.otherTabSets(DISMISSAL_KEY, JSON.stringify({ dismissedAt: tab.now() }))
     await tab.runFor(HOUR)
 
-    expect(store.getState()).toMatchObject({
+    expect(store.state.get()).toMatchObject({
       attention: 'prompt',
       reason: 'outdated',
     })
@@ -107,9 +107,9 @@ describe('dismissals that do not apply here', () => {
     await tab.waitForResponse()
 
     tab.otherTabSets(DISMISSAL_KEY, JSON.stringify({ dismissedAt: tab.now() }))
-    expect(billing.getState().attention).toBe('prompt')
+    expect(billing.state.get().attention).toBe('prompt')
 
-    expect(billing.dismiss()).toBe(true)
+    expect(billing.state.dismiss()).toBe(true)
     expect(tab.storage.getItem('billing:prompt-dismissal')).toBe(
       JSON.stringify({ dismissedAt: tab.now() }),
     )
@@ -126,12 +126,12 @@ describe('clearing and blocking storage', () => {
     const store = app.create()
     app.subscribe(store)
     await tab.waitForResponse()
-    store.dismiss()
-    expect(store.getState().attention).toBe('passive')
+    store.state.dismiss()
+    expect(store.state.get().attention).toBe('passive')
 
     tab.otherTabClears()
 
-    expect(store.getState().attention).toBe('prompt')
+    expect(store.state.get().attention).toBe('prompt')
   })
 
   test('given storage was cleared while this tab was not subscribed, when it resubscribes, then it prompts again', async ({
@@ -143,14 +143,14 @@ describe('clearing and blocking storage', () => {
     const store = app.create()
     const stop = app.subscribe(store)
     await tab.waitForResponse()
-    expect(store.dismiss()).toBe(true)
+    expect(store.state.dismiss()).toBe(true)
     stop()
 
     tab.storage.clear()
     app.subscribe(store)
     await tab.waitForResponse()
 
-    expect(store.getState()).toMatchObject({
+    expect(store.state.get()).toMatchObject({
       attention: 'prompt',
       reason: 'outdated',
     })
@@ -172,14 +172,14 @@ describe('clearing and blocking storage', () => {
     const store = app.create()
     const stop = app.subscribe(store)
     await tab.waitForResponse()
-    expect(store.getState().attention).toBe('prompt')
+    expect(store.state.get().attention).toBe('prompt')
 
-    expect(store.dismiss()).toBe(true)
+    expect(store.state.dismiss()).toBe(true)
     stop()
     app.subscribe(store)
     await tab.waitForResponse()
 
-    expect(store.getState()).toMatchObject({
+    expect(store.state.get()).toMatchObject({
       attention: 'passive',
       reason: 'dismissed',
     })
@@ -197,14 +197,14 @@ describe('storage the browser refuses to open', () => {
     const store = app.create()
     const stop = app.subscribe(store)
     await tab.waitForResponse()
-    expect(store.getState().attention).toBe('prompt')
+    expect(store.state.get().attention).toBe('prompt')
 
-    expect(store.dismiss()).toBe(true)
+    expect(store.state.dismiss()).toBe(true)
     stop()
     app.subscribe(store)
     await tab.waitForResponse()
 
-    expect(store.getState()).toMatchObject({
+    expect(store.state.get()).toMatchObject({
       attention: 'passive',
       reason: 'dismissed',
     })

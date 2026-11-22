@@ -32,11 +32,11 @@ it.each([
       vi.fn<typeof fetch>(async () => Response.json(served)),
     )
     const updates = createAppUpdates()
-    const stop = updates.subscribe(() => {})
+    const stop = updates.state.subscribe(() => {})
 
     try {
       await vi.waitFor(() =>
-        expect(updates.getState()).toEqual({
+        expect(updates.state.get()).toEqual({
           attention,
           reason,
           latest: served,

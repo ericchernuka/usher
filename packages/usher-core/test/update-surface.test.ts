@@ -48,7 +48,7 @@ describe('showing and hiding', () => {
     server.use(serveBuild(newer))
     await app.poll()
 
-    expect(store.getState()).toMatchObject({
+    expect(store.state.get()).toMatchObject({
       reason: 'rollback',
       latest: { version: 'bbb' },
     })
@@ -94,7 +94,7 @@ describe('showing and hiding', () => {
   }) => {
     server.use(serveBuild(older))
     const store = app.create()
-    const removeBlocker = store.addRefreshBlocker(() => true)
+    const removeBlocker = store.refresh.addBlocker(() => true)
     const ui = fakeSurface()
     app.track(connectUpdateSurface(store, ui.surface))
     await tab.waitForResponse()
@@ -123,7 +123,7 @@ describe('closing the surface', () => {
 
     notice.close()
 
-    expect(store.getState().attention).toBe('passive')
+    expect(store.state.get().attention).toBe('passive')
     expect(ui.log).toEqual(['show:prompt', 'hide'])
     notice.close()
     expect(ui.log).toEqual(['show:prompt', 'hide'])
@@ -155,7 +155,7 @@ describe('closing the surface', () => {
     server.use(serveBuild(running))
     await app.poll()
 
-    expect(store.getState().attention).toBe('none')
+    expect(store.state.get().attention).toBe('none')
     expect(tab.storage.getItem(DISMISSAL_KEY)).toBeNull()
   })
 

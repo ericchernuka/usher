@@ -1,7 +1,7 @@
 import * as fc from 'fast-check'
 import type { Environment } from '../../src/environment'
 import { vi } from 'vitest'
-import { createFakeEnvironment } from '../fake-environment'
+import { createFakeEnvironment } from '../../src/fake-environment'
 import type { BuildFacts } from '../../src/build-facts'
 import { createStore, running, type StoreOptions } from '../fixtures'
 

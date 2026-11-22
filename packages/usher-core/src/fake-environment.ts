@@ -1,6 +1,21 @@
-import type { Environment, StorageChange } from '../src/environment'
+import type { Environment, StorageChange } from './environment'
 
-const turn = () => new Promise<void>(resolve => setImmediate(resolve))
+const turn = () =>
+  new Promise<void>(resolve => {
+    const channel = new MessageChannel()
+
+    channel.port1.addEventListener(
+      'message',
+      () => {
+        channel.port1.close()
+        resolve()
+      },
+      { once: true },
+    )
+
+    channel.port1.start()
+    channel.port2.postMessage(undefined)
+  })
 
 async function turns(count: number) {
   for (let index = 0; index < count; index++) {

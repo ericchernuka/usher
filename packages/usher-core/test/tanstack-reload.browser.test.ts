@@ -44,7 +44,7 @@ describe('TanStack Router reload recipe', () => {
     const { router, appUpdates } = setup()
     const blockerFn = vi.fn<() => boolean>(() => true)
     const unblock = router.history.block({ blockerFn })
-    expect(await appUpdates.refresh()).toBe('reloading')
+    expect(await appUpdates.refresh.run()).toBe('reloading')
     expect(blockerFn).toHaveBeenCalled()
     expect(navigations).toEqual([])
     unblock()
@@ -52,14 +52,14 @@ describe('TanStack Router reload recipe', () => {
 
   it('without a blocker it replaces the document at the same URL', async () => {
     const { appUpdates } = setup()
-    expect(await appUpdates.refresh()).toBe('reloading')
+    expect(await appUpdates.refresh.run()).toBe('reloading')
     expect(navigations).toEqual([{ type: 'replace', url: location.href }])
   })
 
   it('a refresh blocker stops the reload before the router hears of it, and says so', async () => {
     const { appUpdates } = setup()
-    const unblock = appUpdates.addRefreshBlocker(() => true)
-    expect(await appUpdates.refresh()).toBe('blocked')
+    const unblock = appUpdates.refresh.addBlocker(() => true)
+    expect(await appUpdates.refresh.run()).toBe('blocked')
     expect(navigations).toEqual([])
     unblock()
   })
@@ -75,7 +75,7 @@ describe('TanStack Router reload recipe', () => {
     )
 
     const unblock = router.history.block({ blockerFn })
-    await appUpdates.refresh()
+    await appUpdates.refresh.run()
     expect(navigations).toHaveLength(1)
     unblock()
   })

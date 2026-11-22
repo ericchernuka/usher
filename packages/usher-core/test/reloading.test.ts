@@ -10,8 +10,8 @@ describe('refreshing', () => {
     const reload = vi.fn<() => Promise<void>>(() => finished.promise)
     const store = app.create({ reload })
 
-    const first = store.refresh()
-    const second = store.refresh()
+    const first = store.refresh.run()
+    const second = store.refresh.run()
     finished.resolve()
 
     expect(reload).toHaveBeenCalledTimes(1)
@@ -29,23 +29,23 @@ describe('refreshing', () => {
     app.subscribe(store)
     await tab.waitForResponse()
     const heard: boolean[] = []
-    app.subscribe(store, () => heard.push(store.isRefreshing()))
+    app.track(store.refresh.subscribe(() => heard.push(store.refresh.get())))
 
-    expect(store.isRefreshing()).toBe(false)
+    expect(store.refresh.get()).toBe(false)
 
-    const succeeding = store.refresh()
-    expect(store.isRefreshing()).toBe(true)
+    const succeeding = store.refresh.run()
+    expect(store.refresh.get()).toBe(true)
     reloaded.resolve()
     await succeeding
-    expect(store.isRefreshing()).toBe(false)
+    expect(store.refresh.get()).toBe(false)
 
     reloaded = Promise.withResolvers<void>()
-    const throwing = store.refresh()
-    expect(store.isRefreshing()).toBe(true)
+    const throwing = store.refresh.run()
+    expect(store.refresh.get()).toBe(true)
     reloaded.reject(new Error('router failed'))
     await throwing
 
-    expect(store.isRefreshing()).toBe(false)
+    expect(store.refresh.get()).toBe(false)
     expect(heard).toEqual([true, false, true, false])
   })
 
@@ -53,20 +53,20 @@ describe('refreshing', () => {
     app,
   }) => {
     const inFlight: boolean[] = []
-    const joined: Array<ReturnType<AppUpdates['refresh']>> = []
+    const joined: Array<ReturnType<AppUpdates['refresh']['run']>> = []
 
     const reload = vi.fn<() => void>(() => {
-      inFlight.push(store.isRefreshing())
-      joined.push(store.refresh())
+      inFlight.push(store.refresh.get())
+      joined.push(store.refresh.run())
     })
 
     const store = app.create({ reload })
 
-    expect(await store.refresh()).toBe('reloading')
+    expect(await store.refresh.run()).toBe('reloading')
     expect(reload).toHaveBeenCalledTimes(1)
     expect(inFlight).toEqual([true])
     expect(await joined[0]).toBe('reloading')
-    expect(store.isRefreshing()).toBe(false)
+    expect(store.refresh.get()).toBe(false)
   })
 
   test('given the app supplies its own reload, then refresh delegates to it, and false or a throw means it was declined', async ({
@@ -77,11 +77,11 @@ describe('refreshing', () => {
     let answer: boolean | undefined = false
     const store = app.create({ reload })
 
-    expect(await store.refresh()).toBe('declined')
+    expect(await store.refresh.run()).toBe('declined')
     expect(reload).toHaveBeenCalledWith()
 
     answer = undefined
-    expect(await store.refresh()).toBe('reloading')
+    expect(await store.refresh.run()).toBe('reloading')
     expect(tab.reloads).toBe(0)
 
     vi.spyOn(console, 'error').mockImplementation(() => {})
@@ -92,7 +92,7 @@ describe('refreshing', () => {
       },
     })
 
-    expect(await throwing.refresh()).toBe('declined')
+    expect(await throwing.refresh.run()).toBe('declined')
   })
 
   test('given refresh blockers, then any one that returns true or throws vetoes, and removing it lifts the veto', async ({
@@ -101,18 +101,18 @@ describe('refreshing', () => {
   }) => {
     const error = vi.spyOn(console, 'error').mockImplementation(() => {})
     const store = app.create()
-    const removeForm = store.addRefreshBlocker(() => true)
-    store.addRefreshBlocker(() => false)
+    const removeForm = store.refresh.addBlocker(() => true)
+    store.refresh.addBlocker(() => false)
 
-    expect(await store.refresh()).toBe('blocked')
+    expect(await store.refresh.run()).toBe('blocked')
 
     removeForm()
 
-    const removeBroken = store.addRefreshBlocker(() => {
+    const removeBroken = store.refresh.addBlocker(() => {
       throw new Error('form state unavailable')
     })
 
-    expect(await store.refresh()).toBe('blocked')
+    expect(await store.refresh.run()).toBe('blocked')
     expect(error).toHaveBeenCalledWith(
       '[usher] refresh blocker threw',
       expect.any(Error),
@@ -120,7 +120,7 @@ describe('refreshing', () => {
 
     removeBroken()
 
-    expect(await store.refresh()).toBe('reloading')
+    expect(await store.refresh.run()).toBe('reloading')
     expect(tab.reloads).toBe(1)
   })
 
@@ -132,12 +132,12 @@ describe('refreshing', () => {
     app.subscribe(store)
     await tab.waitForResponse()
     const listener = vi.fn<() => void>()
-    app.subscribe(store, listener)
-    store.addRefreshBlocker(() => true)
+    app.track(store.refresh.subscribe(listener))
+    store.refresh.addBlocker(() => true)
 
-    const blocked = store.refresh()
+    const blocked = store.refresh.run()
 
-    expect(store.isRefreshing()).toBe(false)
+    expect(store.refresh.get()).toBe(false)
     expect(await blocked).toBe('blocked')
     expect(listener).not.toHaveBeenCalled()
   })
@@ -147,11 +147,11 @@ describe('refreshing', () => {
   }) => {
     const calls: string[] = []
     const store = app.create()
-    store.addRefreshBlocker(() => calls.push('first') < 0)
-    store.addRefreshBlocker(() => calls.push('second') > 0)
-    store.addRefreshBlocker(() => calls.push('third') > 0)
+    store.refresh.addBlocker(() => calls.push('first') < 0)
+    store.refresh.addBlocker(() => calls.push('second') > 0)
+    store.refresh.addBlocker(() => calls.push('third') > 0)
 
-    expect(await store.refresh()).toBe('blocked')
+    expect(await store.refresh.run()).toBe('blocked')
     expect(calls).toEqual(['first', 'second'])
   })
 })

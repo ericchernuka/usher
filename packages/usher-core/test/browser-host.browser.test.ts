@@ -39,13 +39,13 @@ afterEach(() => {
 describe('the store on the real browser', () => {
   it('given explicit build facts and a version URL, then it checks uncached and sees it is up to date', async () => {
     const updates = createAppUpdates({ running, versionUrl: '/version.json' })
-    const stop = updates.subscribe(() => {})
+    const stop = updates.state.subscribe(() => {})
     await settle()
     expect(fetch).toHaveBeenCalledWith(
       expect.stringMatching(/^http.+\/version\.json\?t=\d+$/),
       expect.objectContaining({ cache: 'no-store' }),
     )
-    expect(updates.getState().attention).toBe('none')
+    expect(updates.state.get().attention).toBe('none')
     stop()
   })
 
@@ -55,13 +55,13 @@ describe('the store on the real browser', () => {
       versionUrl: '/version.json',
     })
 
-    const stop = updates.subscribe(() => {})
+    const stop = updates.state.subscribe(() => {})
     await settle()
     served = older
     vi.advanceTimersByTime(61_000)
     window.dispatchEvent(new Event('focus'))
     await settle()
-    expect(updates.getState()).toMatchObject({
+    expect(updates.state.get()).toMatchObject({
       attention: 'urgent',
       reason: 'rollback',
     })
@@ -86,8 +86,8 @@ describe('the store on the real browser', () => {
       versionUrl: '/version.json',
     })
 
-    const stop = updates.subscribe(() => {})
-    await vi.waitFor(() => expect(updates.getState().attention).toBe('prompt'))
+    const stop = updates.state.subscribe(() => {})
+    await vi.waitFor(() => expect(updates.state.get().attention).toBe('prompt'))
     window.dispatchEvent(
       new StorageEvent('storage', {
         key: 'usher:prompt-dismissal',
@@ -95,7 +95,7 @@ describe('the store on the real browser', () => {
         storageArea: localStorage,
       }),
     )
-    expect(updates.getState().attention).toBe('passive')
+    expect(updates.state.get().attention).toBe('passive')
     stop()
   })
 
@@ -112,15 +112,15 @@ describe('the store on the real browser', () => {
       ),
     )
     const updates = createAppUpdates({ running, versionUrl: '/version.json' })
-    const stop = updates.subscribe(() => {})
-    await vi.waitFor(() => expect(updates.getState().attention).toBe('prompt'))
-    expect(updates.dismiss()).toBe(true)
+    const stop = updates.state.subscribe(() => {})
+    await vi.waitFor(() => expect(updates.state.get().attention).toBe('prompt'))
+    expect(updates.state.dismiss()).toBe(true)
 
     window.dispatchEvent(
       new StorageEvent('storage', { key: null, storageArea: sessionStorage }),
     )
 
-    expect(updates.getState().attention).toBe('passive')
+    expect(updates.state.get().attention).toBe('passive')
     stop()
   })
 
@@ -132,7 +132,7 @@ describe('the store on the real browser', () => {
       versionUrl: '/version.json',
     })
 
-    const stop = updates.subscribe(() => {})
+    const stop = updates.state.subscribe(() => {})
     const event = new Event('vite:preloadError', { cancelable: true })
     window.dispatchEvent(event)
     await settle()

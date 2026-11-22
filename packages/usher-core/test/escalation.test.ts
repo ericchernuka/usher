@@ -54,7 +54,7 @@ describe('escalating as the running build ages', () => {
 
       await tab.runFor(Date.parse(running.buildTime) + hours * HOUR - tab.now())
 
-      expect(store.getState().attention).toBe(attention)
+      expect(store.state.get().attention).toBe(attention)
     },
   )
 
@@ -67,7 +67,7 @@ describe('escalating as the running build ages', () => {
     const store = app.create()
     app.subscribe(store)
     await tab.waitForResponse()
-    expect(store.getState().attention).toBe('prompt')
+    expect(store.state.get().attention).toBe('prompt')
 
     await tab.runFor(MINUTE)
     tab.setSystemTime(tab.now() - HOUR)
@@ -76,7 +76,7 @@ describe('escalating as the running build ages', () => {
     await tab.waitForResponse()
     await tab.runFor(MINUTE)
 
-    expect(store.getState()).toMatchObject({
+    expect(store.state.get()).toMatchObject({
       attention: 'urgent',
       reason: 'outdated',
     })
@@ -90,19 +90,19 @@ describe('escalating as the running build ages', () => {
     const store = app.create()
     app.subscribe(store)
     await tab.waitForResponse()
-    expect(store.getState().attention).toBe('passive')
+    expect(store.state.get().attention).toBe('passive')
 
     server.use(serveNetworkError())
     await tab.runFor(11 * HOUR)
 
-    expect(store.getState()).toMatchObject({
+    expect(store.state.get()).toMatchObject({
       attention: 'prompt',
       reason: 'outdated',
     })
 
     await tab.runFor(12 * HOUR)
 
-    expect(store.getState()).toMatchObject({
+    expect(store.state.get()).toMatchObject({
       attention: 'urgent',
       reason: 'outdated',
     })
@@ -123,7 +123,7 @@ test('given time passed while hidden, then visibility evaluates age even if the 
   server.use(serveNetworkError())
   tab.setVisibility('visible')
   await tab.waitForResponse()
-  expect(store.getState().attention).toBe('urgent')
+  expect(store.state.get().attention).toBe('urgent')
 })
 
 test('given time passed while unsubscribed, then subscribing evaluates age before a failed check', async ({
@@ -138,7 +138,7 @@ test('given time passed while unsubscribed, then subscribing evaluates age befor
   await tab.runFor(24 * HOUR)
   server.use(serveNetworkError())
   app.subscribe(store)
-  expect(store.getState().attention).toBe('urgent')
+  expect(store.state.get().attention).toBe('urgent')
 })
 
 test('given thresholds longer than a browser timer can hold, then the tab still escalates on time', async ({
@@ -157,10 +157,10 @@ test('given thresholds longer than a browser timer can hold, then the tab still 
   await tab.waitForResponse()
 
   await tab.runFor(29 * DAY)
-  expect(store.getState().attention).toBe('passive')
+  expect(store.state.get().attention).toBe('passive')
 
   await tab.runFor(DAY)
-  expect(store.getState().attention).toBe('prompt')
+  expect(store.state.get().attention).toBe('prompt')
 })
 
 const deployedAt = (time: string, version = 'bbb') => ({
@@ -179,16 +179,16 @@ describe('counting from when the tab became outdated', () => {
     const store = app.create()
     app.subscribe(store)
     await tab.waitForResponse()
-    expect(store.getState().attention).toBe('passive')
+    expect(store.state.get().attention).toBe('passive')
 
     await tab.runFor(12 * HOUR - MINUTE)
-    expect(store.getState().attention).toBe('passive')
+    expect(store.state.get().attention).toBe('passive')
 
     await tab.runFor(MINUTE)
-    expect(store.getState().attention).toBe('prompt')
+    expect(store.state.get().attention).toBe('prompt')
 
     await tab.runFor(12 * HOUR)
-    expect(store.getState().attention).toBe('urgent')
+    expect(store.state.get().attention).toBe('urgent')
   })
 
   test('given deploys that keep landing, then the tab still escalates, counting from the first deploy it saw', async ({
@@ -206,11 +206,11 @@ describe('counting from when the tab became outdated', () => {
 
     server.use(serveBuild(deployedAt('2026-11-17T17:00:00.000Z', 'third')))
     await tab.runFor(3 * HOUR)
-    expect(store.getState().attention).toBe('passive')
+    expect(store.state.get().attention).toBe('passive')
 
     await tab.runFor(HOUR)
 
-    expect(store.getState()).toMatchObject({
+    expect(store.state.get()).toMatchObject({
       attention: 'prompt',
       latest: { version: 'third' },
     })
@@ -228,12 +228,12 @@ describe('counting from when the tab became outdated', () => {
 
     server.use(serveBuild(running))
     await tab.runFor(HOUR)
-    expect(store.getState().reason).toBe('caught-up')
+    expect(store.state.get().reason).toBe('caught-up')
 
     server.use(serveBuild(deployedAt('2026-11-17T21:00:00.000Z', 'ccc')))
     await tab.runFor(HOUR)
 
-    expect(store.getState().attention).toBe('passive')
+    expect(store.state.get().attention).toBe('passive')
   })
 
   test('given a tab that loads a build superseded long ago, then it is urgent at once', async ({
@@ -246,7 +246,7 @@ describe('counting from when the tab became outdated', () => {
     app.subscribe(store)
     await tab.waitForResponse()
 
-    expect(store.getState()).toMatchObject({
+    expect(store.state.get()).toMatchObject({
       attention: 'urgent',
       reason: 'outdated',
     })

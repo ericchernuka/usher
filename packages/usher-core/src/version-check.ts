@@ -2,12 +2,15 @@ import * as valibot from 'valibot'
 import type { Environment } from './environment'
 import type { CheckProblem } from './types'
 import { parseBuildFacts, type BuildFacts } from './build-facts'
+import { resolveVersionCheck, type VersionCheckOptions } from './options'
+import { createListeners, type Readable } from './readable'
+import { insideTab, type Tab } from './tab'
 import { createVisibleTimer } from './visible-timer'
 
 const MIN_FOCUS_CHECK_GAP_MS = 60_000
 const FETCH_TIMEOUT_MS = 30_000
 
-export interface LatestBuildOptions {
+interface LatestBuildOptions {
   versionUrl: string
   pollInterval: number
   env: Environment
@@ -50,7 +53,7 @@ async function readFacts(
       }
 }
 
-export class LatestBuild {
+class LatestBuild {
   readonly #options: LatestBuildOptions
   readonly #poll: ReturnType<typeof createVisibleTimer>
   #latest: BuildFacts | undefined
@@ -192,4 +195,53 @@ export class LatestBuild {
 
     stopListening.forEach(stop => stop())
   }
+}
+
+function returned(problem: CheckProblem) {
+  if (problem.kind === 'http-error') {
+    return `HTTP ${problem.status}`
+  }
+
+  if (problem.kind === 'not-json') {
+    return `a body that is not JSON (${problem.contentType ?? 'no content type'})`
+  }
+
+  return `JSON that is not build facts (${problem.issues})`
+}
+
+async function reportCheckProblem(
+  problem: CheckProblem,
+  tellApp: VersionCheckOptions['onCheckProblem'],
+) {
+  console.warn(
+    `[usher] ${problem.versionUrl} should return build facts as JSON, but returned ${returned(problem)}. Updates cannot be detected until it does.`,
+  )
+
+  try {
+    await tellApp?.(problem)
+  } catch (error) {
+    console.error('[usher] onCheckProblem threw', error)
+  }
+}
+
+export function createVersionCheck(
+  tab: Tab,
+  options: VersionCheckOptions,
+): Readable<BuildFacts | undefined> {
+  const { versionUrl, pollInterval } = resolveVersionCheck(options)
+
+  const latest = new LatestBuild({
+    ...insideTab(tab),
+    versionUrl,
+    pollInterval,
+    onProblem: problem =>
+      void reportCheckProblem(problem, options.onCheckProblem),
+  })
+
+  const listeners = createListeners({
+    start: () => latest.start(listeners.notify),
+    stop: latest.stop,
+  })
+
+  return { get: latest.get, subscribe: listeners.subscribe }
 }

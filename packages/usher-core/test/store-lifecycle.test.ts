@@ -24,8 +24,8 @@ describe('subscribing', () => {
     await tab.waitForResponse()
     expect(requests).toHaveLength(0)
 
-    const first = store.subscribe(() => {})
-    const second = store.subscribe(() => {})
+    const first = store.state.subscribe(() => {})
+    const second = store.state.subscribe(() => {})
     await tab.waitForResponse()
     expect(requests).toHaveLength(1)
 
@@ -44,7 +44,7 @@ describe('subscribing', () => {
     requests,
   }) => {
     const store = app.create()
-    const first = store.subscribe(noop)
+    const first = store.state.subscribe(noop)
     const second = app.subscribe(store, noop)
     await tab.waitForResponse()
     first()
@@ -72,7 +72,7 @@ describe('subscribing', () => {
     await tab.waitForResponse()
 
     expect(later).toHaveBeenCalled()
-    expect(store.getState().attention).toBe('passive')
+    expect(store.state.get().attention).toBe('passive')
   })
 
   test('given a listener removes a later one, then the removed listener does not hear that change', async ({
@@ -87,7 +87,7 @@ describe('subscribing', () => {
     stopRemoved = app.subscribe(store, removed)
     await tab.waitForResponse()
 
-    expect(store.getState().attention).toBe('passive')
+    expect(store.state.get().attention).toBe('passive')
     expect(removed).not.toHaveBeenCalled()
   })
 
@@ -102,7 +102,7 @@ describe('subscribing', () => {
     await tab.waitForResponse()
     stop()
 
-    expect(store.dismiss()).toBe(true)
+    expect(store.state.dismiss()).toBe(true)
 
     expect(tab.pendingTimers()).toBe(0)
   })
@@ -123,7 +123,7 @@ describe('subscribing', () => {
 
     tab.setVisibility('visible')
 
-    expect(store.getState().attention).toBe('prompt')
+    expect(store.state.get().attention).toBe('prompt')
     expect(tab.pendingTimers()).toBe(0)
   })
 })
@@ -139,13 +139,13 @@ describe('snapshots', () => {
     const listener = vi.fn<() => void>()
     app.subscribe(store, listener)
     await tab.waitForResponse()
-    const first = store.getState()
+    const first = store.state.get()
     listener.mockClear()
 
     await app.poll()
 
     expect(requests).toHaveLength(2)
-    expect(store.getState()).toBe(first)
+    expect(store.state.get()).toBe(first)
     expect(listener).not.toHaveBeenCalled()
   })
 
@@ -157,7 +157,7 @@ describe('snapshots', () => {
     const store = app.create()
     const seen: Array<[string, string | undefined]> = []
     app.subscribe(store, () => {
-      const state = store.getState()
+      const state = store.state.get()
       seen.push([state.attention, state.latest?.version])
     })
     await tab.waitForResponse()
@@ -180,15 +180,15 @@ describe('snapshots', () => {
     const listener = vi.fn<() => void>()
     app.subscribe(store, listener)
     await tab.waitForResponse()
-    const first = store.getState()
+    const first = store.state.get()
     listener.mockClear()
 
     const rebuilt = { ...newer, buildTime: '2026-11-11T15:45:00.000Z' }
     server.use(serveBuild(rebuilt))
     await app.poll()
 
-    expect(store.getState()).not.toBe(first)
-    expect(store.getState()).toEqual({
+    expect(store.state.get()).not.toBe(first)
+    expect(store.state.get()).toEqual({
       attention: 'passive',
       reason: 'outdated',
       latest: rebuilt,

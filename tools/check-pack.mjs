@@ -111,8 +111,8 @@ const appUpdates = createAppUpdates({ pollInterval: 60_000 })
 connectUpdateSurface(appUpdates, { show: notice => void notice.refresh, hide() {} })
 
 function App() {
-  const state: UpdateState = useUpdateState(appUpdates)
-  useRefreshBlocker(appUpdates, false)
+  const state: UpdateState = useUpdateState(appUpdates.state)
+  useRefreshBlocker(appUpdates.refresh, false)
 
   return <p>{runningBuild.version}: {state.attention}</p>
 }
