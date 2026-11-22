@@ -381,4 +381,118 @@ describe('what a screen reader hears', () => {
     expect(await announcements()).toEqual(['assertive: Please refresh'])
     await view.unmount()
   })
+
+  it('given a notice leaves before its wording is announced, then only the notice that stays is announced', async () => {
+    const tab = createTestTab()
+    tab.deploy({ ...older, buildTime: new Date(tab.now()).toISOString() })
+    const updates = createAppUpdates({ running: runningBuild, versionUrl }, tab)
+
+    const staying = (
+      <UpdateNotice.Root updates={updates}>
+        {() => <p>Still shown</p>}
+      </UpdateNotice.Root>
+    )
+
+    const view = await render(
+      <>
+        {staying}
+        <UpdateNotice.Root updates={updates}>
+          {() => <p>Gone</p>}
+        </UpdateNotice.Root>
+      </>,
+    )
+
+    await tab.advance(0)
+    await expect.element(view.getByText('Gone')).toBeVisible()
+    await view.rerender(staying)
+
+    await expect
+      .element(view.getByRole('alert'))
+      .toHaveTextContent('Still shown')
+    await settled()
+    expect(view.getByRole('alert').element().textContent).toBe('Still shown')
+    expect(await announcements()).toEqual(['assertive: Still shown'])
+    await view.unmount()
+  })
+
+  it('given wording hidden by visibility and wording inside a box with no box of its own, then only what is seen is announced', async () => {
+    const tab = createTestTab()
+    tab.deploy({ ...older, buildTime: new Date(tab.now()).toISOString() })
+    const updates = createAppUpdates({ running: runningBuild, versionUrl }, tab)
+
+    const view = await render(
+      <UpdateNotice.Root updates={updates}>
+        {() => (
+          <>
+            <p style={{ display: 'contents' }}>Please refresh</p>
+            <p style={{ visibility: 'hidden' }}>not shown</p>
+          </>
+        )}
+      </UpdateNotice.Root>,
+    )
+
+    await tab.advance(0)
+
+    await expect
+      .element(view.getByRole('alert'))
+      .toHaveTextContent('Please refresh')
+    expect(await announcements()).toEqual(['assertive: Please refresh'])
+    await view.unmount()
+  })
+
+  it('given the app passes a ref that returns a cleanup, then the cleanup runs when the notice leaves', async () => {
+    const tab = createTestTab()
+    tab.deploy({ ...older, buildTime: new Date(tab.now()).toISOString() })
+    const updates = createAppUpdates({ running: runningBuild, versionUrl }, tab)
+    const log: string[] = []
+
+    const view = await render(
+      <UpdateNotice.Root
+        updates={updates}
+        ref={node => {
+          log.push(`attach:${node?.dataset['attention']}`)
+
+          return () => {
+            log.push('cleanup')
+          }
+        }}
+      >
+        {() => <p>Please refresh</p>}
+      </UpdateNotice.Root>,
+    )
+
+    await tab.advance(0)
+    await expect
+      .element(view.getByRole('alert'))
+      .toHaveTextContent('Please refresh')
+    await view.unmount()
+
+    expect(log.at(-1)).toBe('cleanup')
+    expect(log).not.toContain('attach:undefined')
+  })
+
+  it('given something removed the live regions while wording was waiting, then they are made again and the notice is announced', async () => {
+    const tab = createTestTab()
+    tab.deploy({ ...older, buildTime: new Date(tab.now()).toISOString() })
+    const updates = createAppUpdates({ running: runningBuild, versionUrl }, tab)
+
+    const view = await render(
+      <UpdateNotice.Root updates={updates}>
+        {() => <Wording />}
+      </UpdateNotice.Root>,
+    )
+
+    await tab.advance(0)
+    await expect.element(view.getByText('Please refresh')).toBeVisible()
+    document
+      .querySelectorAll('[data-usher-announcer]')
+      .forEach(region => region.remove())
+    await view.getByRole('button', { name: 'Block' }).click()
+
+    await expect
+      .element(view.getByRole('alert'))
+      .toHaveTextContent('Save your work first')
+    expect(document.querySelectorAll('[data-usher-announcer]')).toHaveLength(2)
+    await view.unmount()
+  })
 })

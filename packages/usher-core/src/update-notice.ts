@@ -4,7 +4,10 @@ import type { AppUpdates, Attention, UpdateState } from './types'
 
 type Noticeable = Exclude<UpdateState, { attention: 'none' }>
 
-/** What an update surface is asked to show, new for every change of attention or reason */
+/**
+ * What an update surface is asked to show, new for every change of attention
+ * or reason, with `latest` as it was when the notice was made
+ */
 export type UpdateNotice = Exclude<UpdateState, { attention: 'none' }> & {
   /** Whether the user may close the notice, `false` at urgent attention */
   readonly closable: boolean

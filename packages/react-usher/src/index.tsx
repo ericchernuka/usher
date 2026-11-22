@@ -41,8 +41,8 @@ export function useRefreshing(refresh: Readable<boolean>): boolean {
 }
 
 /**
- * Block refreshes while mounted, with a boolean or a function that may be
- * written inline because the latest one is called
+ * Block refreshes while the component's effects are active, with a boolean or
+ * a function that may be written inline because the latest one is called
  */
 export function useRefreshBlocker(
   refresh: Pick<Refresh, 'addBlocker'>,
@@ -61,8 +61,8 @@ export function useRefreshBlocker(
 }
 
 /**
- * Read the notice to show, for a component that renders its own markup,
- * deferred so its arrival never blocks input
+ * Read the notice to show, for a component that renders its own markup, not
+ * deferred because its `refresh` and `close` have to be the current ones
  */
 export function useUpdateNotice(
   updates: AppUpdates,
@@ -75,7 +75,7 @@ export function useUpdateNotice(
     [updates, minAttention],
   )
 
-  return useDeferredValue(useReadable(notice))
+  return useReadable(notice)
 }
 
 interface Shown {
@@ -100,9 +100,11 @@ function useShown(part: string): Shown {
 function forward<Node>(ref: Ref<Node> | undefined, node: Node | null) {
   if (ref && 'current' in ref) {
     ref.current = node
-  } else {
-    ref?.(node)
+
+    return undefined
   }
+
+  return ref?.(node)
 }
 
 function useAnnouncement(
@@ -170,9 +172,19 @@ function Root(props: RootProps) {
   const [element, setElement] = useState<HTMLDivElement | null>(null)
 
   const attach = useCallback(
-    (node: HTMLDivElement | null) => {
+    (node: HTMLDivElement) => {
       setElement(node)
-      forward(ref, node)
+      const detach = forward(ref, node)
+
+      return () => {
+        setElement(null)
+
+        if (detach) {
+          detach()
+        } else {
+          forward(ref, null)
+        }
+      }
     },
     [ref],
   )
@@ -201,7 +213,7 @@ interface RefreshProps extends ComponentProps<'button'> {
   /**
    * What a press does in place of refreshing, given the refresh to call, and
    * awaited in a transition that keeps the button pending, so it must settle
-   * because React holds every transition pending until all Actions complete
+   * because React holds overlapping transitions pending until all Actions end
    */
   action?: (refresh: () => Promise<RefreshOutcome>) => void | Promise<void>
 }

@@ -3,14 +3,14 @@ const SETTLE_MS = 100
 const UNSEEN =
   'position:fixed;width:1px;height:1px;margin:-1px;padding:0;border:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap'
 
-const SKIPPED = 'button, a, [role="button"], [aria-hidden="true"], [hidden]'
+const SKIPPED = 'button, a, [role="button"], [aria-hidden="true"]'
 
 const PRIORITIES = ['polite', 'assertive'] as const
 
 interface Region {
   element: HTMLElement
-  said: ReadonlyArray<string>
-  pending: ReturnType<typeof setTimeout> | undefined
+  shown: Map<string, HTMLElement>
+  pending: Map<string, ReturnType<typeof setTimeout>>
 }
 
 interface Announcer {
@@ -25,12 +25,18 @@ function region(doc: Document, priority: 'polite' | 'assertive'): Region {
   const element = doc.createElement('div')
   element.setAttribute('role', priority === 'polite' ? 'status' : 'alert')
   element.setAttribute('aria-live', priority)
-  element.setAttribute('aria-atomic', 'true')
+  element.setAttribute('aria-atomic', 'false')
+  element.setAttribute('aria-relevant', 'additions text')
   element.dataset['usherAnnouncer'] = priority
   element.style.cssText = UNSEEN
   doc.body.append(element)
 
-  return { element, said: [], pending: undefined }
+  return { element, shown: new Map(), pending: new Map() }
+}
+
+function retire(found: Region) {
+  found.pending.forEach(timer => clearTimeout(timer))
+  found.element.remove()
 }
 
 function announcerIn(doc: Document): Announcer {
@@ -43,8 +49,10 @@ function announcerIn(doc: Document): Announcer {
     return found
   }
 
-  found?.polite.element.remove()
-  found?.assertive.element.remove()
+  if (found) {
+    retire(found.polite)
+    retire(found.assertive)
+  }
 
   const announcer: Announcer = {
     claims: found?.claims ?? new Map(),
@@ -57,38 +65,55 @@ function announcerIn(doc: Document): Announcer {
   return announcer
 }
 
+function withdraw(target: Region, wanted: ReadonlySet<string>) {
+  for (const [text, child] of target.shown) {
+    if (!wanted.has(text)) {
+      child.remove()
+      target.shown.delete(text)
+    }
+  }
+
+  for (const [text, timer] of target.pending) {
+    if (!wanted.has(text)) {
+      clearTimeout(timer)
+      target.pending.delete(text)
+    }
+  }
+}
+
+function say(target: Region, text: string) {
+  const child = target.element.ownerDocument.createElement('div')
+  child.textContent = text
+  target.pending.delete(text)
+  target.shown.set(text, child)
+  target.element.append(child)
+}
+
 function settle(announcer: Announcer) {
   for (const priority of PRIORITIES) {
     const target = announcer[priority]
 
-    const wanted = Array.from(
-      new Set(
-        Array.from(announcer.claims.values()).flatMap(claimed =>
-          claimed.priority === priority ? [claimed.text] : [],
-        ),
+    const wanted = new Set(
+      Array.from(announcer.claims.values()).flatMap(claimed =>
+        claimed.priority === priority ? [claimed.text] : [],
       ),
     )
 
-    if (wanted.length > 0 && wanted.every(text => target.said.includes(text))) {
-      continue
+    withdraw(target, wanted)
+
+    for (const text of wanted) {
+      if (!target.shown.has(text) && !target.pending.has(text)) {
+        target.pending.set(
+          text,
+          setTimeout(() => say(target, text), SETTLE_MS),
+        )
+      }
     }
-
-    clearTimeout(target.pending)
-    target.element.replaceChildren()
-    target.said = wanted
-
-    target.pending =
-      wanted.length > 0
-        ? setTimeout(
-            () => target.element.replaceChildren(wanted.join(' ')),
-            SETTLE_MS,
-          )
-        : undefined
   }
 }
 
 export function prepareAnnouncements(doc: Document) {
-  announcerIn(doc)
+  settle(announcerIn(doc))
 }
 
 export function claim(
@@ -109,14 +134,23 @@ export function release(container: Element) {
   }
 }
 
-const rendered = (element: Element) =>
-  !('checkVisibility' in element) || element.checkVisibility()
+function seen(text: Node) {
+  const parent = text.parentElement
 
-export function spoken(container: Element) {
-  if (container.closest('[aria-hidden="true"], [hidden]')) {
-    return ''
+  if (!parent || parent.closest(SKIPPED)) {
+    return false
   }
 
+  const range = text.ownerDocument?.createRange()
+  range?.selectNodeContents(text)
+
+  return (
+    range?.getClientRects().length !== 0 &&
+    getComputedStyle(parent).visibility === 'visible'
+  )
+}
+
+export function spoken(container: Element) {
   const walker = container.ownerDocument.createTreeWalker(
     container,
     NodeFilter.SHOW_TEXT,
@@ -125,9 +159,7 @@ export function spoken(container: Element) {
   const words: string[] = []
 
   while (walker.nextNode()) {
-    const parent = walker.currentNode.parentElement
-
-    if (parent && !parent.closest(SKIPPED) && rendered(parent)) {
+    if (seen(walker.currentNode)) {
       words.push(walker.currentNode.nodeValue ?? '')
     }
   }
