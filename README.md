@@ -101,7 +101,7 @@ function JobForm() {
 }
 ```
 
-Each hook takes the behaviour it reads. `useUpdateState` returns the whole state and defers it, so a change never blocks input. Read the field you need from it. `useRefreshing` is `true` while a refresh is in flight, which matters when the reload goes through a router and takes time. Reading it does not start version checks. `useRefreshBlocker` takes a boolean or a function; an inline function is fine, because the hook registers once and calls the latest one.
+Each hook takes the behaviour it reads. `useUpdateState` returns the whole state and defers it, so a new state renders at low priority and does not interrupt typing. Read the field you need from it. `useRefreshing` is `true` while a refresh is in flight, which matters when the reload goes through a router and takes time. Reading it does not start version checks. `useRefreshBlocker` takes a boolean or a function; an inline function is fine, because the hook registers once and calls the latest one.
 
 To tag error reports or RUM events with the running build, import its facts:
 
@@ -141,7 +141,7 @@ export const appUpdates = createAppUpdates({
 
 Every state except `unknown` carries `latest`, the build facts the server reported.
 
-A tab is outdated from the build time of the first newer build it sees, not from the age of its own build. A tab opened a minute ago on last week's build is one minute behind when the next deploy lands, so it starts passive. Later deploys do not restart the count, so a team that deploys a hundred times a day and a team that deploys once a week both prompt after 12 hours behind and turn urgent after 24. If the tab catches up, for example after a rollback to its build, the count starts over.
+A tab is outdated from the build time of the first newer build it sees, not from the age of its own build. A tab opened a minute ago on last week's build has only just fallen behind when the next deploy lands, so it starts passive. Later deploys do not restart the count, so a team that deploys a hundred times a day and a team that deploys once a week both prompt after 12 hours behind and turn urgent after 24. If the tab catches up, for example after a rollback to its build, the count starts over.
 
 Rollback and forced-update knowledge stays urgent until the tab reloads, even if a later response reports the running version again. A forced cutoff applies even when the version matches. Urgent attention cannot be dismissed.
 
@@ -215,7 +215,7 @@ export const appUpdates = createAppUpdates({
 | `not-json`        | The body was not JSON, as when a host answers with its HTML fallback. | `contentType`, `null` if absent |
 | `not-build-facts` | The JSON was the wrong shape.                                         | `issues`, in words for a person |
 
-Every problem also carries `versionUrl`. The handler runs once per outage, and again if the file recovers and breaks later. It may be async; a throw or a rejection is logged and does not stop later checks. Network errors and timeouts do not call it, because a tab being offline is normal.
+Every problem also carries `versionUrl`. The handler runs once per outage, and again if the file recovers and breaks later. It may be async; a throw or a rejection is logged and does not stop later checks. Network errors, timeouts and a connection that drops while the file is arriving do not call it, because a tab being offline is normal.
 
 ### Refresh and unsaved work
 
@@ -312,7 +312,7 @@ function copyFor({ attention, reason }: UpdateNotice) {
 
 Give urgent notices no timeout. A toast library that closes one on its own timer makes the connection show it again, and after five such rounds in one pass it stops and logs an error.
 
-`disconnect()` hides the surface and removes its subscription. A surface that throws is isolated and retried on the next state change.
+`disconnect()` hides the surface and removes its subscription. A `show` that throws is logged, its notice is dropped, and it is tried again on the next state change. A `hide` that throws is logged and not repeated.
 
 A notice's `latest` is the build that was latest when the notice was made. A notice is replaced when attention or reason changes, and when an urgent one is shown again; read the update state for the current build. Every notice also carries `closable`, which is `false` at urgent, and `announce`, which says how a screen reader should hear it: `off` at passive, `polite` at prompt, `assertive` at urgent. Pass `announce` to a toast library that owns its live region.
 
@@ -382,8 +382,8 @@ const appUpdates = createAppUpdates(
 render(<App appUpdates={appUpdates} />)
 
 tab.deploy({ ...running, version: 'two' })
-await tab.advance(5 * MINUTE) // the next check sees the deploy
-await tab.advance(12 * HOUR)
+await tab.advance(5 * 60_000) // five minutes: the next check sees the deploy
+await tab.advance(12 * 60 * 60_000) // twelve hours
 // the app now shows its prompt
 ```
 
@@ -395,6 +395,9 @@ This recipe uses core, so it runs in any test runner. To test through the plugin
 
 ```ts
 // vitest.config.ts
+import { usher } from '@rndsqr/usher-plugin/vite'
+import { defineConfig } from 'vitest/config'
+
 export default defineConfig({
   plugins: [usher()],
   ssr: { noExternal: ['@rndsqr/usher-plugin'] },
@@ -414,8 +417,8 @@ tab.deploy({
   version: 'next',
   buildTime: new Date(tab.now()).toISOString(),
 })
-await tab.advance(5 * MINUTE)
-await tab.advance(12 * HOUR)
+await tab.advance(5 * 60_000)
+await tab.advance(12 * 60 * 60_000)
 ```
 
 ## Skew protection
@@ -441,7 +444,9 @@ For Workers, point wrangler at the generated entry:
 ```jsonc
 // wrangler.jsonc
 {
+  "name": "<worker>",
   "main": "dist-worker/index.js",
+  "compatibility_date": "<date>",
   "assets": {
     "directory": "dist",
     "binding": "ASSETS",
@@ -484,9 +489,12 @@ Dashboard rollbacks and old-commit redeploys are detected through `commitTime`. 
 Upload chunks before the deployment that references them goes live, and never delete from the archive in the same step:
 
 ```sh
-aws s3 sync dist/assets "s3://$BUCKET/assets"   # no --delete
-wrangler pages deploy dist                       # or: wrangler deploy
+aws s3 sync dist/assets "s3://$BUCKET/assets" \
+  --endpoint-url "https://$ACCOUNT_ID.r2.cloudflarestorage.com"   # no --delete
+wrangler pages deploy dist   # or: wrangler deploy
 ```
+
+The `aws` CLI talks to S3 unless it is told otherwise, so give it R2's endpoint as here or in its profile. `$ACCOUNT_ID` is the Cloudflare account id, and the credentials are an R2 API token's.
 
 Uploading first means a tab that loads the new `index.html` in the first seconds can already fall back to R2. Leaving out `--delete` is what keeps old tabs working; expire old chunks with an R2 lifecycle rule instead.
 
@@ -503,7 +511,7 @@ await __USHER_DEVTOOLS__.deploy({ mode: 'rollback' })
 await __USHER_DEVTOOLS__.deploy({ mode: 'reset' })
 ```
 
-The example apps under `examples/react/` put the same four modes on buttons, next to the update state, an update notice and a draft that blocks a refresh. Run one with `pnpm --filter usher-example-react-cloudflare-pages dev`.
+The example apps under `examples/react/` put the same four modes on buttons, next to the update state, an update notice and a draft that blocks a refresh. Run `pnpm build` once so the packages they import exist, then run one with `pnpm --filter usher-example-react-cloudflare-pages dev`.
 
 The dev server then serves different build facts from the version URL. The tab still runs the real build, so:
 

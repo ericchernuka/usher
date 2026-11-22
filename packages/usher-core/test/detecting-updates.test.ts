@@ -7,6 +7,7 @@ import {
   serveBuild,
   serveError,
   serveHang,
+  serveCutOff,
   serveNetworkError,
   serveRaw,
 } from './mocks/overrides'
@@ -508,5 +509,22 @@ describe('a version file that is missing or misrouted', () => {
     await app.poll()
 
     expect(warn).not.toHaveBeenCalled()
+  })
+
+  test('given the connection drops while the version file is arriving, then it counts as the network being down, not as a problem with the file', async ({
+    app,
+    tab,
+  }) => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const onCheckProblem = vi.fn<(problem: CheckProblem) => void>()
+    server.use(serveCutOff())
+    const store = app.create({ onCheckProblem })
+    app.subscribe(store)
+    await tab.waitForResponse()
+    await app.poll()
+
+    expect(onCheckProblem).not.toHaveBeenCalled()
+    expect(warn).not.toHaveBeenCalled()
+    expect(store.state.get().reason).toBe('unknown')
   })
 })

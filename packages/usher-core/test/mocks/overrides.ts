@@ -16,6 +16,21 @@ export const serveError = (
 ): HttpHandler =>
   versionHandler({ error: 'unavailable' }, { ...options, status })
 
+export const serveCutOff = (): HttpHandler =>
+  http.get(
+    VERSION_URL,
+    () =>
+      new HttpResponse(
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode('{"version":'))
+            controller.error(new TypeError('terminated'))
+          },
+        }),
+        { headers: { 'Content-Type': 'application/json' } },
+      ),
+  )
+
 export const serveNetworkError = (): HttpHandler =>
   http.get(VERSION_URL, () => HttpResponse.error())
 
