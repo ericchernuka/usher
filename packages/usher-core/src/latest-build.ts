@@ -1,5 +1,6 @@
 import * as valibot from 'valibot'
 import type { Environment } from './environment'
+import type { CheckProblem } from './types'
 import { parseBuildFacts, type BuildFacts } from './build-facts'
 import { createVisibleTimer } from './visible-timer'
 
@@ -11,7 +12,7 @@ export interface LatestBuildOptions {
   pollInterval: number
   env: Environment
   clock: { observe(serverTime: number): void }
-  onProblem: ((message: string) => void) | undefined
+  onProblem: (problem: CheckProblem) => void
 }
 
 interface Watching {
@@ -20,13 +21,12 @@ interface Watching {
   inFlight?: AbortController | undefined
 }
 
-interface Rejected {
-  problem: string
-}
-
-async function readFacts(res: Response): Promise<BuildFacts | Rejected> {
+async function readFacts(
+  res: Response,
+  versionUrl: string,
+): Promise<BuildFacts | CheckProblem> {
   if (!res.ok) {
-    return { problem: `HTTP ${res.status}` }
+    return { kind: 'http-error', versionUrl, status: res.status }
   }
 
   let body: unknown
@@ -34,9 +34,9 @@ async function readFacts(res: Response): Promise<BuildFacts | Rejected> {
   try {
     body = await res.json()
   } catch {
-    const type = res.headers.get('content-type') ?? 'no content type'
+    const contentType = res.headers.get('content-type')
 
-    return { problem: `a body that is not JSON (${type})` }
+    return { kind: 'not-json', versionUrl, contentType }
   }
 
   const parsed = parseBuildFacts(body)
@@ -44,7 +44,9 @@ async function readFacts(res: Response): Promise<BuildFacts | Rejected> {
   return parsed.success
     ? parsed.output
     : {
-        problem: `JSON that is not build facts (${valibot.summarize(parsed.issues)})`,
+        kind: 'not-build-facts',
+        versionUrl,
+        issues: valibot.summarize(parsed.issues),
       }
 }
 
@@ -53,7 +55,7 @@ export class LatestBuild {
   readonly #poll: ReturnType<typeof createVisibleTimer>
   #latest: BuildFacts | undefined
   #lastCheck: { monotonic: number; wall: number } | undefined
-  #warned = false
+  #reported = false
   #watching: Watching | undefined
 
   constructor(options: LatestBuildOptions) {
@@ -121,7 +123,7 @@ export class LatestBuild {
         signal: controller.signal,
       })
 
-      const facts = await readFacts(res)
+      const facts = await readFacts(res, this.#options.versionUrl)
 
       if (!controller.signal.aborted) {
         this.#accept(res, facts)
@@ -136,9 +138,9 @@ export class LatestBuild {
     }
   }
 
-  #accept = (res: Response, facts: BuildFacts | Rejected) => {
-    if ('problem' in facts) {
-      return this.#warnOnce(facts.problem)
+  #accept = (res: Response, facts: BuildFacts | CheckProblem) => {
+    if ('kind' in facts) {
+      return this.#reportOnce(facts)
     }
 
     const serverTime = Date.parse(res.headers.get('date') ?? '')
@@ -147,26 +149,15 @@ export class LatestBuild {
       this.#options.clock.observe(serverTime)
     }
 
-    this.#warned = false
+    this.#reported = false
     this.#latest = facts
     this.#watching?.onChange()
   }
 
-  #warnOnce = (problem: string) => {
-    if (this.#warned) {
-      return
-    }
-
-    this.#warned = true
-
-    const message = `[usher] ${this.#options.versionUrl} should return build facts as JSON, but returned ${problem}. Updates cannot be detected until it does.`
-
-    console.warn(message)
-
-    try {
-      this.#options.onProblem?.(message)
-    } catch (error) {
-      console.error('[usher] onCheckProblem threw', error)
+  #reportOnce = (problem: CheckProblem) => {
+    if (!this.#reported) {
+      this.#reported = true
+      this.#options.onProblem(problem)
     }
   }
 

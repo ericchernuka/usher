@@ -34,6 +34,21 @@ export type UpdateState =
 /** Why the tab has the attention it has. */
 export type UpdateReason = UpdateState['reason']
 
+/**
+ * An answer to a version check that is not build facts. `versionUrl` is the
+ * store's own `versionUrl` option.
+ *
+ * - `http-error`: the response was not OK.
+ * - `not-json`: the body could not be read as JSON, as when a host answers with
+ *   its HTML fallback. `contentType` is the response's header, if it had one.
+ * - `not-build-facts`: the JSON was the wrong shape. `issues` says what was
+ *   wrong, in words for a person.
+ */
+export type CheckProblem =
+  | { kind: 'http-error'; versionUrl: string; status: number }
+  | { kind: 'not-json'; versionUrl: string; contentType: string | null }
+  | { kind: 'not-build-facts'; versionUrl: string; issues: string }
+
 export interface AppUpdatesOptions {
   /** Build facts of the running build. */
   running: BuildFacts
@@ -64,13 +79,11 @@ export interface AppUpdatesOptions {
    */
   reload?: () => void | boolean | Promise<void | boolean>
   /**
-   * Called when a version check gets an answer that is not build facts: an HTTP
-   * error, a body that is not JSON, or JSON of the wrong shape. It runs once per
-   * outage, with the sentence the console warning prints, so the app can report
-   * a deployment whose tabs cannot detect updates. Network errors and timeouts
-   * do not call it.
+   * Called when a version check gets an answer that is not build facts, so the
+   * app can report a deployment whose tabs cannot detect updates. It runs once
+   * per outage. Network errors and timeouts do not call it.
    */
-  onCheckProblem?: (message: string) => void
+  onCheckProblem?: (problem: CheckProblem) => void
   /** Storage key prefix; set one per app if apps share an origin. Default "usher". */
   storageKey?: string
 }

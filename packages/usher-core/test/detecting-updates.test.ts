@@ -1,5 +1,6 @@
 import { http, HttpResponse } from 'msw/http'
 import { vi } from 'vitest'
+import type { CheckProblem } from '../src/index'
 import { VERSION_URL } from './mocks/handlers'
 import { server } from './mocks/node'
 import {
@@ -427,22 +428,44 @@ describe('a version file that is missing or misrouted', () => {
     expect(warn).toHaveBeenLastCalledWith(expect.stringContaining('HTTP 503'))
   })
 
-  test('given the app asks to hear about check problems, then it is told once per outage, in the sentence the console gets', async ({
-    app,
-    tab,
-  }) => {
-    vi.spyOn(console, 'warn').mockImplementation(() => {})
-    const onCheckProblem = vi.fn<(message: string) => void>()
-    server.use(serveError(404))
-    app.subscribe(app.create({ onCheckProblem }))
-    await tab.waitForResponse()
-    await app.poll()
+  test.for([
+    {
+      name: 'an HTTP error',
+      answer: serveError(404),
+      problem: { kind: 'http-error', versionUrl: VERSION_URL, status: 404 },
+    },
+    {
+      name: "the host's HTML fallback",
+      answer: http.get(VERSION_URL, () => HttpResponse.html('<!doctype html>')),
+      problem: {
+        kind: 'not-json',
+        versionUrl: VERSION_URL,
+        contentType: 'text/html',
+      },
+    },
+    {
+      name: 'JSON that is not build facts',
+      answer: serveRaw({ version: 'aaa' }),
+      problem: {
+        kind: 'not-build-facts',
+        versionUrl: VERSION_URL,
+        issues: expect.stringContaining('commitTime'),
+      },
+    },
+  ])(
+    'given $name, then the app is told what kind of check problem it is, once per outage',
+    async ({ answer, problem }, { app, tab }) => {
+      vi.spyOn(console, 'warn').mockImplementation(() => {})
+      const onCheckProblem = vi.fn<(problem: CheckProblem) => void>()
+      server.use(answer)
+      app.subscribe(app.create({ onCheckProblem }))
+      await tab.waitForResponse()
+      await app.poll()
 
-    expect(onCheckProblem).toHaveBeenCalledTimes(1)
-    expect(onCheckProblem).toHaveBeenCalledWith(
-      '[usher] https://app.test/version.json should return build facts as JSON, but returned HTTP 404. Updates cannot be detected until it does.',
-    )
-  })
+      expect(onCheckProblem).toHaveBeenCalledTimes(1)
+      expect(onCheckProblem).toHaveBeenCalledWith(problem)
+    },
+  )
 
   test("given the app's check problem handler throws, then the error is logged and later checks still land", async ({
     app,
