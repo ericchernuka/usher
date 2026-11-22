@@ -11,6 +11,7 @@ export interface LatestBuildOptions {
   pollInterval: number
   env: Environment
   clock: { observe(serverTime: number): void }
+  onProblem: ((message: string) => void) | undefined
 }
 
 interface Watching {
@@ -157,9 +158,16 @@ export class LatestBuild {
     }
 
     this.#warned = true
-    console.warn(
-      `[usher] ${this.#options.versionUrl} should return build facts as JSON, but returned ${problem}. Updates cannot be detected until it does.`,
-    )
+
+    const message = `[usher] ${this.#options.versionUrl} should return build facts as JSON, but returned ${problem}. Updates cannot be detected until it does.`
+
+    console.warn(message)
+
+    try {
+      this.#options.onProblem?.(message)
+    } catch (error) {
+      console.error('[usher] onCheckProblem threw', error)
+    }
   }
 
   start = (onChange: () => void) => {

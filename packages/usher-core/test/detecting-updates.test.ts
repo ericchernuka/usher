@@ -427,6 +427,48 @@ describe('a version file that is missing or misrouted', () => {
     expect(warn).toHaveBeenLastCalledWith(expect.stringContaining('HTTP 503'))
   })
 
+  test('given the app asks to hear about check problems, then it is told once per outage, in the sentence the console gets', async ({
+    app,
+    tab,
+  }) => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const onCheckProblem = vi.fn<(message: string) => void>()
+    server.use(serveError(404))
+    app.subscribe(app.create({ onCheckProblem }))
+    await tab.waitForResponse()
+    await app.poll()
+
+    expect(onCheckProblem).toHaveBeenCalledTimes(1)
+    expect(onCheckProblem).toHaveBeenCalledWith(
+      '[usher] https://app.test/version.json should return build facts as JSON, but returned HTTP 404. Updates cannot be detected until it does.',
+    )
+  })
+
+  test("given the app's check problem handler throws, then the error is logged and later checks still land", async ({
+    app,
+    tab,
+  }) => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    server.use(serveError(404, { once: true }), serveBuild(newer))
+
+    const store = app.create({
+      onCheckProblem: () => {
+        throw new Error('error tracking is down')
+      },
+    })
+
+    app.subscribe(store)
+    await tab.waitForResponse()
+    await app.poll()
+
+    expect(error).toHaveBeenCalledWith(
+      '[usher] onCheckProblem threw',
+      expect.any(Error),
+    )
+    expect(store.getState().attention).toBe('passive')
+  })
+
   test('given the network is down, then the tab does not warn', async ({
     app,
     tab,

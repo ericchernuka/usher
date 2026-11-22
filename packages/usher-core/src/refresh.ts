@@ -42,6 +42,7 @@ function createBlockers() {
 
 export function createRefresh(
   reload: NonNullable<AppUpdatesOptions['reload']>,
+  onChange: () => void,
 ) {
   const blockers = createBlockers()
   let inFlight: Promise<RefreshOutcome> | undefined
@@ -65,12 +66,20 @@ export function createRefresh(
       return Promise.resolve('blocked')
     }
 
-    inFlight = perform().finally(() => {
+    const attempt = perform().finally(() => {
       inFlight = undefined
+      onChange()
     })
 
-    return inFlight
+    inFlight = attempt
+    onChange()
+
+    return attempt
   }
 
-  return { request, addBlocker: blockers.add }
+  return {
+    request,
+    isRefreshing: () => inFlight !== undefined,
+    addBlocker: blockers.add,
+  }
 }

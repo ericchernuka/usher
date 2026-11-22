@@ -63,6 +63,14 @@ export interface AppUpdatesOptions {
    * then resolves `declined`. Default `location.reload()`.
    */
   reload?: () => void | boolean | Promise<void | boolean>
+  /**
+   * Called when a version check gets an answer that is not build facts: an HTTP
+   * error, a body that is not JSON, or JSON of the wrong shape. It runs once per
+   * outage, with the sentence the console warning prints, so the app can report
+   * a deployment whose tabs cannot detect updates. Network errors and timeouts
+   * do not call it.
+   */
+  onCheckProblem?: (message: string) => void
   /** Storage key prefix; set one per app if apps share an origin. Default "usher". */
   storageKey?: string
 }

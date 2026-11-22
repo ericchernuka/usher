@@ -68,16 +68,25 @@ export const appUpdates = createAppUpdates()
 ```
 
 ```tsx
-import { useRefreshBlocker, useUpdateState } from '@rndsqr/react-usher'
+import {
+  useRefreshBlocker,
+  useRefreshing,
+  useUpdateState,
+} from '@rndsqr/react-usher'
 import { appUpdates } from './updates'
 
 function UpdateButton() {
   const { attention } = useUpdateState(appUpdates)
+  const refreshing = useRefreshing(appUpdates)
 
   if (attention === 'none') return null
 
   return (
-    <button type="button" onClick={() => appUpdates.refresh()}>
+    <button
+      type="button"
+      disabled={refreshing}
+      onClick={() => appUpdates.refresh()}
+    >
       Refresh
     </button>
   )
@@ -91,7 +100,7 @@ function JobForm() {
 }
 ```
 
-`useUpdateState` returns the whole state and defers it, so a store change never blocks input. Read the field you need from it. `useRefreshBlocker` takes a boolean or a function; an inline function is fine, because the hook registers once and calls the latest one.
+`useUpdateState` returns the whole state and defers it, so a store change never blocks input. Read the field you need from it. `useRefreshing` is `true` while a refresh is in flight, which matters when the reload goes through a router and takes time. `useRefreshBlocker` takes a boolean or a function; an inline function is fine, because the hook registers once and calls the latest one.
 
 To tag error reports or RUM events with the running build, import its facts:
 
@@ -144,6 +153,7 @@ interface AppUpdates {
   getState(): UpdateState
   subscribe(listener: () => void): () => void
   refresh(): Promise<'reloading' | 'blocked' | 'declined'>
+  isRefreshing(): boolean
   dismiss(): boolean
   addRefreshBlocker(blocker: () => boolean): () => void
 }
@@ -151,7 +161,7 @@ interface AppUpdates {
 
 Create one store per `storageKey` in a document. Two stores that share a key in the same document do not hear each other's dismissals, because the browser reports a storage change only to other documents.
 
-`getState()` returns the same object until attention, reason, or any of the latest build facts change. `dismiss()` returns `true` only when it lowered a prompt; otherwise it returns `false` and writes nothing.
+`getState()` returns the same object until attention, reason, or any of the latest build facts change. `dismiss()` returns `true` only when it lowered a prompt; otherwise it returns `false` and writes nothing. Subscribers hear about changes to the state and to `isRefreshing()`.
 
 Durations are milliseconds, so they can be computed:
 
@@ -166,20 +176,33 @@ export const appUpdates = createAppUpdates({
 })
 ```
 
-| Option         | Default                            | Meaning                                                                                                                        |
-| -------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `running`      | Required by core; set by `/client` | Build facts of the running build.                                                                                              |
-| `versionUrl`   | Required by core; set by `/client` | The serving deployment's `version.json` URL.                                                                                   |
-| `promptAfter`  | 12 hours                           | Time outdated at which a tab reaches prompt attention. `false` turns the level off.                                            |
-| `urgentAfter`  | 24 hours                           | Time outdated at which it reaches urgent attention. `false` turns the level off. Must be later than `promptAfter`.             |
-| `promptSnooze` | Until urgent attention starts      | How long a prompt dismissal quiets prompt attention.                                                                           |
-| `pollInterval` | 5 minutes                          | How often a visible tab checks, at least 10 seconds. Focus and visibility also trigger a check, at most once a minute.         |
-| `reload`       | `location.reload()`                | The document load a refresh performs. Return or resolve `false` when you know it did not happen.                               |
-| `storageKey`   | `usher`                            | Prefix for the keys Usher writes to localStorage, such as `usher:prompt-dismissal`. Set one per app when apps share an origin. |
+| Option           | Default                            | Meaning                                                                                                                           |
+| ---------------- | ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `running`        | Required by core; set by `/client` | Build facts of the running build.                                                                                                 |
+| `versionUrl`     | Required by core; set by `/client` | The serving deployment's `version.json` URL.                                                                                      |
+| `promptAfter`    | 12 hours                           | Time outdated at which a tab reaches prompt attention. `false` turns the level off.                                               |
+| `urgentAfter`    | 24 hours                           | Time outdated at which it reaches urgent attention. `false` turns the level off. Must be later than `promptAfter`.                |
+| `promptSnooze`   | Until urgent attention starts      | How long a prompt dismissal quiets prompt attention.                                                                              |
+| `pollInterval`   | 5 minutes                          | How often a visible tab checks, at least 10 seconds. Focus and visibility also trigger a check, at most once a minute.            |
+| `reload`         | `location.reload()`                | The document load a refresh performs. Return or resolve `false` when you know it did not happen.                                  |
+| `onCheckProblem` | None                               | Called when the version file answers with something that is not build facts. See [Version file problems](#version-file-problems). |
+| `storageKey`     | `usher`                            | Prefix for the keys Usher writes to localStorage, such as `usher:prompt-dismissal`. Set one per app when apps share an origin.    |
 
 Invalid options throw when the store is created, with a message that names the option.
 
 Usher never reloads on navigation, on a chunk error, or on its own timer. The asset fallback keeps old chunks available, and the tab refreshes only when the app calls `refresh()`.
+
+### Version file problems
+
+A version check can get an answer that is not build facts: a 404, a host's HTML fallback, or JSON of the wrong shape. Until that is fixed, tabs on that deployment cannot detect updates, and nothing in the update state says so. The store logs one console warning per outage. Pass `onCheckProblem` to report it as well:
+
+```ts
+export const appUpdates = createAppUpdates({
+  onCheckProblem: message => reportError(new Error(message)),
+})
+```
+
+It runs once per outage, with the sentence the warning prints, and again if the file recovers and breaks later. Network errors and timeouts do not call it, because a tab being offline is normal.
 
 ### Refresh and unsaved work
 
@@ -193,7 +216,7 @@ Refresh blockers decide whether a refresh can proceed. They run synchronously, i
 | `blocked`   | A refresh blocker stopped it. `reload` was never called. |
 | `declined`  | `reload` returned `false` or threw. The error is logged. |
 
-Nothing is remembered between calls, so any outcome can be retried, and concurrent calls share one attempt. To let the user override a blocker, confirm on `blocked`, remove the blocker, and call `refresh()` again:
+Nothing is remembered between calls, so any outcome can be retried, and concurrent calls share one attempt. `isRefreshing()` is `true` from the moment `reload` is called until it settles, and `false` again after every outcome. A blocked refresh never makes it `true`. To let the user override a blocker, confirm on `blocked`, remove the blocker, and call `refresh()` again:
 
 ```ts
 if ((await appUpdates.refresh()) === 'blocked' && confirm('Discard changes?')) {
