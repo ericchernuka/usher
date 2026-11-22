@@ -1,5 +1,5 @@
 import * as valibot from 'valibot'
-import type { Environment } from './environment'
+import type { Environment, VersionResponse } from './environment'
 import type { CheckProblem } from './types'
 import { parseBuildFacts, type BuildFacts } from './build-facts'
 import { resolveVersionCheck, type VersionCheckOptions } from './options'
@@ -25,7 +25,7 @@ interface Watching {
 }
 
 async function readFacts(
-  res: Response,
+  res: VersionResponse,
   versionUrl: string,
 ): Promise<BuildFacts | CheckProblem> {
   if (!res.ok) {
@@ -141,7 +141,7 @@ class LatestBuild {
     }
   }
 
-  #accept = (res: Response, facts: BuildFacts | CheckProblem) => {
+  #accept = (res: VersionResponse, facts: BuildFacts | CheckProblem) => {
     if ('kind' in facts) {
       return this.#reportOnce(facts)
     }

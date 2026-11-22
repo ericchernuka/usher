@@ -32,7 +32,7 @@ The build plugin, the adapter contract and the asset fallback handler do not cha
 - An app cannot compose something wrong, such as leaving out rollback detection, because it cannot compose.
 - The signal contract can change freely. Tests cross the public interface, so they do not pin it either.
 - A tab is recognised by identity, so a test tab only works with the copy of core that made it. Core is a peer dependency of the plugin and the React package to keep that to one copy, and the error names the cause when it is not.
-- The environment stays private ([ADR 0004](0004-environment-is-internal.md)); the test tab promises `deploy` and `advance` and nothing else.
+- The environment stays private ([ADR 0004](0004-environment-is-internal.md)); the test tab promises `now`, `deploy` and `advance` and nothing else.
 - ADR 0011 is superseded where it puts a refresh in flight on the store's `subscribe`. A check problem stays a callback.
 - When to change this: the first real need for a custom signal or source, such as the server-driven signal the one-pager names. Build it inside core first, then export the contract it proved.
 

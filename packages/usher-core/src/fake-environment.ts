@@ -1,7 +1,11 @@
 import type { Environment, StorageChange } from './environment'
 
-const turn = () =>
-  new Promise<void>(resolve => {
+function turn() {
+  if (!('MessageChannel' in globalThis)) {
+    return new Promise<void>(resolve => setTimeout(resolve, 0))
+  }
+
+  return new Promise<void>(resolve => {
     const channel = new MessageChannel()
 
     channel.port1.addEventListener(
@@ -16,6 +20,7 @@ const turn = () =>
     channel.port1.start()
     channel.port2.postMessage(undefined)
   })
+}
 
 async function turns(count: number) {
   for (let index = 0; index < count; index++) {
@@ -56,10 +61,10 @@ function listeners<Event extends unknown[]>() {
   }
 }
 
-function trackResponses(inner: () => typeof fetch) {
+function trackResponses(inner: () => Environment['fetch']) {
   const pending = new Set<symbol>()
 
-  const fetch: typeof globalThis.fetch = async (input, init) => {
+  const fetch: Environment['fetch'] = async (input, init) => {
     const token = Symbol()
     const signal = init?.signal
 
@@ -98,7 +103,7 @@ const MAX_BROWSER_TIMER_MS = 2 ** 31 - 1
 const MAX_TIMERS_PER_ADVANCE = 20_000
 
 export interface FakeEnvironmentOptions {
-  fetch?: typeof fetch
+  fetch?: Environment['fetch']
 }
 
 export function createFakeEnvironment(options: FakeEnvironmentOptions = {}) {
