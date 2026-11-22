@@ -9,7 +9,8 @@ import {
   type DeploySimulation,
 } from './simulated-deploy'
 
-export const DEPLOY_PATH = '__usher/deploy'
+/** Where the page posts a simulated deploy. `base` is the dev server's base. */
+export const deployUrl = (base: string) => `${base}__usher/deploy`
 
 function reply(
   res: ServerResponse,
@@ -89,7 +90,8 @@ export interface DevServing {
    * was configured: a relative base becomes "/" and a CDN base keeps its path.
    */
   base: string
-  fileName: string
+  /** The build layout's version URL, which is a path on the dev server. */
+  versionUrl: string
   facts: BuildFacts
   devtools: boolean
 }
@@ -101,7 +103,7 @@ export function serveDevelopment(
   const simulation = createDeploySimulation(serving.facts)
 
   middlewares.use(
-    route(serving.base + serving.fileName, (_req, res) =>
+    route(serving.versionUrl, (_req, res) =>
       reply(res, 200, {
         type: 'application/json',
         text: JSON.stringify(simulation.served()),
@@ -110,6 +112,6 @@ export function serveDevelopment(
   )
 
   if (serving.devtools) {
-    middlewares.use(route(serving.base + DEPLOY_PATH, answerDeploy(simulation)))
+    middlewares.use(route(deployUrl(serving.base), answerDeploy(simulation)))
   }
 }

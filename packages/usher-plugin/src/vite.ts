@@ -120,7 +120,7 @@ export function usher(options: UsherPluginOptions = {}): Plugin {
     configureServer(server) {
       serveDevelopment(server.middlewares, {
         base: config.base,
-        fileName,
+        versionUrl: layout.versionUrl,
         facts,
         devtools: options.devtools ?? false,
       })
