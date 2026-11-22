@@ -37,7 +37,7 @@ async function readFacts(
   try {
     body = await res.json()
   } catch (error) {
-    if (!(error instanceof SyntaxError)) {
+    if (!(error instanceof Error && error.name === 'SyntaxError')) {
       throw error
     }
 
