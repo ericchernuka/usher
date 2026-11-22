@@ -95,8 +95,10 @@ function useShown(part: string): Shown {
   return shown
 }
 
+const SETTLE_MS = 100
+
 const unseen: CSSProperties = {
-  position: 'absolute',
+  position: 'fixed',
   width: 1,
   height: 1,
   margin: -1,
@@ -136,14 +138,28 @@ function Announcer({ announce, container }: AnnouncerProps) {
   useEffect(() => {
     const text = spoken(container.current)
 
-    polite.current?.replaceChildren(announce === 'polite' ? text : '')
-    assertive.current?.replaceChildren(announce === 'assertive' ? text : '')
+    const region = { off: undefined, polite, assertive }[announce ?? 'off']
+    polite.current?.replaceChildren()
+    assertive.current?.replaceChildren()
+
+    const pending = setTimeout(
+      () => region?.current?.replaceChildren(text),
+      SETTLE_MS,
+    )
+
+    return () => clearTimeout(pending)
   }, [announce, container])
 
   return (
     <>
-      <output ref={polite} style={unseen} />
-      <div ref={assertive} role="alert" style={unseen} />
+      <output ref={polite} aria-live="polite" aria-atomic style={unseen} />
+      <div
+        ref={assertive}
+        role="alert"
+        aria-live="assertive"
+        aria-atomic
+        style={unseen}
+      />
     </>
   )
 }

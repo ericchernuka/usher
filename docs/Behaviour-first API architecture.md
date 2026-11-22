@@ -226,7 +226,14 @@ Headless means the app owns the markup. It should not also have to own the acces
 - No part closes a notice on a timer.
 - `Close` has no default label, since wording is the app's.
 
-The first version put `role="status"` or `role="alert"` on `Root`'s own element, which mounts together with its content. A browser test with a virtual screen reader showed that a prompt mounted that way was not announced, while text placed into a region that was already mounted was. That is why the regions are separate and stay mounted. The test runs in Chromium and WebKit. A virtual screen reader follows the specification and is not VoiceOver, NVDA or JAWS, so this has still not been heard on a real one.
+The first version put `role="status"` or `role="alert"` on `Root`'s own element, which mounts together with its content. A browser test with a virtual screen reader showed that a prompt mounted that way was not announced, while text placed into a region that was already mounted was. That is why the regions are separate and stay mounted. The test runs in Chromium and WebKit.
+
+Two libraries were read for how they do this and how they check it:
+
+- UI SDK keeps one polite and one assertive region per document, each with a role, `aria-live` and `aria-atomic`. To announce, it empties the region and sets the text 100 ms later, because a screen reader only notices text that changes after the region exists, and the same text twice only after it was cleared. Its toast announces the title and description and not the actions. It checks announcements with the same virtual screen reader, in specs that compare the spoken phrase log.
+- Base UI's toast viewport is a polite region that is already mounted when a toast is added. A high-priority toast is repeated in a visually hidden `role="alert"`. Its tests assert the roles and ARIA attributes and do not record speech.
+
+`Root` follows UI SDK on all three points: both attributes beside the role, the empty-then-set delay, and leaving the controls out. Neither library automates a real screen reader, and neither do we. A virtual screen reader follows the specification and is not VoiceOver, NVDA or JAWS, so this is a best guess that matches current practice.
 
 ## Testing
 
