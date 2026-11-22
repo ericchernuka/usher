@@ -63,84 +63,87 @@ function safely(label: string, fn: () => void) {
 const MAX_PASSES = 5
 
 class SurfaceConnection {
-  readonly updates: AppUpdates
-  readonly minAttention: Exclude<Attention, 'none'>
-  readonly show: (notice: UpdateNotice) => void
-  readonly hide: () => void
+  readonly #updates: AppUpdates
+  readonly #minAttention: Exclude<Attention, 'none'>
+  readonly #show: (notice: UpdateNotice) => void
+  readonly #hide: () => void
 
   constructor(updates: AppUpdates, surface: UpdateSurface) {
-    this.updates = updates
-    this.minAttention = surface.minAttention ?? 'prompt'
-    this.show = notice => surface.show(notice)
-    this.hide = () => surface.hide()
+    this.#updates = updates
+    this.#minAttention = surface.minAttention ?? 'prompt'
+    this.#show = notice => surface.show(notice)
+    this.#hide = () => surface.hide()
   }
 
-  shown: UpdateNotice | undefined
+  #shown: UpdateNotice | undefined
 
-  closed: string | undefined
+  #closed: string | undefined
 
-  syncing = false
+  #syncing = false
 
-  again = false
+  #again = false
 
-  reconcile = () => {
-    const state = this.updates.getState()
+  /** The state this surface should show, if any. */
+  #wanted = () => {
+    const state = this.#updates.getState()
 
-    const wanted =
-      state.attention !== 'none' &&
-      rank[state.attention] >= rank[this.minAttention]
-        ? state
-        : undefined
+    return state.attention !== 'none' &&
+      rank[state.attention] >= rank[this.#minAttention]
+      ? state
+      : undefined
+  }
 
+  #reconcile = () => {
+    const wanted = this.#wanted()
     const key = wanted && keyOf(wanted)
 
-    if (key !== this.closed) {
-      this.closed = undefined
+    if (key !== this.#closed) {
+      this.#closed = undefined
     }
 
-    if (!wanted || this.closed) {
-      return this.remove()
+    if (!wanted || this.#closed) {
+      return this.#remove()
     }
 
-    if (this.shown && keyOf(this.shown) === key) {
+    if (this.#shown && keyOf(this.#shown) === key) {
       return
     }
 
-    const notice = this.makeNotice(wanted)
-    this.shown = notice
+    const notice = this.#makeNotice(wanted)
+    this.#shown = notice
 
-    if (!safely('show', () => this.show(notice))) {
-      this.shown = undefined
-      safely('hide', this.hide)
+    if (!safely('show', () => this.#show(notice))) {
+      this.#shown = undefined
+      safely('hide', this.#hide)
     }
   }
 
-  remove = () => {
-    if (this.shown) {
-      this.shown = undefined
-      safely('hide', this.hide)
+  #remove = () => {
+    if (this.#shown) {
+      this.#shown = undefined
+      safely('hide', this.#hide)
     }
   }
 
-  close = (notice: UpdateNotice) => {
+  #close = (notice: UpdateNotice) => {
     if (notice.attention === 'passive') {
-      this.closed = keyOf(notice)
+      this.#closed = keyOf(notice)
     } else if (notice.attention === 'urgent') {
-      this.shown = undefined
-    } else if (this.updates.dismiss()) {
-      this.closed = keyOf(this.updates.getState())
+      this.#shown = undefined
+    } else if (this.#updates.dismiss()) {
+      this.#closed = keyOf(this.#updates.getState())
     }
   }
 
-  makeNotice = (
+  #makeNotice = (
     state: Exclude<UpdateState, { attention: 'none' }>,
   ): UpdateNotice => {
     const notice: UpdateNotice = Object.freeze<UpdateNotice>({
       ...state,
-      refresh: () => this.updates.refresh(),
+      refresh: () => this.#updates.refresh(),
       close: () => {
-        if (this.shown === notice) {
-          this.sync(() => this.close(notice))
+        if (this.#shown === notice) {
+          this.#sync(() => this.#close(notice))
         }
       },
     })
@@ -148,45 +151,45 @@ class SurfaceConnection {
     return notice
   }
 
-  sync = (change?: () => void) => {
-    if (this.syncing) {
+  #sync = (change?: () => void) => {
+    if (this.#syncing) {
       change?.()
-      this.again = true
+      this.#again = true
 
       return
     }
 
-    this.syncing = true
+    this.#syncing = true
 
     try {
       change?.()
       let passes = 0
 
       do {
-        this.again = false
-        this.reconcile()
-      } while (this.again && ++passes < MAX_PASSES)
+        this.#again = false
+        this.#reconcile()
+      } while (this.#again && ++passes < MAX_PASSES)
 
-      if (this.again) {
+      if (this.#again) {
         console.error(
           '[usher] update surface keeps re-triggering updates; stopped after',
           MAX_PASSES,
         )
       }
     } finally {
-      this.again = false
-      this.syncing = false
+      this.#again = false
+      this.#syncing = false
     }
   }
 
   connect = () => {
-    const unsubscribe = this.updates.subscribe(() => this.sync())
-    this.sync()
+    const unsubscribe = this.#updates.subscribe(() => this.#sync())
+    this.#sync()
 
     return () => {
       unsubscribe()
-      this.closed = undefined
-      this.remove()
+      this.#closed = undefined
+      this.#remove()
     }
   }
 }

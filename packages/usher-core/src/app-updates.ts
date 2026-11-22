@@ -84,140 +84,140 @@ function notifyAll(listeners: ReadonlySet<{ listener: () => void }>) {
 }
 
 export class AppUpdatesStore implements AppUpdates {
-  readonly running: BuildFacts
-  readonly env: Environment
-  readonly thresholds: Thresholds
-  readonly clock: ReturnType<typeof createServerClock>
-  readonly dismissal: ReturnType<typeof createPromptDismissal>
-  readonly refreshes: ReturnType<typeof createRefresh>
-  readonly latestBuild: LatestBuild
-  readonly deadline: ReturnType<typeof createVisibleTimer>
-  readonly listeners = new Set<{ listener: () => void }>()
-  state: UpdateState = { attention: 'none', reason: 'unknown' }
-  stickyUrgency: StickyUrgency | undefined
-  outdatedSince: number | undefined
-  stopListening: (() => void) | undefined
+  readonly #running: BuildFacts
+  readonly #env: Environment
+  readonly #thresholds: Thresholds
+  readonly #clock: ReturnType<typeof createServerClock>
+  readonly #dismissal: ReturnType<typeof createPromptDismissal>
+  readonly #refreshes: ReturnType<typeof createRefresh>
+  readonly #latestBuild: LatestBuild
+  readonly #deadline: ReturnType<typeof createVisibleTimer>
+  readonly #listeners = new Set<{ listener: () => void }>()
+  #state: UpdateState = { attention: 'none', reason: 'unknown' }
+  #stickyUrgency: StickyUrgency | undefined
+  #outdatedSince: number | undefined
+  #stopListening: (() => void) | undefined
 
   constructor(options: AppUpdatesOptions, env: Environment) {
     const resolved = resolveOptions(options)
-    this.running = resolved.running
-    this.env = env
-    this.thresholds = resolved
-    this.clock = createServerClock(env)
-    this.deadline = createVisibleTimer(env, this.evaluate)
-    this.dismissal = createPromptDismissal(resolved.storageKey, env)
-    this.refreshes = createRefresh(options.reload ?? (() => env.reload()))
-    this.latestBuild = new LatestBuild({
+    this.#running = resolved.running
+    this.#env = env
+    this.#thresholds = resolved
+    this.#clock = createServerClock(env)
+    this.#deadline = createVisibleTimer(env, this.#evaluate)
+    this.#dismissal = createPromptDismissal(resolved.storageKey, env)
+    this.#refreshes = createRefresh(options.reload ?? (() => env.reload()))
+    this.#latestBuild = new LatestBuild({
       versionUrl: resolved.versionUrl,
       pollInterval: resolved.pollInterval,
       env,
-      clock: this.clock,
+      clock: this.#clock,
     })
   }
 
-  decide = (dismissedAt = this.dismissal.get()): Decision | undefined => {
-    const latest = this.latestBuild.get()
+  #decide = (dismissedAt = this.#dismissal.get()): Decision | undefined => {
+    const latest = this.#latestBuild.get()
 
     return latest
       ? resolveAttention({
-          running: this.running,
+          running: this.#running,
           latest,
-          now: this.clock.now(),
-          stickyUrgency: this.stickyUrgency,
-          outdatedSince: this.outdatedSince,
+          now: this.#clock.now(),
+          stickyUrgency: this.#stickyUrgency,
+          outdatedSince: this.#outdatedSince,
           dismissedAt,
-          thresholds: this.thresholds,
+          thresholds: this.#thresholds,
         })
       : undefined
   }
 
-  apply = (decision: Decision) => {
-    this.stickyUrgency = decision.stickyUrgency
-    this.outdatedSince = decision.outdatedSince
-    this.scheduleDeadline(decision.nextAt)
-    this.publish(decision.state)
+  #apply = (decision: Decision) => {
+    this.#stickyUrgency = decision.stickyUrgency
+    this.#outdatedSince = decision.outdatedSince
+    this.#scheduleDeadline(decision.nextAt)
+    this.#publish(decision.state)
   }
 
-  evaluate = () => {
-    const decision = this.decide()
+  #evaluate = () => {
+    const decision = this.#decide()
 
     if (decision) {
-      this.apply(decision)
+      this.#apply(decision)
     }
   }
 
-  scheduleDeadline = (nextAt: number | undefined) => {
-    if (!this.stopListening) {
+  #scheduleDeadline = (nextAt: number | undefined) => {
+    if (!this.#stopListening) {
       return
     }
 
     if (nextAt === undefined) {
-      this.deadline.cancel()
+      this.#deadline.cancel()
     } else {
-      this.deadline.arm(nextAt - this.clock.now())
+      this.#deadline.arm(nextAt - this.#clock.now())
     }
   }
 
-  publish = (next: Decision['state']) => {
-    if (sameState(next, this.state)) {
+  #publish = (next: Decision['state']) => {
+    if (sameState(next, this.#state)) {
       return
     }
 
-    this.state = next
-    notifyAll(this.listeners)
+    this.#state = next
+    notifyAll(this.#listeners)
   }
 
-  start = () => {
-    this.stopListening = this.env.onVisibilityChange(this.evaluate)
-    this.dismissal.start(this.evaluate)
-    this.latestBuild.start(this.evaluate)
-    this.evaluate()
+  #start = () => {
+    this.#stopListening = this.#env.onVisibilityChange(this.#evaluate)
+    this.#dismissal.start(this.#evaluate)
+    this.#latestBuild.start(this.#evaluate)
+    this.#evaluate()
   }
 
-  stop = () => {
-    this.stopListening?.()
-    this.stopListening = undefined
-    this.deadline.cancel()
-    this.latestBuild.stop()
-    this.dismissal.stop()
+  #stop = () => {
+    this.#stopListening?.()
+    this.#stopListening = undefined
+    this.#deadline.cancel()
+    this.#latestBuild.stop()
+    this.#dismissal.stop()
   }
 
-  getState = () => this.state
+  getState = () => this.#state
 
   subscribe = (listener: () => void) => {
     const entry = { listener }
-    this.listeners.add(entry)
+    this.#listeners.add(entry)
 
-    if (this.listeners.size === 1) {
-      this.start()
+    if (this.#listeners.size === 1) {
+      this.#start()
     }
 
     return () => {
-      if (this.listeners.delete(entry) && this.listeners.size === 0) {
-        this.stop()
+      if (this.#listeners.delete(entry) && this.#listeners.size === 0) {
+        this.#stop()
       }
     }
   }
 
   addRefreshBlocker = (blocker: RefreshBlocker) =>
-    this.refreshes.addBlocker(blocker)
+    this.#refreshes.addBlocker(blocker)
 
-  refresh = () => this.refreshes.request()
+  refresh = () => this.#refreshes.request()
 
   dismiss = (): boolean => {
-    if (this.state.attention !== 'prompt') {
+    if (this.#state.attention !== 'prompt') {
       return false
     }
 
-    const at = this.clock.now()
-    const decision = this.decide(at)
+    const at = this.#clock.now()
+    const decision = this.#decide(at)
 
     if (decision?.state.reason !== 'dismissed') {
       return false
     }
 
-    this.dismissal.record(at)
-    this.apply(decision)
+    this.#dismissal.record(at)
+    this.#apply(decision)
 
     return true
   }
