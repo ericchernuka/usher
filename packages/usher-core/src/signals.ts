@@ -22,7 +22,7 @@ export interface Moment extends Builds {
   now: number
 }
 
-export interface SignalDefinition<Memory, Claimed extends Claim> {
+interface SignalDefinition<Memory, Claimed extends Claim> {
   initial: Memory
   observe(memory: Memory, builds: Builds): Memory
   ask(memory: Memory, moment: Moment): Asked<Claimed> | undefined
@@ -35,7 +35,7 @@ export interface Signal<Claimed extends Claim> {
   }
 }
 
-export function defineSignal<Memory, const Claimed extends Claim>(
+function defineSignal<Memory, const Claimed extends Claim>(
   definition: SignalDefinition<Memory, Claimed>,
 ): Signal<Claimed> {
   return {

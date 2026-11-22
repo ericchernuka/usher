@@ -8,37 +8,11 @@ import { createVersionCheck } from './version-check'
 
 export type { BuildFacts } from './build-facts'
 
-export type {
-  EscalationOptions,
-  PromptDismissalOptions,
-  RefreshOptions,
-  VersionCheckOptions,
-} from './options'
-
-export { createPromptDismissal, type PromptDismissal } from './prompt-dismissal'
-
 export type { Readable } from './readable'
 
-export {
-  createRefresh,
-  type Refresh,
-  type RefreshBlocker,
-  type RefreshOutcome,
-} from './refresh'
+export type { Refresh, RefreshBlocker, RefreshOutcome } from './refresh'
 
-export {
-  defineSignal,
-  escalation,
-  forcedUpdate,
-  rollback,
-  type Asked,
-  type Claim,
-  type Moment,
-  type Signal,
-  type SignalDefinition,
-} from './signals'
-
-export { createTab, type Tab } from './tab'
+export type { Tab } from './tab'
 
 export type {
   AppUpdates,
@@ -57,16 +31,9 @@ export {
   type UpdateNoticeParts,
 } from './update-notice'
 
-export {
-  createUpdateState,
-  type UpdateStateOf,
-  type UpdateStateParts,
-  type Updates,
-} from './update-state'
+export type { Updates } from './update-state'
 
 export { connectUpdateSurface, type UpdateSurface } from './update-surface'
-
-export { createVersionCheck } from './version-check'
 
 export function createAppUpdates(
   options: AppUpdatesOptions,

@@ -4,16 +4,16 @@ Usher keeps open tabs on a current build with as little disruption as possible. 
 
 The [glossary](GLOSSARY.md) defines the domain terms. The [architecture document](docs/Skew%20protection%20architecture.md) covers package ownership, internal modules, request handling and deployment.
 
-| Import                            | What it gives you                                                                         | Needs      |
-| --------------------------------- | ----------------------------------------------------------------------------------------- | ---------- |
-| `@rndsqr/usher-plugin/vite`       | `usher()`: writes `version.json`, embeds the build facts, runs a skew-protection adapter  | Vite       |
-| `@rndsqr/usher-plugin/adapter`    | `SkewProtectionAdapter` and its types, for writing an adapter for another host            | Nothing    |
-| `@rndsqr/usher-plugin/client`     | `createAppUpdates()` with the build facts filled in, and `runningBuild`                   | The plugin |
-| `@rndsqr/react-usher`             | `useUpdateState`, `useRefreshing`, `useRefreshBlocker`, `useUpdateNotice`, `UpdateNotice` | React      |
-| `@rndsqr/usher-cloudflare`        | `cloudflarePages()`, `cloudflareWorkers()`: adapters that serve old chunks from R2        | Cloudflare |
-| `@rndsqr/usher-cloudflare/worker` | `createAssetFallback()`: the same handler, for apps that own their Worker                 | Cloudflare |
-| `@rndsqr/usher-core`              | `createAppUpdates(options)`, `connectUpdateSurface()` and the behaviours they are made of | Nothing    |
-| `@rndsqr/usher-core/testing`      | `createTestTab()`: a tab with virtual time, for testing update UI                         | Nothing    |
+| Import                            | What it gives you                                                                                    | Needs      |
+| --------------------------------- | ---------------------------------------------------------------------------------------------------- | ---------- |
+| `@rndsqr/usher-plugin/vite`       | `usher()`: writes `version.json`, embeds the build facts, runs a skew-protection adapter             | Vite       |
+| `@rndsqr/usher-plugin/adapter`    | `SkewProtectionAdapter` and its types, for writing an adapter for another host                       | Nothing    |
+| `@rndsqr/usher-plugin/client`     | `createAppUpdates()` with the build facts filled in, and `runningBuild`                              | The plugin |
+| `@rndsqr/react-usher`             | `useUpdateState`, `useRefreshing`, `useRefreshBlocker`, `useUpdateNotice`, `UpdateNotice`            | React      |
+| `@rndsqr/usher-cloudflare`        | `cloudflarePages()`, `cloudflareWorkers()`: adapters that serve old chunks from R2                   | Cloudflare |
+| `@rndsqr/usher-cloudflare/worker` | `createAssetFallback()`: the same handler, for apps that own their Worker                            | Cloudflare |
+| `@rndsqr/usher-core`              | `createAppUpdates(options)`, `connectUpdateSurface()` and `createUpdateNotice()`, with no build tool | Nothing    |
+| `@rndsqr/usher-core/testing`      | `createTestTab()`: a tab with virtual time, for testing update UI                                    | Nothing    |
 
 ## Setup
 
@@ -335,68 +335,6 @@ import { UpdateNotice } from '@rndsqr/react-usher'
 ```
 
 `Root` renders its element only while there is a notice, with `data-attention` and `data-reason` for styling. Beside it, `Root` keeps two visually hidden live regions mounted, a `status` and an `alert`, and copies the notice's text into the one that matches `announce`, leaving out the text of buttons. A screen reader hears a prompt politely and an urgent notice assertively, once each. The regions stay mounted because a live region that is inserted together with its text is not reliably announced. For the same reason the text is set a tenth of a second after the region is emptied. `Refresh` is disabled, with `data-refreshing`, while a refresh is in flight. `Close` renders nothing at urgent. The parts ship no wording and no styles beyond hiding those two regions. They never move focus and never close on a timer. Any prop you pass to a part overrides its default.
-
-## Behaviours
-
-`createAppUpdates` is a preset. It is built from the same public pieces an app can compose itself:
-
-```ts
-import {
-  createPromptDismissal,
-  createRefresh,
-  createTab,
-  createUpdateState,
-  createVersionCheck,
-  escalation,
-  forcedUpdate,
-  rollback,
-} from '@rndsqr/usher-core'
-
-const tab = createTab()
-
-export const appUpdates = {
-  state: createUpdateState(tab, {
-    running,
-    latest: createVersionCheck(tab, { versionUrl: '/version.json' }),
-    signals: [
-      forcedUpdate(),
-      rollback(),
-      escalation({ promptAfter: 4 * HOUR }),
-    ],
-    dismissal: createPromptDismissal(tab),
-  }),
-  refresh: createRefresh(tab),
-}
-```
-
-| Behaviour                             | Holds                                                 |
-| ------------------------------------- | ----------------------------------------------------- |
-| `createVersionCheck(tab, options)`    | The latest build, polling and focus rechecks          |
-| `escalation(options)`                 | Outdated since; asks for passive, prompt, then urgent |
-| `rollback()`, `forcedUpdate()`        | Sticky urgency                                        |
-| `createPromptDismissal(tab, options)` | The dismissal time shared across tabs                 |
-| `createUpdateState(tab, parts)`       | The published update state and `dismiss()`            |
-| `createRefresh(tab, options)`         | Refresh blockers and the refresh in flight            |
-| `createUpdateNotice(parts, options)`  | The notice a surface should show, and its close rules |
-
-Each takes the options listed above for its part of the preset. The loudest signal wins, and the earlier one in the list wins a tie. Leave the preset only with a reason: without `rollback()`, for example, a tab does not notice a rollback.
-
-A signal is a reason to ask for a refresh, written as pure functions:
-
-```ts
-import { defineSignal } from '@rndsqr/usher-core'
-
-const retired = (versions: ReadonlyArray<string>) =>
-  defineSignal({
-    initial: false,
-    observe: (seen: boolean, { running }) =>
-      seen || versions.includes(running.version),
-    ask: seen =>
-      seen ? { claim: { attention: 'urgent', reason: 'retired' } } : undefined,
-  })
-```
-
-`observe` runs with the running and latest builds and returns what the signal remembers. `ask` returns the attention and reason it claims. It can add `changesAt`, the server time its answer may change, and a prompt claim needs `since`, the server time its prompt began, to be dismissable. The state's `reason` type is built from the signals, so `'retired'` appears in it and an exhaustive `switch` over `reason` stops compiling until it has copy for the new case.
 
 ## Testing update UI
 

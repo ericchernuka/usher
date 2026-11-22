@@ -1,6 +1,8 @@
 # Behaviour-first API: design
 
-Status: implemented. This is the design the client interface was rebuilt to, with the reasons for it. "Today" and "the store" below mean the interface it replaced. The [architecture document](Skew%20protection%20architecture.md) describes the modules, and [ADR 0012](adr/0012-behaviours-are-the-public-interface.md) records the decision.
+Status: implemented. This is the design the client interface was rebuilt to, with the reasons for it. "Today" and "the store" below mean the interface it replaced. The [architecture document](Skew%20protection%20architecture.md) describes the modules, and [ADR 0012](adr/0012-core-is-built-from-behaviours.md) records the decision.
+
+**What is public.** Core is built from the behaviours below, and it does not export all of them yet. An app gets `createAppUpdates()`, which returns the update state and the refresh as `{ state, refresh }`, plus `connectUpdateSurface()`, `createUpdateNotice()` and the test tab. The version check, the prompt dismissal, `createUpdateState`, `createTab`, the signals and `defineSignal` are internal. Nobody has written a custom signal or a custom composition, so their contracts are guesses, and an unexported guess can be corrected without a breaking release. Where this document shows an app composing behaviours or defining a signal, read it as what the internals allow and what a later release can open up.
 
 This document redesigns Usher's public interface around behaviours, in the manner of [UI SDK](https://ui-sdk.dev/). It keeps every feature the library has today and changes no decision rule. Domain terms are in the [glossary](../GLOSSARY.md).
 
@@ -322,8 +324,8 @@ This is not a bundle-size argument. Core is small and an app using the preset sh
 
 ## Costs
 
-- **More public surface.** Six methods and one function become eight factories and three contracts. `Signal`, `Claim` and `Readable` are compatibility promises from the day they ship, and the freedom ADR 0004 protects for the environment is given up for those three shapes.
-- **Wrong compositions become possible.** An app can omit `rollback()` and miss a rollback, or order signals so a tie goes the other way. The store allows neither. The preset is the defence, and it should stay the documented default.
+- **More public surface, once it is opened.** Today the public additions are `Readable`, the notice and the test tab. Exporting the rest would make `Signal`, `Claim` and the factories compatibility promises from that day.
+- **Wrong compositions become possible, once apps can compose.** An app can omit `rollback()` and miss a rollback, or order signals so a tie goes the other way. The store allows neither. The preset is the defence, and it should stay the documented default.
 - **Checks that span behaviours move up.** Escalation and the dismissal no longer see each other's options, so a rule such as "`promptSnooze` needs a prompt level" is enforced by the preset and not by a hand-made composition.
 - **Indirection for the reader.** `resolveAttention` can be read top to bottom in one screen. The same rules across three signals and a combining step need the five-step list above to follow.
 
@@ -350,6 +352,7 @@ The glossary gains **Behaviour**, **Signal** and **Claim**.
 - **`/testing` ships with the first release.**
 - **The parts carry the accessibility defaults.** Headless covers markup and styling. Roles, focus and announcement rules come from the notice and can be overridden.
 - **Devtools do not change.** See [Build and edge](#build-and-edge).
+- **The composition stays internal at first.** The handle, the notice and the test tab are public, because each fixed a problem apps already had. Signals and the other factories wait for a real second use.
 
 ## What changed while building it
 

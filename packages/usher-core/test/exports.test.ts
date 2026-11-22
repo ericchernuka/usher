@@ -6,16 +6,7 @@ test('given the package entry, then it exports exactly the documented functions'
   expect(Object.keys(core).toSorted()).toEqual([
     'connectUpdateSurface',
     'createAppUpdates',
-    'createPromptDismissal',
-    'createRefresh',
-    'createTab',
     'createUpdateNotice',
-    'createUpdateState',
-    'createVersionCheck',
-    'defineSignal',
-    'escalation',
-    'forcedUpdate',
-    'rollback',
   ])
 })
 

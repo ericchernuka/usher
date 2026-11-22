@@ -109,7 +109,7 @@ The build-time threshold before which running builds require an urgent update. I
 _Avoid_: Deadline.
 
 **Behaviour**:
-One piece of the update library with a single job, such as the version check, the prompt dismissal or the refresh. Apps use them through a preset or compose them.
+One piece of the update library with a single job, such as the version check, the prompt dismissal or the refresh. `createAppUpdates` composes them, and apps read the update state and the refresh.
 _Avoid_: Store, which named the one object that used to do all of it.
 
 **Signal**:
