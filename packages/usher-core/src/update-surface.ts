@@ -36,6 +36,7 @@ class SurfaceConnection {
   readonly #show: (notice: UpdateNotice) => void
   readonly #hide: () => void
   #shown: UpdateNotice | undefined
+  #presented: UpdateNotice | undefined
   #syncing = false
   #again = false
 
@@ -56,18 +57,47 @@ class SurfaceConnection {
       return
     }
 
+    const presented = this.#present(wanted)
     this.#shown = wanted
+    this.#presented = presented
 
-    if (!safely('show', () => this.#show(wanted))) {
-      this.#shown = undefined
+    if (!safely('show', () => this.#show(presented))) {
+      this.#forget()
       this.#notice.discard(wanted)
       safely('hide', this.#hide)
     }
   }
 
+  #present = (source: UpdateNotice) => {
+    const presented: UpdateNotice = {
+      ...source,
+      close: () => {
+        if (this.#presented !== presented) {
+          return
+        }
+
+        if (source.closable) {
+          source.close()
+        } else {
+          this.#forget()
+          this.#sync()
+        }
+      },
+    }
+
+    Object.freeze(presented)
+
+    return presented
+  }
+
+  #forget = () => {
+    this.#shown = undefined
+    this.#presented = undefined
+  }
+
   #remove = () => {
     if (this.#shown) {
-      this.#shown = undefined
+      this.#forget()
       safely('hide', this.#hide)
     }
   }

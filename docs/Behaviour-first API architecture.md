@@ -96,12 +96,12 @@ The React parts read the same notice, so a declarative banner and an imperative 
 
 ## Headless, with the accessibility rules included
 
-The app owns the markup and the wording. It should not also have to own the accessibility rules, so the parts apply them, and a prop on a part overrides its default.
+The app owns the markup and the wording. It should not also have to own the accessibility rules, so the parts apply them.
 
 - `Root` renders its element only while there is a notice, with `data-attention` and `data-reason` for styling.
-- The React package keeps one `status` and one `alert` region per document, visually hidden and made when the first `Root` mounts. Each `Root` claims its notice's wording at the priority `announce` gives. A region holds one element per distinct wording claimed for it: new wording is added 100 ms after it is claimed, and wording nobody claims any more is removed at once, which a screen reader does not announce. Nothing is announced at passive.
-- The wording is the text inside `Root` that is seen on the page, without buttons, links, and anything hidden from assistive technology. `Root` watches its own subtree, its size, and `hidden` and `aria-hidden` above it, so a change of reason at the same attention, a message the app swaps in, or a notice being revealed is announced as well. A style rule elsewhere that reveals part of a notice without changing its size is not seen until the next change, because watching every class in the document would cost more than it is worth.
-- Claims are kept per `Root`, so one `Root` leaving does not silence another and cannot leave its wording behind, a polite and an assertive notice do not cancel each other, and the same wording from several `Root`s is announced once.
+- `Root` takes an `announcement` prop, a function from the notice to the wording a screen reader should hear. The package keeps one `status` and one `alert` region in the document, visually hidden and made when the first `Root` mounts, and each `Root` claims its wording at the priority `announce` gives. A region holds one element per distinct wording claimed for it: new wording is added 100 ms after it is claimed, and wording nobody claims any more is removed at once, which a screen reader does not announce. Nothing is announced at passive or for empty wording.
+- Claims are kept per `Root`, so one `Root` leaving does not silence another and cannot leave its wording behind, a polite and an assertive notice do not cancel each other, and the same wording at the same priority is announced once however many `Root`s give it.
+- The app gives the wording because only the app knows which of its text is the message. An earlier version read it out of the markup inside `Root`, and each review found another case it guessed wrong: text hidden by a style, by `inert` or inside a shadow root, words split across inline elements, a reveal it could not see. A prop has none of those cases, needs no observers, and leaves the caller's `ref` alone.
 - A part's own `onClick` runs before the part acts.
 - `Refresh` is disabled, with `data-refreshing`, while a refresh is in flight. `Close` renders nothing at urgent.
 - `Refresh` takes an `action`, following React's convention for Action props: it receives the refresh to call, runs in a transition the part starts, and keeps the button pending until it settles. Without one, a press refreshes outside any transition, because React holds overlapping transitions in a root pending until all their Actions complete and a slow reload should not do that to an app that did not ask for it.
@@ -115,7 +115,7 @@ Two libraries were read for how they do this and how they check it:
 - UI SDK keeps one polite and one assertive region per document, each with a role, `aria-live` and `aria-atomic`. To announce, it empties the region and sets the text 100 ms later, because a screen reader only notices text that changes after the region exists, and the same text twice only after it was cleared. Its toast announces the title and description and not the actions. It checks announcements with the same virtual screen reader.
 - Base UI's toast viewport is a polite region that is already mounted when a toast is added. A high-priority toast is repeated in a visually hidden `role="alert"`. Its tests assert roles and ARIA attributes and do not record speech.
 
-`Root` follows UI SDK on all three points. Neither library automates a real screen reader, and neither do we. The announcement tests run in Chromium and WebKit against a virtual screen reader, which follows the specification and is not VoiceOver, NVDA or JAWS. This is a best guess that matches current practice.
+`Root` follows UI SDK in keeping regions mounted, delaying new wording by 100 ms and announcing the message without its controls, and Base UI in not making the region atomic, so wording that is added is announced on its own. Neither library automates a real screen reader, and neither do we. The announcement tests run in Chromium and WebKit against a virtual screen reader, which follows the specification and is not VoiceOver, NVDA or JAWS. This is a best guess that matches current practice.
 
 ## Why this shape
 
@@ -123,7 +123,7 @@ Two libraries were read for how they do this and how they check it:
 
 - The quick start is still one line, and the hooks kept their names.
 - A call site says what it depends on. `useRefreshBlocker(appUpdates.refresh, isDirty)` cannot touch update state.
-- A subscription means one thing, so no listener has to compare what it reads.
+- A subscription means one thing. A listener on the state or the refresh runs only when that value changed. The notice is the exception: it tells its listeners about every state change, including one that leaves the notice as it was, which is what lets a surface whose `show` threw try again.
 - An app tests its update UI against the real rules with `createTestTab()`.
 
 ### User experience
@@ -163,13 +163,13 @@ When the first real need arrives, build it inside core, then export the contract
 
 ## Decisions this touches
 
-| ADR                                | Effect                                                                                                                                  |
-| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| 0001 One `outdated` reason         | Stands. Each signal owns its reasons.                                                                                                   |
-| 0003 No selector in the React hook | Stands. Each readable is narrow, so there is nothing to select from. The package now holds one piece of module state, the live regions. |
-| 0004 Environment is internal       | Stands. `/testing` promises two driver methods and not the seam.                                                                        |
-| 0005 Escalate from outdated since  | Stands. Outdated since moved from the store into escalation.                                                                            |
-| 0007 Forced-update cutoff          | Stands, inside the sticky urgency signal.                                                                                               |
-| 0010 Classes with `#private`       | Stands for the update state, the notice and the surface connection.                                                                     |
-| 0011 Refreshing is store state     | Superseded in part by ADR 0012. Check problems stay a callback.                                                                         |
-| 0002, 0006, 0008, 0009             | Untouched.                                                                                                                              |
+| ADR                                | Effect                                                                                                                                                     |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0001 One `outdated` reason         | Stands. Each signal owns its reasons.                                                                                                                      |
+| 0003 No selector in the React hook | Stands. Each readable is narrow, so there is nothing to select from. The package now holds module state for the live regions and what is claimed for them. |
+| 0004 Environment is internal       | Stands. `/testing` promises two driver methods and not the seam.                                                                                           |
+| 0005 Escalate from outdated since  | Stands. Outdated since moved from the store into escalation.                                                                                               |
+| 0007 Forced-update cutoff          | Stands, inside the sticky urgency signal.                                                                                                                  |
+| 0010 Classes with `#private`       | Stands for the update state, the notice and the surface connection.                                                                                        |
+| 0011 Refreshing is store state     | Superseded in part by ADR 0012. Check problems stay a callback.                                                                                            |
+| 0002, 0006, 0008, 0009             | Untouched.                                                                                                                                                 |
