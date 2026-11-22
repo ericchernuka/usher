@@ -10,7 +10,7 @@ import {
   type RefreshBlocker,
   type UpdateNotice,
 } from '@rndsqr/usher-core'
-import { useUpdateState, useRefreshBlocker } from '../src/index'
+import { useRefreshBlocker, useRefreshing, useUpdateState } from '../src/index'
 import { captureNavigations } from '../../usher-core/test/navigation'
 import { runningBuild, versionUrl } from './build-info.stub'
 
@@ -198,6 +198,43 @@ describe('useRefreshBlocker with a function', () => {
     expect(add).toHaveBeenCalledTimes(registrations)
     expect(await updates.refresh()).toBe('reloading')
     expect(navigations).toHaveLength(1)
+    await view.unmount()
+  })
+})
+
+describe('useRefreshing', () => {
+  it('disables a refresh control while the reload runs, and enables it again when the reload settles', async () => {
+    const reloaded = Promise.withResolvers<boolean>()
+
+    const updates = createCoreUpdates({
+      running: runningBuild,
+      versionUrl,
+      reload: () => reloaded.promise,
+    })
+
+    function RefreshButton() {
+      const refreshing = useRefreshing(updates)
+
+      return (
+        <button
+          type="button"
+          disabled={refreshing}
+          onClick={() => void updates.refresh()}
+        >
+          Refresh
+        </button>
+      )
+    }
+
+    const view = await render(<RefreshButton />)
+    const button = view.getByRole('button', { name: 'Refresh' })
+    await expect.element(button).toBeEnabled()
+
+    await button.click()
+    await expect.element(button).toBeDisabled()
+
+    reloaded.resolve(false)
+    await expect.element(button).toBeEnabled()
     await view.unmount()
   })
 })

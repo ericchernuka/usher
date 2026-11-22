@@ -61,3 +61,18 @@ export function useRefreshBlocker(
     })
   }, [updates, registered])
 }
+
+/**
+ * Whether a refresh is in flight, for disabling a refresh control while the
+ * reload runs. Unlike the update state it is not deferred, so the control
+ * responds to the click at once.
+ *
+ *   <button disabled={useRefreshing(appUpdates)} onClick={() => appUpdates.refresh()} />
+ */
+export function useRefreshing(updates: AppUpdates): boolean {
+  return useSyncExternalStore(
+    updates.subscribe,
+    updates.isRefreshing,
+    updates.isRefreshing,
+  )
+}

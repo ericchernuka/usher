@@ -39,6 +39,14 @@ _Avoid_: Build age, which counts from the running build's own build time and so 
 The elapsed server time since a tab became outdated. Escalation thresholds are measured in it.
 _Avoid_: Build age, session age.
 
+**Version check**:
+A tab's request for the build facts of the serving deployment. A check that gets no answer fails quietly.
+_Avoid_: Poll, which names only the checks made on a timer.
+
+**Check problem**:
+An answer to a version check that is not build facts, such as an error page. While it lasts, the tab cannot detect updates.
+_Avoid_: Network error, which is no answer at all.
+
 **Chunk**:
 A content-hashed JavaScript or CSS asset that a tab can request after its initial page load.
 

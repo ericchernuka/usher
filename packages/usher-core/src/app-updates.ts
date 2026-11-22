@@ -34,9 +34,9 @@ export interface AppUpdates {
    */
   getState: () => UpdateState
   /**
-   * Listen for state changes. Listeners run after the new state is readable, and
-   * one that throws does not stop the others. Each call is its own
-   * subscription, even with the same function.
+   * Listen for changes to the state and to `isRefreshing()`. Listeners run after
+   * the new value is readable, and one that throws does not stop the others.
+   * Each call is its own subscription, even with the same function.
    */
   subscribe: (listener: () => void) => () => void
   /**
@@ -46,6 +46,12 @@ export interface AppUpdates {
    * remembered: a later call tries again. Concurrent calls share one attempt.
    */
   refresh: () => Promise<RefreshOutcome>
+  /**
+   * Whether a refresh is in flight: `reload` has been called and has not
+   * settled. It is `false` again after every outcome, and a blocked refresh
+   * never makes it `true`.
+   */
+  isRefreshing: () => boolean
   /**
    * Dismiss the prompt for every tab. Returns `true` only when the state was
    * `prompt` and is now `passive` / `dismissed`. Otherwise it returns `false`
@@ -103,12 +109,16 @@ export class AppUpdatesStore implements AppUpdates {
     this.#clock = createServerClock(env)
     this.#deadline = createVisibleTimer(env, this.#evaluate)
     this.#dismissal = createPromptDismissal(resolved.storageKey, env)
-    this.#refreshes = createRefresh(options.reload ?? (() => env.reload()))
+    this.#refreshes = createRefresh(
+      options.reload ?? (() => env.reload()),
+      () => notifyAll(this.#listeners),
+    )
     this.#latestBuild = new LatestBuild({
       versionUrl: resolved.versionUrl,
       pollInterval: resolved.pollInterval,
       env,
       clock: this.#clock,
+      onProblem: options.onCheckProblem,
     })
   }
 
@@ -197,6 +207,8 @@ export class AppUpdatesStore implements AppUpdates {
     this.#refreshes.addBlocker(blocker)
 
   refresh = () => this.#refreshes.request()
+
+  isRefreshing = () => this.#refreshes.isRefreshing()
 
   dismiss = (): boolean => {
     if (this.#state.attention !== 'prompt') {

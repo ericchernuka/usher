@@ -72,11 +72,11 @@ Inside core, the store composes five sources, and dependencies point one way. No
 | `visible-timer.ts`    | One pending timer for its owner: the browser timer, the visibility subscription while armed, and the wait for a delay longer than a browser timer holds. |
 | `server-clock.ts`     | The offset between server time and monotonic time.                                                                                                       |
 | `prompt-dismissal.ts` | The shared dismissal timestamp, in memory and in localStorage, and the storage event subscription.                                                       |
-| `refresh.ts`          | Refresh blockers and the one refresh attempt that concurrent callers share.                                                                              |
+| `refresh.ts`          | Refresh blockers, the one refresh attempt that concurrent callers share, and whether it is in flight.                                                    |
 | `options.ts`          | Nothing. Validates the duration options and applies their defaults.                                                                                      |
 | `environment.ts`      | Nothing. Describes what core needs from a tab: clocks, timers, fetch, storage, visibility, focus and reload.                                             |
 
-`environment.ts` is the one internal seam. Its browser adapter is the only code that touches globals, and the tests replace it with a fake tab that has virtual time. It is not part of the public interface: an app that tests its own update UI can fake the five-method `AppUpdates` interface by hand.
+`environment.ts` is the one internal seam. Its browser adapter is the only code that touches globals, and the tests replace it with a fake tab that has virtual time. It is not part of the public interface: an app that tests its own update UI can fake the six-method `AppUpdates` interface by hand.
 
 Every source calls back into the store's single `evaluate()`. It reads the latest build, the server time and the dismissal, asks `attention.ts` for a decision, keeps sticky urgency, publishes, and sets the deadline timer. Snapshot identity stays stable while attention, reason, and the latest build facts remain unchanged.
 
@@ -88,11 +88,11 @@ A tab is outdated since the build time of the first build it saw supersede its o
 
 Hidden tabs keep no poll or deadline timer and catch up when visible. A pending request keeps its 30-second timeout and is aborted when the final subscriber leaves. Age evaluation continues on the deadline timer when network checks fail. The clock estimate, the last observed build and sticky urgency survive periods without subscribers.
 
-When a store receives a response that is not OK or not build facts as JSON, it logs one warning naming the version URL, and stays quiet until a valid response arrives. Network errors and timeouts stay silent. Timestamps in the file must be ISO 8601 with a time zone, and fields the store does not know are dropped.
+When a store receives a response that is not OK or not build facts as JSON, it logs one warning naming the version URL, passes the same sentence to the app's `onCheckProblem` if there is one, and stays quiet until a valid response arrives. Network errors and timeouts stay silent. Timestamps in the file must be ISO 8601 with a time zone, and fields the store does not know are dropped.
 
 `prompt-dismissal.ts` stores `{ "dismissedAt": <server time in ms> }` under `<storageKey>:prompt-dismissal`. Every tab of the app reads it, across releases, so the format is a contract. The latest dismissal wins. Dismissal quiets tabs whose prompt threshold had already started. It never quiets urgent attention. Without an explicit prompt snooze, dismissal lasts until urgent starts; if urgent is disabled, it has no expiry. Blocked storage keeps a dismissal for the current tab.
 
-`refresh.ts` runs blockers synchronously, and a throwing blocker prevents the refresh. A refresh resolves `reloading`, `blocked` or `declined`, keeps no memory of the outcome, and can always be retried. The app can supply a reload function to send the document load through its router.
+`refresh.ts` runs blockers synchronously, and a throwing blocker prevents the refresh. A refresh resolves `reloading`, `blocked` or `declined`, keeps no memory of the outcome, and can always be retried. While `reload` is running the store reports a refresh in flight and tells subscribers when that starts and ends. The app can supply a reload function to send the document load through its router.
 
 `connectUpdateSurface` connects an imperative update surface to the store. It handles attention thresholds, notices that are no longer shown, and surface callbacks during programmatic closure. Closing an urgent notice shows it again. A passive surface can be closed locally until its attention or reason changes.
 

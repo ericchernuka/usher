@@ -12,5 +12,5 @@ Core reads clocks, timers, fetch, storage, visibility, focus and reload through 
 
 - The seam can change shape freely. It already differs from its first design: timers return a cancel function, and a base URL was added.
 - There are two adapters, the browser and the test fake, so the seam is real, but both live in this repository.
-- Apps that test their update UI fake `AppUpdates`, which has five methods, instead of faking a browser.
+- Apps that test their update UI fake `AppUpdates`, which has six methods, instead of faking a browser.
 - Running outside a browser tab is not supported. If that becomes a goal, exporting the seam is the way in, and its shape then becomes a compatibility promise.
