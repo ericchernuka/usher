@@ -108,6 +108,17 @@ _Avoid_: Revert, which can be a new commit.
 The build-time threshold before which running builds require an urgent update. It names a build time, not a deadline, so it is never later than the build that declares it.
 _Avoid_: Deadline.
 
+**Behaviour**:
+One piece of the update library with a single job, such as the version check, the prompt dismissal or the refresh. Apps use them through a preset or compose them.
+_Avoid_: Store, which named the one object that used to do all of it.
+
+**Signal**:
+A reason to ask for a refresh, such as escalation, a rollback or a forced update. It remembers what it has seen and claims an attention.
+_Avoid_: Rule, trigger.
+
+**Claim**:
+The attention and reason a signal asks for at one moment. The loudest claim becomes the update state.
+
 **Update surface**:
 The app's presentation of attention, such as a toast, banner, or update button.
 _Avoid_: Prompt when the attention level is not meant.

@@ -1,6 +1,6 @@
-# Behaviour-first API: architecture proposal
+# Behaviour-first API: design
 
-Status: proposal. Nothing here is implemented. The [architecture document](Skew%20protection%20architecture.md) describes the code as it is.
+Status: implemented. This is the design the client interface was rebuilt to, with the reasons for it. "Today" and "the store" below mean the interface it replaced. The [architecture document](Skew%20protection%20architecture.md) describes the modules, and [ADR 0012](adr/0012-behaviours-are-the-public-interface.md) records the decision.
 
 This document redesigns Usher's public interface around behaviours, in the manner of [UI SDK](https://ui-sdk.dev/). It keeps every feature the library has today and changes no decision rule. Domain terms are in the [glossary](../GLOSSARY.md).
 
@@ -60,32 +60,26 @@ This is the "subscription per fact" branch of ADR 0011. Each readable is narrow,
 ### Tab
 
 ```ts
-const tab = createTab({ running })
+const tab = createTab()
 ```
 
-A tab holds the running build, the server clock and the environment. Its only public member is `running`. Behaviours made by core reach the clock and the environment through it. [ADR 0004](adr/0004-environment-is-internal.md) stands: the environment is still not exported.
+A tab holds the server clock and the environment. Its only public member is `now()`, the server time. Behaviours made by core reach the environment through it. [ADR 0004](adr/0004-environment-is-internal.md) stands: the environment is still not exported.
 
 ### Signal
 
 A signal is a reason to ask for a refresh. It is a description with pure functions, and it performs no effects, the same bargain [ADR 0002](adr/0002-adapters-return-data.md) struck for adapters.
 
 ```ts
-type Claim =
-  | { attention: 'passive' | 'urgent'; reason: string }
-  | { attention: 'prompt'; reason: string; since: number }
-
 const rollback = () =>
   defineSignal({
-    name: 'rollback',
-    // What this signal remembers. Kept by the update state until the tab reloads.
     initial: false,
     observe: (seen: boolean, builds) => seen || isRollback(builds),
-    claim: seen =>
-      seen ? { attention: 'urgent', reason: 'rollback' } : undefined,
+    ask: seen =>
+      seen ? { claim: { attention: 'urgent', reason: 'rollback' } } : undefined,
   })
 ```
 
-`observe` runs when the latest build changes and returns the signal's memory. `claim` reads that memory, the builds and the server time, and returns the attention this signal asks for, with an optional `changesAt` for when its answer may differ. A prompt claim carries `since`, the server time its prompt level began, which is what a dismissal is compared with.
+`initial` is what the signal remembers at first, and the update state keeps that memory until the tab reloads. `observe` runs with the running and latest builds and returns the memory. `ask` reads the memory, the builds and the server time, and returns the claim: the attention and reason this signal asks for. Beside the claim it can return `changesAt`, the server time its answer may differ, and `since`, the server time a prompt began. A dismissal is compared with `since`, so a prompt claim without one cannot be dismissed.
 
 Each observed fact gets one owner. Today the store keeps sticky urgency and outdated since on behalf of a function that receives them back as arguments. Here `rollback` owns "this tab saw a rollback" and `escalation` owns outdated since.
 
@@ -108,6 +102,7 @@ Naming follows what the code already does. `create*` makes something stateful th
 
 ```ts
 const state = createUpdateState(tab, {
+  running,
   latest,
   signals: [
     forcedUpdate(),
@@ -173,23 +168,21 @@ This is the half of `SurfaceConnection` that decides what should be shown: the a
 
 `announce` says how a screen reader should hear the notice: `'off'` at passive, `'polite'` at prompt and `'assertive'` at urgent. It is on the notice, and not only in the React parts, so an imperative surface can hand it to a toast library that owns its own live region.
 
-`connectUpdateSurface(notice, surface)` becomes a driver over a notice. The surface is `show` and `hide` and nothing else, because `minAttention` now belongs to the notice. The driver keeps the parts that exist because imperative libraries misbehave: showing an urgent notice again after the library removed it, the limit of five passes, and isolating a surface that throws.
+`connectUpdateSurface(appUpdates, surface)` keeps its signature and becomes a driver over a notice it makes from the surface's `minAttention`. The driver keeps the parts that exist because imperative libraries misbehave: showing an urgent notice again after the library removed it, the limit of five passes, and isolating a surface that throws.
 
 ## The preset
 
 ```ts
-export function createAppUpdates(options: AppUpdatesOptions) {
-  const tab = createTab({ running: options.running })
-  const latest = createVersionCheck(tab, options)
-  const dismissal = createPromptDismissal(tab, options)
-
-  const state = createUpdateState(tab, {
-    latest,
-    signals: [forcedUpdate(), rollback(), escalation(options)],
-    dismissal,
-  })
-
-  return { state, refresh: createRefresh(tab, options) }
+export function createAppUpdates(options, tab = createTab()) {
+  return {
+    state: createUpdateState(tab, {
+      running: options.running,
+      latest: createVersionCheck(tab, options),
+      signals: [forcedUpdate(), rollback(), escalation(options)],
+      dismissal: createPromptDismissal(tab, options),
+    }),
+    refresh: createRefresh(tab, options),
+  }
 }
 ```
 
@@ -231,18 +224,19 @@ Headless means the app owns the markup. It should not also have to own the acces
 - A notice is announced once. The behaviour makes a new notice only when attention or reason changes, so a re-render does not repeat it.
 - The parts never move focus. A notice must not interrupt typing, at any attention.
 - No part closes a notice on a timer.
-- `Close` has no default label, since wording is the app's. It warns in development when it has neither children nor an `aria-label`.
+- `Close` has no default label, since wording is the app's.
 
-Whether a `status` region mounted together with its content is announced by every screen reader has to be tested in step 4 of the sequence. If it is not, `Root` keeps an empty region mounted and the rest of the design stands.
+Whether a `status` region mounted together with its content is announced by every screen reader has not been tested with one. If it is not, `Root` keeps an empty region mounted and the rest of the design stands.
 
 ## Testing
 
 `@rndsqr/usher-core/testing` exports a tab with virtual time for apps and for people writing signals:
 
 ```ts
-const tab = createTestTab({ running })
+const tab = createTestTab()
 tab.deploy(nextBuild) // what the version URL now answers
-tab.advance(12 * HOUR)
+const appUpdates = createAppUpdates({ running, versionUrl }, tab)
+await tab.advance(12 * HOUR)
 ```
 
 An app can then test its notice against the real behaviours, where today it fakes six methods by hand and re-encodes the rules in the fake. The fake environment stays private. Only these driver methods become a promise. A signal needs none of this: it is tested as function calls.
@@ -253,7 +247,7 @@ No change is proposed, and the reasons are worth stating so the idea is not appl
 
 - The adapter contract is already data in, files out (ADR 0002), and the bundler is already a subpath ([ADR 0008](adr/0008-bundler-is-a-subpath.md)).
 - `createAssetFallback` could be split into "ask the current deployment" and "ask the chunk archive", with R2 as one archive among several. There is one archive today. ADR 0008 declined a bundler abstraction for the same reason: a seam with one adapter is a guess. [ADR 0006](adr/0006-inline-function-source-text.md) also needs the handler to be one self-contained function so generated workers can inline it, which composition from imported pieces would break.
-- Simulated deploys keep their four modes. A signal reads only build facts, and `version.json` carries only the fields core knows, so the four modes already reach everything a custom signal can observe. A custom signal is exercised in tests with `tab.deploy(facts)`. Devtools need a new mode only once a signal can read an outside fact.
+- Simulated deploys keep their four modes. A signal reads only build facts, and `version.json` carries only the fields core knows, so the four modes already reach everything a custom signal can observe. A custom signal is exercised in tests with `tab.deploy(build)`. Devtools need a new mode only once a signal can read an outside fact.
 
 ## Where every current feature lives
 
@@ -328,19 +322,19 @@ This is not a bundle-size argument. Core is small and an app using the preset sh
 
 ## Decisions this touches
 
-| ADR                                | Effect                                                                                              |
-| ---------------------------------- | --------------------------------------------------------------------------------------------------- |
-| 0001 One `outdated` reason         | Stands. Each signal owns its reasons.                                                               |
-| 0002 Adapters return data          | Stands, and signals follow the same rule.                                                           |
-| 0003 No selector in the React hook | Stands. Narrow readables remove the remaining case for one.                                         |
-| 0004 Environment is internal       | Stands. `/testing` promises a few driver methods and not the seam.                                  |
-| 0005 Escalate from outdated since  | Stands. Outdated since moves from the store into `escalation()`.                                    |
-| 0007 Forced-update cutoff          | Stands, inside `forcedUpdate()`.                                                                    |
-| 0010 Classes with `#private`       | Stands for update state and the notice.                                                             |
-| 0011 Refreshing is store state     | Superseded in part, by the route it names: a subscription per fact. Check problems stay a callback. |
-| 0006, 0008, 0009                   | Untouched.                                                                                          |
+| ADR                                | Effect                                                                                                          |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| 0001 One `outdated` reason         | Stands. Each signal owns its reasons.                                                                           |
+| 0002 Adapters return data          | Stands, and signals follow the same rule.                                                                       |
+| 0003 No selector in the React hook | Stands. Narrow readables remove the remaining case for one.                                                     |
+| 0004 Environment is internal       | Stands. `/testing` promises a few driver methods and not the seam.                                              |
+| 0005 Escalate from outdated since  | Stands. Outdated since moves from the store into `escalation()`.                                                |
+| 0007 Forced-update cutoff          | Stands, inside `forcedUpdate()`.                                                                                |
+| 0010 Classes with `#private`       | Stands for update state and the notice.                                                                         |
+| 0011 Refreshing is store state     | Superseded in part by ADR 0012, by the route it names: a subscription per fact. Check problems stay a callback. |
+| 0006, 0008, 0009                   | Untouched.                                                                                                      |
 
-If the proposal is accepted, ADR 0011 gets a successor and the glossary gains **Behaviour**, **Signal** and **Claim**.
+The glossary gains **Behaviour**, **Signal** and **Claim**.
 
 ## Decided
 
@@ -350,11 +344,11 @@ If the proposal is accepted, ADR 0011 gets a successor and the glossary gains **
 - **The parts carry the accessibility defaults.** Headless covers markup and styling. Roles, focus and announcement rules come from the notice and can be overridden.
 - **Devtools do not change.** See [Build and edge](#build-and-edge).
 
-## Sequence
+## What changed while building it
 
-Each step leaves the test suite passing.
-
-1. Add `Readable`, `Tab` and `defineSignal`. Split `resolveAttention` into the three signals and the combining step inside `createUpdateState`. The model tests are the safety net, since they assert on published state and never on the function.
-2. Give refresh and the prompt dismissal their own subscriptions, and split `SurfaceConnection` into the notice and its driver.
-3. Replace the store with the preset and delete `AppUpdatesStore`. Move the hooks, examples and README to `appUpdates.state` and `appUpdates.refresh`.
-4. Add `/testing`, then `useUpdateNotice` and the `UpdateNotice` parts, tested through it.
+- **The tab does not hold the running build.** Only the update state reads it, so `running` is one of its parts and `createTab()` takes nothing. This is also what lets a test tab be passed to `createAppUpdates(options, tab)`.
+- **A signal's `ask` returns the claim beside its timing**, as `{ claim, since, changesAt }`. The state is the claim plus the latest build, and keeping them apart lets the state type be built from the signals without a type assertion. Signals have no `name`, because nothing read it.
+- **`connectUpdateSurface` kept `(appUpdates, surface)`** with `minAttention` on the surface. One call is simpler for an app than making a notice first, and `createUpdateNotice` is there for a declarative surface.
+- **The preset's state type is the hand-written `UpdateState` union.** A custom composition gets an inferred type. The two are assignable to each other, and the written one reads better in an editor.
+- **`UpdateNotice.Close` does not warn about a missing label.** A development-only warning needs a bundler flag, which [ADR 0003](adr/0003-no-selector-in-react-hook.md) removed from the React package.
+- **The notice tells its subscribers about every state change**, including one that leaves the notice as it was. That is what retries a surface whose `show` threw.

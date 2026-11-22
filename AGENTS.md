@@ -4,9 +4,9 @@ Before designing, changing, or reviewing code, read [CODING_STANDARDS.md](CODING
 
 ## Repo map
 
-- `packages/usher-core/`: build-tool-independent update state, polling, refresh, and update surfaces.
+- `packages/usher-core/`: the build-tool-independent behaviours (version check, signals, dismissal, update state, refresh, update notice), the `createAppUpdates` preset, and the `/testing` tab.
 - `packages/usher-plugin/`: the Vite plugin, virtual build metadata, client setup, and the skew-protection adapter contract.
-- `packages/react-usher/`: React hooks for reading update state and blocking explicit refreshes.
+- `packages/react-usher/`: React hooks that each read one behaviour, and headless update notice parts.
 - `packages/usher-cloudflare/`: Pages and Workers adapters, the asset fallback handler, and workerd tests.
 - `examples/react/cloudflare-pages/` and `examples/react/cloudflare-workers/`: sample Vite apps for the two hosting targets.
 - `docs/`: the [SPA one-pager](docs/Skew%20protection%20for%20the%20SPA%20one-pager.md) defines the product goals; the architecture document describes the implementation.
