@@ -4,15 +4,16 @@ Usher keeps open tabs on a current build with as little disruption as possible. 
 
 The [glossary](GLOSSARY.md) defines the domain terms. The [architecture document](docs/Skew%20protection%20architecture.md) covers package ownership, internal modules, request handling and deployment.
 
-| Import                            | What it gives you                                                                        | Needs      |
-| --------------------------------- | ---------------------------------------------------------------------------------------- | ---------- |
-| `@rndsqr/usher-plugin/vite`       | `usher()`: writes `version.json`, embeds the build facts, runs a skew-protection adapter | Vite       |
-| `@rndsqr/usher-plugin/adapter`    | `SkewProtectionAdapter` and its types, for writing an adapter for another host           | Nothing    |
-| `@rndsqr/usher-plugin/client`     | `createAppUpdates()` with the build facts filled in, and `runningBuild`                  | The plugin |
-| `@rndsqr/react-usher`             | `useUpdateState(updates)`, `useRefreshBlocker(updates, shouldBlock)`                     | React      |
-| `@rndsqr/usher-cloudflare`        | `cloudflarePages()`, `cloudflareWorkers()`: adapters that serve old chunks from R2       | Cloudflare |
-| `@rndsqr/usher-cloudflare/worker` | `createAssetFallback()`: the same handler, for apps that own their Worker                | Cloudflare |
-| `@rndsqr/usher-core`              | `createAppUpdates(options)` and `connectUpdateSurface()`, with no build tool             | Nothing    |
+| Import                            | What it gives you                                                                         | Needs      |
+| --------------------------------- | ----------------------------------------------------------------------------------------- | ---------- |
+| `@rndsqr/usher-plugin/vite`       | `usher()`: writes `version.json`, embeds the build facts, runs a skew-protection adapter  | Vite       |
+| `@rndsqr/usher-plugin/adapter`    | `SkewProtectionAdapter` and its types, for writing an adapter for another host            | Nothing    |
+| `@rndsqr/usher-plugin/client`     | `createAppUpdates()` with the build facts filled in, and `runningBuild`                   | The plugin |
+| `@rndsqr/react-usher`             | `useUpdateState`, `useRefreshing`, `useRefreshBlocker`, `useUpdateNotice`, `UpdateNotice` | React      |
+| `@rndsqr/usher-cloudflare`        | `cloudflarePages()`, `cloudflareWorkers()`: adapters that serve old chunks from R2        | Cloudflare |
+| `@rndsqr/usher-cloudflare/worker` | `createAssetFallback()`: the same handler, for apps that own their Worker                 | Cloudflare |
+| `@rndsqr/usher-core`              | `createAppUpdates(options)`, `connectUpdateSurface()` and the behaviours they are made of | Nothing    |
+| `@rndsqr/usher-core/testing`      | `createTestTab()`: a tab with virtual time, for testing update UI                         | Nothing    |
 
 ## Setup
 
@@ -58,7 +59,7 @@ Time outdated and dismissals are measured against the server's clock, read from 
 
 ## Use it in an app
 
-Create one store at module scope. Creating it has no side effects. It polls while it has at least one subscriber and stops after the last one leaves.
+Create the app's updates once at module scope. Creating them has no side effects. `appUpdates.state` checks for a new build while it has at least one subscriber and stops after the last one leaves.
 
 ```ts
 // updates.ts
@@ -76,8 +77,8 @@ import {
 import { appUpdates } from './updates'
 
 function UpdateButton() {
-  const { attention } = useUpdateState(appUpdates)
-  const refreshing = useRefreshing(appUpdates)
+  const { attention } = useUpdateState(appUpdates.state)
+  const refreshing = useRefreshing(appUpdates.refresh)
 
   if (attention === 'none') return null
 
@@ -85,7 +86,7 @@ function UpdateButton() {
     <button
       type="button"
       disabled={refreshing}
-      onClick={() => appUpdates.refresh()}
+      onClick={() => appUpdates.refresh.run()}
     >
       Refresh
     </button>
@@ -94,13 +95,13 @@ function UpdateButton() {
 
 function JobForm() {
   const form = useForm()
-  useRefreshBlocker(appUpdates, form.formState.isDirty)
+  useRefreshBlocker(appUpdates.refresh, form.formState.isDirty)
 
   return null
 }
 ```
 
-`useUpdateState` returns the whole state and defers it, so a store change never blocks input. Read the field you need from it. `useRefreshing` is `true` while a refresh is in flight, which matters when the reload goes through a router and takes time. `useRefreshBlocker` takes a boolean or a function; an inline function is fine, because the hook registers once and calls the latest one.
+Each hook takes the behaviour it reads. `useUpdateState` returns the whole state and defers it, so a change never blocks input. Read the field you need from it. `useRefreshing` is `true` while a refresh is in flight, which matters when the reload goes through a router and takes time. Reading it does not start version checks. `useRefreshBlocker` takes a boolean or a function; an inline function is fine, because the hook registers once and calls the latest one.
 
 To tag error reports or RUM events with the running build, import its facts:
 
@@ -146,22 +147,27 @@ Rollback and forced-update knowledge stays urgent until the tab reloads, even if
 
 A prompt dismissal records its server time in localStorage. It quiets every tab whose prompt threshold had already started, until each tab reaches urgent attention. A build that reaches its prompt threshold later can still prompt. `promptSnooze` sets a shorter or longer quiet period; it never quiets urgent attention. With `urgentAfter: false` and no `promptSnooze`, a dismissed prompt stays dismissed.
 
-## The store
+## The app's updates
 
 ```ts
 interface AppUpdates {
-  getState(): UpdateState
-  subscribe(listener: () => void): () => void
-  refresh(): Promise<'reloading' | 'blocked' | 'declined'>
-  isRefreshing(): boolean
-  dismiss(): boolean
-  addRefreshBlocker(blocker: () => boolean): () => void
+  state: {
+    get(): UpdateState
+    subscribe(listener: () => void): () => void
+    dismiss(): boolean
+  }
+  refresh: {
+    get(): boolean // whether a refresh is in flight
+    subscribe(listener: () => void): () => void
+    run(): Promise<'reloading' | 'blocked' | 'declined'>
+    addBlocker(blocker: () => boolean): () => void
+  }
 }
 ```
 
-Create one store per `storageKey` in a document. Two stores that share a key in the same document do not hear each other's dismissals, because the browser reports a storage change only to other documents.
+Create one per `storageKey` in a document. Two that share a key in the same document do not hear each other's dismissals, because the browser reports a storage change only to other documents.
 
-`getState()` returns the same object until attention, reason, or any of the latest build facts change. `dismiss()` returns `true` only when it lowered a prompt; otherwise it returns `false` and writes nothing. Subscribers hear about changes to the state and to `isRefreshing()`.
+`state.get()` returns the same object until attention, reason, or any of the latest build facts change. `state.dismiss()` returns `true` only when it lowered a prompt; otherwise it returns `false` and writes nothing. Each behaviour has its own subscription: a listener on `state` hears about update state, and a listener on `refresh` hears when a refresh starts and ends.
 
 Durations are milliseconds, so they can be computed:
 
@@ -188,13 +194,13 @@ export const appUpdates = createAppUpdates({
 | `onCheckProblem` | None                               | Called when the version file answers with something that is not build facts. See [Version file problems](#version-file-problems). |
 | `storageKey`     | `usher`                            | Prefix for the keys Usher writes to localStorage, such as `usher:prompt-dismissal`. Set one per app when apps share an origin.    |
 
-Invalid options throw when the store is created, with a message that names the option.
+Invalid options throw at creation, with a message that names the option.
 
-Usher never reloads on navigation, on a chunk error, or on its own timer. The asset fallback keeps old chunks available, and the tab refreshes only when the app calls `refresh()`.
+Usher never reloads on navigation, on a chunk error, or on its own timer. The asset fallback keeps old chunks available, and the tab refreshes only when the app calls `refresh.run()`.
 
 ### Version file problems
 
-A version check can get an answer that is not build facts: a 404, a host's HTML fallback, or JSON of the wrong shape. Until that is fixed, tabs on that deployment cannot detect updates, and nothing in the update state says so. The store logs one console warning per outage. Pass `onCheckProblem` to report it as well:
+A version check can get an answer that is not build facts: a 404, a host's HTML fallback, or JSON of the wrong shape. Until that is fixed, tabs on that deployment cannot detect updates, and nothing in the update state says so. The version check logs one console warning per outage. Pass `onCheckProblem` to report it as well:
 
 ```ts
 export const appUpdates = createAppUpdates({
@@ -213,9 +219,9 @@ Every problem also carries `versionUrl`. The handler runs once per outage, and a
 
 ### Refresh and unsaved work
 
-Refresh blockers decide whether a refresh can proceed. They run synchronously, in the order they were added, and a blocker that returns `true` or throws blocks the refresh. In React, `useRefreshBlocker(appUpdates, isDirty)` registers one for as long as the component is mounted.
+Refresh blockers decide whether a refresh can proceed. They run synchronously, in the order they were added, and a blocker that returns `true` or throws blocks the refresh. In React, `useRefreshBlocker(appUpdates.refresh, isDirty)` registers one for as long as the component is mounted.
 
-`refresh()` resolves with what happened:
+`refresh.run()` resolves with what happened:
 
 | Outcome     | Meaning                                                  |
 | ----------- | -------------------------------------------------------- |
@@ -223,12 +229,15 @@ Refresh blockers decide whether a refresh can proceed. They run synchronously, i
 | `blocked`   | A refresh blocker stopped it. `reload` was never called. |
 | `declined`  | `reload` returned `false` or threw. The error is logged. |
 
-Nothing is remembered between calls, so any outcome can be retried, and concurrent calls share one attempt. `isRefreshing()` is `true` from the moment `reload` is called until it settles, and `false` again after every outcome. A blocked refresh never makes it `true`. To let the user override a blocker, confirm on `blocked`, remove the blocker, and call `refresh()` again:
+Nothing is remembered between calls, so any outcome can be retried, and concurrent calls share one attempt. `refresh.get()` is `true` from the moment `reload` is called until it settles, and `false` again after every outcome. A blocked refresh never makes it `true`. To let the user override a blocker, confirm on `blocked`, remove the blocker, and call `refresh.run()` again:
 
 ```ts
-if ((await appUpdates.refresh()) === 'blocked' && confirm('Discard changes?')) {
+if (
+  (await appUpdates.refresh.run()) === 'blocked' &&
+  confirm('Discard changes?')
+) {
   discardChanges() // the blocker now returns false
-  await appUpdates.refresh()
+  await appUpdates.refresh.run()
 }
 ```
 
@@ -247,11 +256,11 @@ export const appUpdates = createAppUpdates({
 })
 ```
 
-This recipe is tested against TanStack Router, whose own blockers then apply to the reload. The router does not report a blocked navigation, so `refresh()` resolves `reloading` either way; use a refresh blocker when the app needs to know. For a refresh the current and next paths match, so a router blocker must check dirty state, not a pathname change.
+This recipe is tested against TanStack Router, whose own blockers then apply to the reload. The router does not report a blocked navigation, so `refresh.run()` resolves `reloading` either way; use a refresh blocker when the app needs to know. For a refresh the current and next paths match, so a router blocker must check dirty state, not a pathname change.
 
 ## Update surfaces
 
-`connectUpdateSurface` drives an imperative toast or banner library from the store:
+`connectUpdateSurface` drives an imperative toast or banner library:
 
 ```ts
 import { connectUpdateSurface, type UpdateNotice } from '@rndsqr/usher-core'
@@ -303,7 +312,110 @@ function copyFor({ attention, reason }: UpdateNotice) {
 
 Give urgent notices no timeout. A toast library that closes one on its own timer makes the connection show it again, and after five such rounds in one pass it stops and logs an error.
 
-`disconnect()` hides the surface and removes its store subscription. A surface that throws is isolated and retried on the next state change.
+`disconnect()` hides the surface and removes its subscription. A surface that throws is isolated and retried on the next state change.
+
+Every notice also carries `closable`, which is `false` at urgent, and `announce`, which says how a screen reader should hear it: `off` at passive, `polite` at prompt, `assertive` at urgent. Pass `announce` to a toast library that owns its live region.
+
+### A notice in React
+
+A component that renders its own markup reads the same notice, with the same close rules, from `useUpdateNotice(appUpdates, { minAttention })`. The headless parts cover the common case:
+
+```tsx
+import { UpdateNotice } from '@rndsqr/react-usher'
+
+;<UpdateNotice.Root updates={appUpdates} minAttention="passive">
+  {notice => (
+    <>
+      <p>{copyFor(notice).title}</p>
+      <UpdateNotice.Refresh>Refresh</UpdateNotice.Refresh>
+      <UpdateNotice.Close aria-label="Close" />
+    </>
+  )}
+</UpdateNotice.Root>
+```
+
+`Root` renders nothing without a notice. It sets `data-attention` and `data-reason`, with `role="status"` at prompt and `role="alert"` at urgent. `Refresh` is disabled, with `data-refreshing`, while a refresh is in flight. `Close` renders nothing at urgent. The parts ship no styles and no wording, never move focus, and never close on a timer. Any prop you pass overrides a default.
+
+## Behaviours
+
+`createAppUpdates` is a preset. It is built from the same public pieces an app can compose itself:
+
+```ts
+import {
+  createPromptDismissal,
+  createRefresh,
+  createTab,
+  createUpdateState,
+  createVersionCheck,
+  escalation,
+  forcedUpdate,
+  rollback,
+} from '@rndsqr/usher-core'
+
+const tab = createTab()
+
+export const appUpdates = {
+  state: createUpdateState(tab, {
+    running,
+    latest: createVersionCheck(tab, { versionUrl: '/version.json' }),
+    signals: [
+      forcedUpdate(),
+      rollback(),
+      escalation({ promptAfter: 4 * HOUR }),
+    ],
+    dismissal: createPromptDismissal(tab),
+  }),
+  refresh: createRefresh(tab),
+}
+```
+
+| Behaviour                             | Holds                                                 |
+| ------------------------------------- | ----------------------------------------------------- |
+| `createVersionCheck(tab, options)`    | The latest build, polling and focus rechecks          |
+| `escalation(options)`                 | Outdated since; asks for passive, prompt, then urgent |
+| `rollback()`, `forcedUpdate()`        | Sticky urgency                                        |
+| `createPromptDismissal(tab, options)` | The dismissal time shared across tabs                 |
+| `createUpdateState(tab, parts)`       | The published update state and `dismiss()`            |
+| `createRefresh(tab, options)`         | Refresh blockers and the refresh in flight            |
+| `createUpdateNotice(parts, options)`  | The notice a surface should show, and its close rules |
+
+Each takes the options listed above for its part of the preset. The loudest signal wins, and the earlier one in the list wins a tie. Leave the preset only with a reason: without `rollback()`, for example, a tab does not notice a rollback.
+
+A signal is a reason to ask for a refresh, written as pure functions:
+
+```ts
+import { defineSignal } from '@rndsqr/usher-core'
+
+const retired = (versions: ReadonlyArray<string>) =>
+  defineSignal({
+    initial: false,
+    observe: (seen: boolean, { running }) =>
+      seen || versions.includes(running.version),
+    ask: seen =>
+      seen ? { claim: { attention: 'urgent', reason: 'retired' } } : undefined,
+  })
+```
+
+`observe` runs with the running and latest builds and returns what the signal remembers. `ask` returns the attention and reason it claims. It can add `changesAt`, the server time its answer may change, and a prompt claim needs `since`, the server time its prompt began, to be dismissable. The state's `reason` type is built from the signals, so `'retired'` appears in it and an exhaustive `switch` over `reason` stops compiling until it has copy for the new case.
+
+## Testing update UI
+
+`createTestTab()` is a tab with virtual time. Pass it as the second argument to `createAppUpdates`, from core or from `/client`:
+
+```ts
+import { createTestTab } from '@rndsqr/usher-core/testing'
+
+const tab = createTestTab()
+tab.deploy({ ...running, version: 'next', buildTime: '2026-11-12T00:00:00Z' })
+
+const appUpdates = createAppUpdates({ running, versionUrl: '/version.json' }, tab)
+render(<App appUpdates={appUpdates} />)
+
+await tab.advance(12 * HOUR)
+// the app now shows its prompt
+```
+
+`deploy` sets the build facts every version check gets, and `advance` moves time forward, running the checks and timers that fall due. Before the first `deploy` the tab is offline.
 
 ## Skew protection
 

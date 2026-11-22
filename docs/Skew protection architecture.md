@@ -6,14 +6,14 @@ The repository contains the libraries, two example apps, and local browser and w
 
 ## Package ownership
 
-| Package                    | Responsibility                                                                                                                                                                                                                                                                                                 |
-| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `@rndsqr/usher-core`       | Build-tool-independent update state, polling, prompt dismissal, explicit refresh, and update surfaces. Its constructor accepts running-build facts and a version URL.                                                                                                                                          |
-| `@rndsqr/usher-plugin`     | The build plugin at `/vite`, the skew-protection adapter contract at `/adapter`, which names no bundler, and the browser entry at `/client`, which creates the core store with the embedded build facts and version URL. Only Vite is implemented; the bundler is a subpath so another can be added beside it. |
-| `@rndsqr/react-usher`      | Hooks that read a core store and register explicit refresh blockers.                                                                                                                                                                                                                                           |
-| `@rndsqr/usher-cloudflare` | Build adapters for Pages and Workers, plus the asset fallback handler at `/worker`.                                                                                                                                                                                                                            |
+| Package                    | Responsibility                                                                                                                                                                                                                                                                                                  |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@rndsqr/usher-core`       | The build-tool-independent behaviours: version check, signals, prompt dismissal, update state, refresh and update notice. `createAppUpdates` is a preset built from them, and `/testing` exports a tab with virtual time.                                                                                       |
+| `@rndsqr/usher-plugin`     | The build plugin at `/vite`, the skew-protection adapter contract at `/adapter`, which names no bundler, and the browser entry at `/client`, which creates the core preset with the embedded build facts and version URL. Only Vite is implemented; the bundler is a subpath so another can be added beside it. |
+| `@rndsqr/react-usher`      | Hooks that each read one behaviour, and headless update notice parts.                                                                                                                                                                                                                                           |
+| `@rndsqr/usher-cloudflare` | Build adapters for Pages and Workers, plus the asset fallback handler at `/worker`.                                                                                                                                                                                                                             |
 
-Core does not import a build tool. The plugin's client entry imports core. React uses the core store interface. Cloudflare implements the adapter contract from the plugin package's `/adapter` entry and uses only its types, so an app that imports just the asset fallback handler does not need the plugin installed. The example apps assemble these pieces.
+Core does not import a build tool. The plugin's client entry imports core. React uses the behaviours' `Readable` interface. Cloudflare implements the adapter contract from the plugin package's `/adapter` entry and uses only its types, so an app that imports just the asset fallback handler does not need the plugin installed. The example apps assemble these pieces.
 
 Decisions that someone may want to reopen are recorded in [docs/adr](adr/).
 
@@ -62,39 +62,46 @@ The handler is `createAssetFallback()` in `@rndsqr/usher-cloudflare/worker`, one
 
 ## Update state
 
-Inside core, the store composes five sources, and dependencies point one way. No source knows about another source or about the store.
+Core's public interface is its behaviours, and `createAppUpdates` composes them. See [ADR 0012](adr/0012-behaviours-are-the-public-interface.md) and the [design document](Behaviour-first%20API%20architecture.md). Dependencies point one way: the update state reads the version check and the dismissal, the notice reads the update state and the refresh, and nothing reads upward.
 
 | Module                | Owns                                                                                                                                                     |
 | --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `app-updates.ts`      | Subscribers, the published snapshot, sticky urgency, and the one deadline timer for the next change of attention.                                        |
-| `attention.ts`        | Nothing. A pure function from running facts, latest facts, server time, the dismissal and thresholds to a state and its next deadline.                   |
-| `latest-build.ts`     | The last valid build facts observed, the poll schedule, the in-flight request and its 30-second timeout, and focus and visibility rechecks.              |
+| `readable.ts`         | The `Readable` contract, and a set of listeners that starts its owner on the first subscriber and stops it after the last.                               |
+| `tab.ts`              | A tab: the environment and the server clock. Behaviours reach both through it, and apps see only `now()`.                                                |
+| `version-check.ts`    | The last valid build facts observed, the poll schedule, the in-flight request and its 30-second timeout, focus and visibility rechecks, check problems.  |
+| `signals.ts`          | `defineSignal` and the three shipped signals. Each signal's memory: outdated since for escalation, and sticky urgency for rollback and forced update.    |
+| `prompt-dismissal.ts` | The shared dismissal timestamp, in memory and in localStorage, and the storage event subscription.                                                       |
+| `update-state.ts`     | The signals' trackers, the published snapshot, and the one deadline timer for the next change of attention.                                              |
+| `refresh.ts`          | Refresh blockers, the one refresh attempt that concurrent callers share, and whether it is in flight.                                                    |
+| `update-notice.ts`    | The notice a surface should show, and a local close.                                                                                                     |
+| `update-surface.ts`   | The connection to an imperative surface: what it last showed, and the guard against a surface that re-triggers itself.                                   |
 | `visible-timer.ts`    | One pending timer for its owner: the browser timer, the visibility subscription while armed, and the wait for a delay longer than a browser timer holds. |
 | `server-clock.ts`     | The offset between server time and monotonic time.                                                                                                       |
-| `prompt-dismissal.ts` | The shared dismissal timestamp, in memory and in localStorage, and the storage event subscription.                                                       |
-| `refresh.ts`          | Refresh blockers, the one refresh attempt that concurrent callers share, and whether it is in flight.                                                    |
-| `options.ts`          | Nothing. Validates the duration options and applies their defaults.                                                                                      |
+| `options.ts`          | Nothing. Validates each behaviour's options and applies their defaults.                                                                                  |
 | `environment.ts`      | Nothing. Describes what core needs from a tab: clocks, timers, fetch, storage, visibility, focus and reload.                                             |
+| `fake-environment.ts` | The fake tab with virtual time that core's tests and `/testing` share.                                                                                   |
 
-`environment.ts` is the one internal seam. Its browser adapter is the only code that touches globals, and the tests replace it with a fake tab that has virtual time. It is not part of the public interface: an app that tests its own update UI can fake the six-method `AppUpdates` interface by hand.
+`environment.ts` is the one internal seam. Its browser adapter is the only code that touches globals, and the tests replace it with the fake. It is not part of the public interface: an app that tests its own update UI uses `createTestTab()` from `/testing`, which exposes `deploy` and `advance` and not the seam.
 
-Every source calls back into the store's single `evaluate()`. It reads the latest build, the server time and the dismissal, asks `attention.ts` for a decision, keeps sticky urgency, publishes, and sets the deadline timer. Snapshot identity stays stable while attention, reason, and the latest build facts remain unchanged.
+Each behaviour holds timers, listeners and requests only while it has a subscriber, and it subscribes to what it reads only while it has one itself. Subscribing to the refresh starts nothing else.
 
-A tab is outdated since the build time of the first build it saw supersede its own, clamped to its own build time. The store keeps that time next to sticky urgency, and `attention.ts` measures the prompt and urgent thresholds from it. Later deploys do not move it, and a response that matches the running version clears it. See [ADR 0005](adr/0005-escalate-from-outdated-since.md).
+The update state has a single `evaluate()`, which the version check, the dismissal and visibility changes call. It asks each signal to observe the builds and then for its claim, turns a dismissed prompt claim into `passive` / `dismissed`, publishes the loudest claim, and sets the deadline timer for the earliest time a claim says it may change. The earlier signal in the list wins a tie, and the preset lists forced update, rollback, then escalation. Snapshot identity stays stable while attention, reason, and the latest build facts remain unchanged.
 
-`attention.ts` compares source versions for ordinary update detection, commit times for rollback detection, and running-build time against the forced-update cutoff. Rollback and forced-update knowledge remains urgent after later deployments, including a deployment that matches the running version.
+A tab is outdated since the build time of the first build it saw supersede its own, clamped to its own build time. `escalation()` keeps that time and measures the prompt and urgent thresholds from it. Later deploys do not move it, and a response that matches the running version clears it. See [ADR 0005](adr/0005-escalate-from-outdated-since.md).
+
+Escalation compares source versions, `rollback()` compares commit times, and `forcedUpdate()` compares running-build time against the forced-update cutoff. Rollback and forced-update knowledge remains urgent after later deployments, including a deployment that matches the running version.
 
 `server-clock.ts` anchors the response's Date header to monotonic time, so changing the user's clock cannot move a tab's time outdated. Before a Date header is available, it uses the local clock. Missing Date headers keep the last estimate, and changes under two seconds are treated as header rounding. Cross-origin version responses need `Access-Control-Expose-Headers: Date` for clock correction.
 
 Hidden tabs keep no poll or deadline timer and catch up when visible. A pending request keeps its 30-second timeout and is aborted when the final subscriber leaves. Age evaluation continues on the deadline timer when network checks fail. The clock estimate, the last observed build and sticky urgency survive periods without subscribers.
 
-When a store receives a response that is not OK or not build facts as JSON, it reports one check problem and stays quiet until a valid response arrives. The latest build only says what kind of problem it was. The store logs the warning naming the version URL and passes the problem to the app's `onCheckProblem` if there is one. Network errors and timeouts stay silent. Timestamps in the file must be ISO 8601 with a time zone, and fields the store does not know are dropped.
+When a version check gets a response that is not OK or not build facts as JSON, it reports one check problem and stays quiet until a valid response arrives. It logs the warning naming the version URL and passes the problem to the app's `onCheckProblem` if there is one. Network errors and timeouts stay silent. Timestamps in the file must be ISO 8601 with a time zone, and fields the store does not know are dropped.
 
 `prompt-dismissal.ts` stores `{ "dismissedAt": <server time in ms> }` under `<storageKey>:prompt-dismissal`. Every tab of the app reads it, across releases, so the format is a contract. The latest dismissal wins. Dismissal quiets tabs whose prompt threshold had already started. It never quiets urgent attention. Without an explicit prompt snooze, dismissal lasts until urgent starts; if urgent is disabled, it has no expiry. Blocked storage keeps a dismissal for the current tab.
 
-`refresh.ts` runs blockers synchronously, and a throwing blocker prevents the refresh. A refresh resolves `reloading`, `blocked` or `declined`, keeps no memory of the outcome, and can always be retried. While `reload` is running the store reports a refresh in flight and tells subscribers when that starts and ends. The app can supply a reload function to send the document load through its router.
+`refresh.ts` runs blockers synchronously, and a throwing blocker prevents the refresh. A refresh resolves `reloading`, `blocked` or `declined`, keeps no memory of the outcome, and can always be retried. While `reload` is running the refresh reports itself in flight and tells its subscribers when that starts and ends. The app can supply a reload function to send the document load through its router.
 
-`connectUpdateSurface` connects an imperative update surface to the store. It handles attention thresholds, notices that are no longer shown, and surface callbacks during programmatic closure. Closing an urgent notice shows it again. A passive surface can be closed locally until its attention or reason changes.
+`update-notice.ts` decides what a surface should show: the attention threshold, one notice per change of attention or reason, a prompt close that dismisses, and a passive close that holds until attention or reason changes. A notice that is no longer shown ignores `close()`. `connectUpdateSurface` drives an imperative surface from a notice and handles surface callbacks during programmatic closure. Closing an urgent notice shows it again. The React parts read the same notice.
 
 ## Deployment integration
 
