@@ -133,7 +133,6 @@ class SurfaceConnection {
 
   connect = () => {
     const unsubscribe = this.#notice.subscribe(this.#sync)
-    this.#sync()
 
     return () => {
       unsubscribe()

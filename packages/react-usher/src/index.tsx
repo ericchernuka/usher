@@ -5,10 +5,11 @@ import {
   useEffect,
   useEffectEvent,
   useMemo,
-  useState,
+  useRef,
   useSyncExternalStore,
   useTransition,
   type ComponentProps,
+  type CSSProperties,
   type ReactNode,
 } from 'react'
 import {
@@ -22,7 +23,6 @@ import {
   type UpdateNoticeOptions,
   type UpdateState,
 } from '@rndsqr/usher-core'
-import { claim, prepareAnnouncements, release } from './announcer'
 
 function useReadable<Value>(readable: Readable<Value>): Value {
   return useSyncExternalStore(readable.subscribe, readable.get, readable.get)
@@ -95,23 +95,49 @@ function useShown(part: string): Shown {
   return shown
 }
 
-function useAnnouncement(
-  priority: Notice['announce'] | undefined,
-  wording: string,
-) {
-  const [owner] = useState(() => Symbol('update notice'))
+const SETTLE_MS = 100
 
-  useEffect(prepareAnnouncements, [])
+const unseen: CSSProperties = {
+  position: 'fixed',
+  width: 1,
+  height: 1,
+  margin: -1,
+  overflow: 'hidden',
+  clipPath: 'inset(50%)',
+  whiteSpace: 'nowrap',
+}
+
+interface AnnouncerProps {
+  priority: Notice['announce'] | undefined
+  wording: string
+}
+
+function Announcer({ priority, wording }: AnnouncerProps) {
+  const polite = useRef<HTMLOutputElement>(null)
+  const assertive = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    if (!wording || !priority || priority === 'off') {
+    const region = { off: undefined, polite, assertive }[priority ?? 'off']
+      ?.current
+
+    if (!region || !wording) {
       return undefined
     }
 
-    claim(owner, priority, wording)
+    const pending = setTimeout(() => region.replaceChildren(wording), SETTLE_MS)
 
-    return () => release(owner)
-  }, [owner, priority, wording])
+    return () => {
+      clearTimeout(pending)
+      region.replaceChildren()
+    }
+  }, [priority, wording])
+
+  return (
+    <>
+      <output ref={polite} aria-live="polite" style={unseen} />
+      <div ref={assertive} role="alert" aria-live="assertive" style={unseen} />
+    </>
+  )
 }
 
 interface RootProps
@@ -120,8 +146,8 @@ interface RootProps
   updates: AppUpdates
   /**
    * Wording a screen reader hears when the notice appears or the wording
-   * changes, politely for a prompt and assertively for urgent attention, and
-   * once for any number of roots that give the same wording
+   * changes, politely for a prompt and assertively for urgent attention,
+   * with an empty string for a root that should stay silent
    */
   announcement: (notice: Notice) => string
   /** Markup for the notice, called only while there is one */
@@ -131,22 +157,26 @@ interface RootProps
 function Root(props: RootProps) {
   const { updates, minAttention, announcement, children, ...rest } = props
   const notice = useUpdateNotice(updates, { minAttention })
-  useAnnouncement(notice?.announce, notice ? announcement(notice) : '')
-
-  if (!notice) {
-    return null
-  }
+  const silent = rest.hidden === true || rest['aria-hidden'] === true
 
   return (
-    <div
-      data-attention={notice.attention}
-      data-reason={notice.reason}
-      {...rest}
-    >
-      <ShownNotice value={{ notice, refresh: updates.refresh }}>
-        {children(notice)}
-      </ShownNotice>
-    </div>
+    <>
+      <Announcer
+        priority={notice?.announce}
+        wording={notice && !silent ? announcement(notice) : ''}
+      />
+      {notice && (
+        <div
+          data-attention={notice.attention}
+          data-reason={notice.reason}
+          {...rest}
+        >
+          <ShownNotice value={{ notice, refresh: updates.refresh }}>
+            {children(notice)}
+          </ShownNotice>
+        </div>
+      )}
+    </>
   )
 }
 

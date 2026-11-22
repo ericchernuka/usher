@@ -2,7 +2,10 @@ import type { BuildFacts } from './build-facts'
 import { createFakeEnvironment } from './fake-environment'
 import { createTabIn, type Tab } from './tab'
 
-/** Tab with virtual time for testing update UI, offline until the first deploy */
+/**
+ * Tab with virtual time for testing update UI, offline until the first deploy,
+ * whose clock starts at the real time and then moves only when advanced
+ */
 export interface TestTab extends Tab {
   /** Build facts every later version check gets */
   deploy(build: BuildFacts): void
@@ -29,6 +32,8 @@ export function createTestTab(): TestTab {
       })
     },
   })
+
+  fake.setSystemTime(Date.now())
 
   return Object.assign(createTabIn(fake.env), {
     deploy(build: BuildFacts) {
