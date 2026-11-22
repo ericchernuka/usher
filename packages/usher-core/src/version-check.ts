@@ -36,7 +36,11 @@ async function readFacts(
 
   try {
     body = await res.json()
-  } catch {
+  } catch (error) {
+    if (!(error instanceof SyntaxError)) {
+      throw error
+    }
+
     const contentType = res.headers.get('content-type')
 
     return { kind: 'not-json', versionUrl, contentType }
