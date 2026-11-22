@@ -1,0 +1,70 @@
+:root {
+  color-scheme: light dark;
+  font-family: system-ui, sans-serif;
+  line-height: 1.5;
+}
+
+main {
+  max-width: 40rem;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+section {
+  margin-block: 1.5rem;
+}
+
+h2 {
+  font-size: 1rem;
+  margin-bottom: 0.25rem;
+}
+
+p {
+  margin: 0.25rem 0;
+}
+
+button {
+  font: inherit;
+  padding: 0.25rem 0.75rem;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+label,
+textarea {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+textarea {
+  font: inherit;
+  min-height: 4rem;
+}
+
+.banner {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid;
+  border-radius: 0.5rem;
+}
+
+.banner > div {
+  flex: 1;
+}
+
+.banner[data-attention='prompt'] {
+  border-color: #b7791f;
+  background: #b7791f22;
+}
+
+.banner[data-attention='urgent'] {
+  border-color: #c53030;
+  background: #c5303022;
+}

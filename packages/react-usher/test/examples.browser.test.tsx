@@ -40,6 +40,9 @@ it.each([
       .element(view.getByRole('heading', { name: `${name} example` }))
       .toBeVisible()
     await expect.element(view.getByText('Attention: passive')).toBeVisible()
+    await expect
+      .element(view.getByText('A new version is available'))
+      .toBeVisible()
     await view.unmount()
   },
 )
