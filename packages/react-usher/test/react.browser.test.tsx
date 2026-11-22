@@ -1,4 +1,5 @@
-import { useSyncExternalStore } from 'react'
+import { useState, useSyncExternalStore } from 'react'
+import { flushSync } from 'react-dom'
 import { render } from 'vitest-browser-react'
 import { configure } from 'vitest-browser-react/pure'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -416,6 +417,46 @@ describe('UpdateNotice', () => {
     working.resolve()
     await expect.element(button).toBeEnabled()
     expect(action).toHaveBeenCalledTimes(1)
+    await view.unmount()
+  })
+
+  it('given an action discards a draft held in state and refreshes again, then the second refresh is not blocked', async () => {
+    const tab = createTestTab()
+    tab.deploy({ ...older, buildTime: new Date(tab.now()).toISOString() })
+
+    const updates = createCoreUpdates(
+      { running: runningBuild, versionUrl },
+      tab,
+    )
+
+    const outcomes: string[] = []
+
+    function Editor() {
+      const [dirty, setDirty] = useState(true)
+      useRefreshBlocker(updates.refresh, dirty)
+
+      return (
+        <UpdateNotice.Root updates={updates} announcement={() => 'Update'}>
+          {() => (
+            <UpdateNotice.Refresh
+              action={async refresh => {
+                outcomes.push(await refresh())
+                flushSync(() => setDirty(false))
+                outcomes.push(await refresh())
+              }}
+            >
+              Refresh
+            </UpdateNotice.Refresh>
+          )}
+        </UpdateNotice.Root>
+      )
+    }
+
+    const view = await render(<Editor />)
+    await tab.advance(0)
+    await view.getByRole('button', { name: 'Refresh' }).click()
+
+    await expect.poll(() => outcomes).toEqual(['blocked', 'reloading'])
     await view.unmount()
   })
 

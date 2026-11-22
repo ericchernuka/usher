@@ -260,7 +260,7 @@ describe('what a screen reader hears', () => {
     await view.unmount()
   })
 
-  it('given no wording, or a root hidden from the page or from assistive technology, then nothing is announced', async () => {
+  it('given no wording, or a root that is hidden, inert or hidden from assistive technology, then nothing is announced', async () => {
     const { tab, updates } = served(older)
 
     const view = await render(
@@ -274,6 +274,9 @@ describe('what a screen reader hears', () => {
           updates={updates}
           announcement={wordingFor}
         >
+          {() => null}
+        </UpdateNotice.Root>
+        <UpdateNotice.Root inert updates={updates} announcement={wordingFor}>
           {() => null}
         </UpdateNotice.Root>
       </>,
@@ -308,12 +311,13 @@ describe('what a screen reader hears', () => {
     await view.unmount()
   })
 
-  it('given the notice is rendered on a server, then its live regions carry no inline style, and are hidden once mounted', async () => {
+  it('given the notice is rendered on a server, then its live regions take no space and carry no inline style, and are shown but unseen once mounted', async () => {
     const { updates } = served(newer)
     const markup = renderToString(<Banner updates={updates} />)
 
     expect(markup).toContain('role="alert"')
     expect(markup).not.toContain('style=')
+    expect(markup.match(/ hidden=""/g)).toHaveLength(2)
 
     const view = await render(<Banner updates={updates} />)
 
@@ -323,6 +327,7 @@ describe('what a screen reader hears', () => {
     expect(getComputedStyle(view.getByRole('status').element()).width).toBe(
       '1px',
     )
+    expect(view.container.querySelectorAll('[hidden]')).toHaveLength(0)
     await view.unmount()
   })
 })

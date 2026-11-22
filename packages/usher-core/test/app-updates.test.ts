@@ -39,6 +39,21 @@ test('given a build deployed at the time the tab shows, when exactly the prompt 
   stop()
 })
 
+test('given time passes before the first check, then the count still starts from the time the tab shows', async () => {
+  const tab = createTestTab()
+  await tab.advance(250)
+  tab.deploy({ ...newer, buildTime: new Date(tab.now()).toISOString() })
+  const updates = createAppUpdates({ running, versionUrl }, tab)
+  const stop = updates.state.subscribe(() => {})
+  const start = tab.now()
+
+  await tab.advance(12 * HOUR)
+
+  expect(tab.now() - start).toBe(12 * HOUR)
+  expect(updates.state.get().attention).toBe('prompt')
+  stop()
+})
+
 test('given a build deployed before the app subscribes, when less time passes than a check may take, then the first check still lands', async () => {
   const tab = createTestTab()
   tab.deploy(newer)

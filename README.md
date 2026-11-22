@@ -346,7 +346,7 @@ To decide what a press on `Refresh` does, give it an `action`. It receives the r
 <UpdateNotice.Refresh
   action={async refresh => {
     if ((await refresh()) === 'blocked' && confirm('Discard changes?')) {
-      discardChanges()
+      flushSync(discardChanges)
       await refresh()
     }
   }}
@@ -355,11 +355,13 @@ To decide what a press on `Refresh` does, give it an `action`. It receives the r
 </UpdateNotice.Refresh>
 ```
 
+`useRefreshBlocker` reads the value from the last render, so when the draft lives in React state the retry has to wait for that state to be committed. `flushSync` from `react-dom` does that. Without it the second `refresh()` sees the old value and is blocked again.
+
 An action has to settle. React keeps overlapping transitions in the same root pending until all their Actions complete, so one that never resolves holds the app's other pending states too. A press without an `action` starts no transition.
 
 `Root` announces the notice with the wording its `announcement` prop returns. The prop is required, and an empty string announces nothing.
 
-Each `Root` keeps a `status` and an `alert` region of its own beside the notice, visually hidden and present before there is anything to say. It puts the wording into the one that matches `announce`, so a screen reader hears a prompt politely and an urgent notice assertively, when the notice appears and again when the wording changes. Because the regions sit where the `Root` is rendered, a notice inside a modal dialog, a portal or another document is announced there. A `Root` given `hidden` or `aria-hidden` stays silent. A notice on the page behind an open modal dialog is not heard while the dialog is open, since the page is inert then, and is not said again when it closes. The regions are hidden with styles set from script, so they need no inline style attribute and work under a strict content security policy. Two `Root`s that give wording for the same notice both announce it, so give the wording to one and an empty string to the other. The wording is the app's to give because only the app knows which of its text is the message: reading it back out of the markup means guessing what is hidden, decorative or a control.
+Each `Root` keeps a `status` and an `alert` region of its own beside the notice, visually hidden and present before there is anything to say. It puts the wording into the one that matches `announce`, so a screen reader hears a prompt politely and an urgent notice assertively, when the notice appears and again when the wording changes. Because the regions sit where the `Root` is rendered, a notice inside a modal dialog, a portal or another document is announced there. A `Root` given `hidden`, `inert` or `aria-hidden` stays silent. If a `Root` is hidden some other way, such as by a class, give it an empty string while it is. A notice on the page behind an open modal dialog is not heard while the dialog is open, since the page is inert then, and is not said again when it closes. The regions are hidden with styles set from script, so they need no inline style attribute and work under a strict content security policy. In server-rendered markup they carry `hidden` until then, so they take no space before the page hydrates. Two `Root`s that give wording for the same notice both announce it, so give the wording to one and an empty string to the other. The wording is the app's to give because only the app knows which of its text is the message: reading it back out of the markup means guessing what is hidden, decorative or a control.
 
 ## Testing update UI
 
@@ -383,7 +385,7 @@ await tab.advance(12 * HOUR)
 // the app now shows its prompt
 ```
 
-`deploy` sets the build facts every version check gets, and `advance` moves time forward, running the checks and timers that fall due. Before the first `deploy` the tab is offline. The tab's clock starts at the real time, on a whole second, and then moves only when advanced. A tab is outdated from the build time of the newer build, so give a deployed build the time `tab.now()` to start the count there, and keep the running build's commit time so the deploy is not taken for a rollback.
+`deploy` sets the build facts every version check gets, and `advance` moves time forward, running the checks and timers that fall due. Before the first `deploy` the tab is offline. The tab's clock starts at the real time and then moves only when advanced. A tab is outdated from the build time of the newer build, so give a deployed build the time `tab.now()` to start the count there, and keep the running build's commit time so the deploy is not taken for a rollback.
 
 ## Skew protection
 

@@ -9,7 +9,12 @@ export default defineConfig({
     },
   },
   optimizeDeps: {
-    include: ['vitest-browser-react', 'vitest-browser-react/pure'],
+    include: [
+      'react-dom',
+      'react-dom/server',
+      'vitest-browser-react',
+      'vitest-browser-react/pure',
+    ],
   },
   test: {
     coverage,
