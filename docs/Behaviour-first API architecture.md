@@ -166,10 +166,12 @@ const notice = createUpdateNotice(
   { minAttention: 'prompt' },
 )
 
-notice.get() // undefined, or the state plus refresh(), close() and closable
+notice.get() // undefined, or the state plus refresh(), close(), closable and announce
 ```
 
 This is the half of `SurfaceConnection` that decides what should be shown: the attention threshold, one notice per change of attention or reason, a passive close that holds until the pair changes, a prompt close that dismisses for every tab, and a stale notice whose `close()` does nothing. `closable` is `false` at urgent.
+
+`announce` says how a screen reader should hear the notice: `'off'` at passive, `'polite'` at prompt and `'assertive'` at urgent. It is on the notice, and not only in the React parts, so an imperative surface can hand it to a toast library that owns its own live region.
 
 `connectUpdateSurface(notice, surface)` becomes a driver over a notice. The surface is `show` and `hide` and nothing else, because `minAttention` now belongs to the notice. The driver keeps the parts that exist because imperative libraries misbehave: showing an urgent notice again after the library removed it, the limit of five passes, and isolating a surface that throws.
 
@@ -221,7 +223,17 @@ Two additions sit on the notice behaviour. `useUpdateNotice(appUpdates, { minAtt
 </UpdateNotice.Root>
 ```
 
-`Root` renders nothing without a notice. It sets `data-attention` and `data-reason` for styling, with `role="status"` at prompt and `role="alert"` at urgent. `Refresh` is a button that calls `notice.refresh()` and is disabled, with `data-refreshing`, while a refresh is in flight. `Close` renders nothing when the notice is not closable. The parts ship no styles and no wording.
+`Root` renders nothing without a notice and sets `data-attention` and `data-reason` for styling. `Refresh` is a button that calls `notice.refresh()` and is disabled, with `data-refreshing`, while a refresh is in flight. `Close` renders nothing when the notice is not closable. The parts ship no styles and no wording.
+
+Headless means the app owns the markup. It should not also have to own the accessibility rules, so the parts apply them and every one can be overridden by a prop:
+
+- `Root` takes its role from `notice.announce`: none at passive, `role="status"` at prompt, `role="alert"` at urgent.
+- A notice is announced once. The behaviour makes a new notice only when attention or reason changes, so a re-render does not repeat it.
+- The parts never move focus. A notice must not interrupt typing, at any attention.
+- No part closes a notice on a timer.
+- `Close` has no default label, since wording is the app's. It warns in development when it has neither children nor an `aria-label`.
+
+Whether a `status` region mounted together with its content is announced by every screen reader has to be tested in step 4 of the sequence. If it is not, `Root` keeps an empty region mounted and the rest of the design stands.
 
 ## Testing
 
@@ -241,7 +253,7 @@ No change is proposed, and the reasons are worth stating so the idea is not appl
 
 - The adapter contract is already data in, files out (ADR 0002), and the bundler is already a subpath ([ADR 0008](adr/0008-bundler-is-a-subpath.md)).
 - `createAssetFallback` could be split into "ask the current deployment" and "ask the chunk archive", with R2 as one archive among several. There is one archive today. ADR 0008 declined a bundler abstraction for the same reason: a seam with one adapter is a guess. [ADR 0006](adr/0006-inline-function-source-text.md) also needs the handler to be one self-contained function so generated workers can inline it, which composition from imported pieces would break.
-- Simulated deploys keep their four modes. Each mode exercises one shipped signal.
+- Simulated deploys keep their four modes. A signal reads only build facts, and `version.json` carries only the fields core knows, so the four modes already reach everything a custom signal can observe. A custom signal is exercised in tests with `tab.deploy(facts)`. Devtools need a new mode only once a signal can read an outside fact.
 
 ## Where every current feature lives
 
@@ -335,6 +347,8 @@ If the proposal is accepted, ADR 0011 gets a successor and the glossary gains **
 - **No backwards compatibility.** Nothing depends on the current interface, so the new one replaces it in one release. The flat `AppUpdates` methods, the store class behind them and the surface's own `minAttention` are deleted, with no deprecated forwards.
 - **Nothing ships ahead of a need.** `defineSignal` has `name`, `initial`, `observe` and `claim`. `watch` waits for the first signal that reads an outside fact.
 - **`/testing` ships with the first release.**
+- **The parts carry the accessibility defaults.** Headless covers markup and styling. Roles, focus and announcement rules come from the notice and can be overridden.
+- **Devtools do not change.** See [Build and edge](#build-and-edge).
 
 ## Sequence
 
@@ -344,8 +358,3 @@ Each step leaves the test suite passing.
 2. Give refresh and the prompt dismissal their own subscriptions, and split `SurfaceConnection` into the notice and its driver.
 3. Replace the store with the preset and delete `AppUpdatesStore`. Move the hooks, examples and README to `appUpdates.state` and `appUpdates.refresh`.
 4. Add `/testing`, then `useUpdateNotice` and the `UpdateNotice` parts, tested through it.
-
-## Open questions
-
-1. Are `role="status"` and `role="alert"` the right defaults for `UpdateNotice.Root`, or should the parts leave live regions to the app?
-2. Should devtools gain a way to exercise a custom signal, or stay limited to the four modes that change build facts?
