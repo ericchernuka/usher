@@ -339,6 +339,24 @@ describe('hidden tabs', () => {
 })
 
 describe('build age and the server clock', () => {
+  test('given no server time and the clock is set back while the tab is hidden, when the tab returns, then attention follows the clock at once', async ({
+    app,
+    tab,
+  }) => {
+    tab.setSystemTime('2026-11-12T04:00:00Z')
+    server.use(serveBuild(newer, { date: null }))
+    const store = app.create()
+    app.subscribe(store)
+    await tab.waitForResponse()
+    expect(store.getState().attention).toBe('prompt')
+
+    tab.setVisibility('hidden')
+    tab.setSystemTime('2026-11-11T16:30:00Z')
+    tab.setVisibility('visible')
+
+    expect(store.getState().attention).toBe('passive')
+  })
+
   test("given the page's clock runs 30 h fast, then build age follows the server's Date header", async ({
     app,
     tab,
