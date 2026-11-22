@@ -85,7 +85,6 @@ function notifyAll(listeners: ReadonlySet<{ listener: () => void }>) {
 
 export class AppUpdatesStore implements AppUpdates {
   readonly #running: BuildFacts
-  readonly #env: Environment
   readonly #thresholds: Thresholds
   readonly #clock: ReturnType<typeof createServerClock>
   readonly #dismissal: ReturnType<typeof createPromptDismissal>
@@ -96,12 +95,10 @@ export class AppUpdatesStore implements AppUpdates {
   #state: UpdateState = { attention: 'none', reason: 'unknown' }
   #stickyUrgency: StickyUrgency | undefined
   #outdatedSince: number | undefined
-  #stopListening: (() => void) | undefined
 
   constructor(options: AppUpdatesOptions, env: Environment) {
     const resolved = resolveOptions(options)
     this.#running = resolved.running
-    this.#env = env
     this.#thresholds = resolved
     this.#clock = createServerClock(env)
     this.#deadline = createVisibleTimer(env, this.#evaluate)
@@ -147,14 +144,14 @@ export class AppUpdatesStore implements AppUpdates {
   }
 
   #scheduleDeadline = (nextAt: number | undefined) => {
-    if (!this.#stopListening) {
+    if (this.#listeners.size === 0) {
       return
     }
 
     if (nextAt === undefined) {
       this.#deadline.cancel()
     } else {
-      this.#deadline.arm(nextAt - this.#clock.now())
+      this.#deadline.arm(() => nextAt - this.#clock.now())
     }
   }
 
@@ -168,15 +165,12 @@ export class AppUpdatesStore implements AppUpdates {
   }
 
   #start = () => {
-    this.#stopListening = this.#env.onVisibilityChange(this.#evaluate)
     this.#dismissal.start(this.#evaluate)
     this.#latestBuild.start(this.#evaluate)
     this.#evaluate()
   }
 
   #stop = () => {
-    this.#stopListening?.()
-    this.#stopListening = undefined
     this.#deadline.cancel()
     this.#latestBuild.stop()
     this.#dismissal.stop()

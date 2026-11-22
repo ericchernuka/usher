@@ -57,7 +57,7 @@ export class LatestBuild {
 
   constructor(options: LatestBuildOptions) {
     this.#options = options
-    this.#poll = createVisibleTimer(options.env, this.#onPoll)
+    this.#poll = createVisibleTimer(options.env, () => void this.#check())
   }
 
   get = () => this.#latest
@@ -87,26 +87,13 @@ export class LatestBuild {
   }
 
   #schedulePoll = () => {
-    this.#poll.arm(this.#options.pollInterval - this.#sinceCheck())
-  }
-
-  #onPoll = () => {
-    if (this.#sinceCheck() >= this.#options.pollInterval) {
-      void this.#check()
-    } else {
-      this.#schedulePoll()
-    }
+    this.#poll.arm(() => this.#options.pollInterval - this.#sinceCheck())
   }
 
   #recheck = () => {
     if (this.#sinceCheck() >= MIN_FOCUS_CHECK_GAP_MS) {
       void this.#check()
     }
-  }
-
-  #resume = () => {
-    this.#schedulePoll()
-    this.#recheck()
   }
 
   #check = async () => {
@@ -181,12 +168,13 @@ export class LatestBuild {
     this.#watching = {
       onChange,
       stopListening: [
-        env.onVisibilityChange(this.#resume),
+        env.onVisibilityChange(this.#recheck),
         env.onFocus(this.#recheck),
       ],
     }
 
-    this.#resume()
+    this.#schedulePoll()
+    this.#recheck()
   }
 
   stop = () => {
