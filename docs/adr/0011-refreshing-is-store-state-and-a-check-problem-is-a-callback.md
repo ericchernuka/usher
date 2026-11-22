@@ -12,12 +12,14 @@ The refresh flag could also have lived in a React hook. The store already holds 
 
 The store says whether a refresh is in flight. `isRefreshing()` is true from the call to `reload` until it settles, `subscribe` listeners are told when it changes, and `useRefreshing` reads it in React. It is false again after every outcome, including `reloading`. A router can report `reloading` when its own blocker stopped the navigation, and a flag that stayed true would leave the button disabled for good.
 
-A check problem is reported through a function option, `onCheckProblem`, called once per outage with the sentence the console warning prints. It is not state. Nobody shows end users that update checks are failing. The app's use for it is error tracking, and a callback does that without the app subscribing and removing duplicates.
+A check problem is reported through a function option, `onCheckProblem`, called once per outage. It is not state. Nobody shows end users that update checks are failing. The app's use for it is error tracking, and a callback does that without the app subscribing and removing duplicates.
+
+The handler receives a `CheckProblem`: the version URL and a kind, with the status, content type or schema issues that go with that kind. The first version passed the sentence the console warning prints. That made the wording part of the interface, so rewording the warning would have changed what apps receive, and an app that wanted to group reports by cause would have had to parse English.
 
 ## Consequences
 
 - `AppUpdates` has six methods. An app that fakes it by hand needs `isRefreshing` if it uses `useRefreshing`.
 - A `subscribe` listener also runs when a refresh starts and ends, with the update state unchanged. A listener that acts on every call should compare what it reads.
 - A component that subscribes only through `useRefreshing` starts polling, like any other subscriber.
-- Apps receive the warning's wording, so rewording it changes what they get. Treat the text as written for people, not as something to parse.
+- The console warning's wording belongs to the store and can change freely. Adding a kind of check problem is an addition to a public union.
 - When to change this: a third fact that apps need to observe. A seventh method on the same `subscribe` is the wrong answer then. Design either a subscription per fact or one snapshot that holds them all.

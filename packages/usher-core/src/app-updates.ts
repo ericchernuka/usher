@@ -15,7 +15,7 @@ import {
 import { createPromptDismissal } from './prompt-dismissal'
 import { createVisibleTimer } from './visible-timer'
 import { sameBuildFacts, type BuildFacts } from './build-facts'
-import type { AppUpdatesOptions, UpdateState } from './types'
+import type { AppUpdatesOptions, CheckProblem, UpdateState } from './types'
 
 export type { RefreshBlocker, RefreshOutcome } from './refresh'
 
@@ -73,6 +73,33 @@ function sameState(next: Decision['state'], current: UpdateState) {
   )
 }
 
+function returned(problem: CheckProblem) {
+  if (problem.kind === 'http-error') {
+    return `HTTP ${problem.status}`
+  }
+
+  if (problem.kind === 'not-json') {
+    return `a body that is not JSON (${problem.contentType ?? 'no content type'})`
+  }
+
+  return `JSON that is not build facts (${problem.issues})`
+}
+
+function reportCheckProblem(
+  problem: CheckProblem,
+  tellApp: AppUpdatesOptions['onCheckProblem'],
+) {
+  console.warn(
+    `[usher] ${problem.versionUrl} should return build facts as JSON, but returned ${returned(problem)}. Updates cannot be detected until it does.`,
+  )
+
+  try {
+    tellApp?.(problem)
+  } catch (error) {
+    console.error('[usher] onCheckProblem threw', error)
+  }
+}
+
 function notifyAll(listeners: ReadonlySet<{ listener: () => void }>) {
   for (const entry of Array.from(listeners)) {
     if (!listeners.has(entry)) {
@@ -118,7 +145,7 @@ export class AppUpdatesStore implements AppUpdates {
       pollInterval: resolved.pollInterval,
       env,
       clock: this.#clock,
-      onProblem: options.onCheckProblem,
+      onProblem: problem => reportCheckProblem(problem, options.onCheckProblem),
     })
   }
 

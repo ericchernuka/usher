@@ -198,11 +198,18 @@ A version check can get an answer that is not build facts: a 404, a host's HTML 
 
 ```ts
 export const appUpdates = createAppUpdates({
-  onCheckProblem: message => reportError(new Error(message)),
+  onCheckProblem: problem =>
+    reportError(new Error(`version.json: ${problem.kind}`), problem),
 })
 ```
 
-It runs once per outage, with the sentence the warning prints, and again if the file recovers and breaks later. Network errors and timeouts do not call it, because a tab being offline is normal.
+| Kind              | Meaning                                                               | Also carries                    |
+| ----------------- | --------------------------------------------------------------------- | ------------------------------- |
+| `http-error`      | The response was not OK.                                              | `status`                        |
+| `not-json`        | The body was not JSON, as when a host answers with its HTML fallback. | `contentType`, `null` if absent |
+| `not-build-facts` | The JSON was the wrong shape.                                         | `issues`, in words for a person |
+
+Every problem also carries `versionUrl`. The handler runs once per outage, and again if the file recovers and breaks later. Network errors and timeouts do not call it, because a tab being offline is normal.
 
 ### Refresh and unsaved work
 

@@ -5,4 +5,4 @@
 
 The store now says when a refresh is in flight. `isRefreshing()` is `true` from the moment `reload` is called until it settles, subscribers are told when it changes, and `useRefreshing(appUpdates)` reads it in React, so a refresh button can be disabled while a router reload runs. An app that fakes `AppUpdates` by hand needs the new method.
 
-A new `onCheckProblem` option is called when the version file answers with something that is not build facts, once per outage, with the sentence the console warning prints. Use it to report a deployment whose tabs cannot detect updates.
+A new `onCheckProblem` option is called when the version file answers with something that is not build facts, once per outage. It receives a `CheckProblem`: the version URL and a `kind` of `http-error`, `not-json` or `not-build-facts`, each with its own detail. Use it to report a deployment whose tabs cannot detect updates.

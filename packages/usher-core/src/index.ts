@@ -15,6 +15,7 @@ export type { BuildFacts } from './build-facts'
 export type {
   AppUpdatesOptions,
   Attention,
+  CheckProblem,
   UpdateReason,
   UpdateState,
 } from './types'
