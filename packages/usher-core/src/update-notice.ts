@@ -177,5 +177,7 @@ export function createUpdateNotice(
   updates: AppUpdates,
   options: UpdateNoticeOptions = {},
 ): Readable<UpdateNotice | undefined> {
-  return createNoticeStore(updates, options)
+  const { get, subscribe } = createNoticeStore(updates, options)
+
+  return { get, subscribe }
 }
