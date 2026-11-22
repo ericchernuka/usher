@@ -385,7 +385,7 @@ await tab.advance(12 * HOUR)
 // the app now shows its prompt
 ```
 
-`deploy` sets the build facts every version check gets, and `advance` moves time forward, running the checks and timers that fall due. Before the first `deploy` the tab is offline. The tab's clock starts at the real time and then moves only when advanced. A tab is outdated from the build time of the newer build, so give a deployed build the time `tab.now()` to start the count there, and keep the running build's commit time so the deploy is not taken for a rollback.
+`deploy` sets the build facts every version check gets, and `advance` moves time forward, running the checks and timers that fall due. Before the first `deploy` the tab is offline. The tab needs nothing from the test runner but real timers to wait on, so it runs in Vitest, in a browser, and in Jest with a simulated DOM; leave `setTimeout` unfaked while it advances. The tab's clock starts at the real time and then moves only when advanced. A tab is outdated from the build time of the newer build, so give a deployed build the time `tab.now()` to start the count there, and keep the running build's commit time so the deploy is not taken for a rollback.
 
 ## Skew protection
 

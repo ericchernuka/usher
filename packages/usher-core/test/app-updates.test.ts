@@ -54,6 +54,30 @@ test('given time passes before the first check, then the count still starts from
   stop()
 })
 
+test('given a runtime without MessageChannel or Response, as a test runner with a simulated DOM can be, then the test tab still works', async () => {
+  const removed = {
+    MessageChannel: globalThis.MessageChannel,
+    Response: globalThis.Response,
+  }
+
+  Reflect.deleteProperty(globalThis, 'MessageChannel')
+  Reflect.deleteProperty(globalThis, 'Response')
+
+  try {
+    const tab = createTestTab()
+    tab.deploy({ ...newer, buildTime: new Date(tab.now()).toISOString() })
+    const updates = createAppUpdates({ running, versionUrl }, tab)
+    const stop = updates.state.subscribe(() => {})
+
+    await tab.advance(12 * HOUR)
+
+    expect(updates.state.get().attention).toBe('prompt')
+    stop()
+  } finally {
+    Object.assign(globalThis, removed)
+  }
+})
+
 test('given a build deployed before the app subscribes, when less time passes than a check may take, then the first check still lands', async () => {
   const tab = createTestTab()
   tab.deploy(newer)

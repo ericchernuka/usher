@@ -11,7 +11,7 @@ export interface Environment {
   monotonicNow(): number
   /** Run `callback` once after `ms`. Returns a function that cancels it. */
   startTimer(callback: () => void, ms: number): () => void
-  fetch: typeof fetch
+  fetch: (url: string, init: RequestInit) => Promise<VersionResponse>
   /** Storage shared by the app's tabs. Reading the property or calling it may throw. */
   readonly storage: Pick<Storage, 'getItem' | 'setItem'>
   /** The URL that relative URLs resolve against. */
@@ -22,6 +22,10 @@ export interface Environment {
   /** Changes other tabs made to `storage`. A cleared storage reports a null key. */
   onStorageChange(listener: (change: StorageChange) => void): () => void
   reload(): void
+}
+
+export type VersionResponse = Pick<Response, 'ok' | 'status' | 'json'> & {
+  headers: Pick<Headers, 'get'>
 }
 
 export interface StorageChange {
