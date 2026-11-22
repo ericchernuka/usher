@@ -2,13 +2,13 @@ import {
   createContext,
   useContext,
   useDeferredValue,
+  useId,
   useEffect,
   useMemo,
   useRef,
   useSyncExternalStore,
   type ComponentProps,
-  type CSSProperties,
-  type RefObject,
+  type MouseEvent,
   type ReactNode,
 } from 'react'
 import {
@@ -21,6 +21,7 @@ import {
   type AppUpdates,
   type UpdateState,
 } from '@rndsqr/usher-core'
+import { announce, prepareAnnouncements, spoken, withdraw } from './announcer'
 
 function useReadable<Value>(readable: Readable<Value>): Value {
   return useSyncExternalStore(readable.subscribe, readable.get, readable.get)
@@ -99,106 +100,98 @@ function useShown(part: string): Shown {
   return shown
 }
 
-const SETTLE_MS = 100
-
-const unseen: CSSProperties = {
-  position: 'fixed',
-  width: 1,
-  height: 1,
-  margin: -1,
-  overflow: 'hidden',
-  clipPath: 'inset(50%)',
-  whiteSpace: 'nowrap',
-}
-
-function spoken(container: HTMLElement | null) {
-  if (!container) {
-    return ''
-  }
-
-  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT)
-  const words: string[] = []
-
-  while (walker.nextNode()) {
-    const node = walker.currentNode
-
-    if (node instanceof Text && !node.parentElement?.closest('button')) {
-      words.push(node.data)
-    }
-  }
-
-  return words.join(' ').replaceAll(/\s+/g, ' ').trim()
-}
-
-interface AnnouncerProps {
-  announce: Notice['announce'] | undefined
-  container: RefObject<HTMLElement | null>
-}
-
-function Announcer({ announce, container }: AnnouncerProps) {
-  const polite = useRef<HTMLOutputElement>(null)
-  const assertive = useRef<HTMLDivElement>(null)
+function useAnnouncement(id: string, priority: Notice['announce'] | undefined) {
+  useEffect(() => {
+    prepareAnnouncements()
+  }, [])
 
   useEffect(() => {
-    const text = spoken(container.current)
+    const container = document.querySelector(`[data-usher-notice="${id}"]`)
 
-    const region = { off: undefined, polite, assertive }[announce ?? 'off']
-    polite.current?.replaceChildren()
-    assertive.current?.replaceChildren()
+    if (!container || !priority || priority === 'off') {
+      return undefined
+    }
 
-    const pending = setTimeout(
-      () => region?.current?.replaceChildren(text),
-      SETTLE_MS,
-    )
+    let said = ''
 
-    return () => clearTimeout(pending)
-  }, [announce, container])
+    const sync = () => {
+      const text = spoken(container)
 
-  return (
-    <>
-      <output ref={polite} aria-live="polite" aria-atomic style={unseen} />
-      <div
-        ref={assertive}
-        role="alert"
-        aria-live="assertive"
-        aria-atomic
-        style={unseen}
-      />
-    </>
-  )
+      if (text === said) {
+        return
+      }
+
+      said = text
+
+      if (text) {
+        announce(id, priority, text)
+      } else {
+        withdraw(id)
+      }
+    }
+
+    const observer = new MutationObserver(sync)
+
+    observer.observe(container, {
+      subtree: true,
+      childList: true,
+      characterData: true,
+    })
+
+    sync()
+
+    return () => {
+      observer.disconnect()
+      withdraw(id)
+    }
+  }, [id, priority])
 }
 
 interface RootProps
   extends Omit<ComponentProps<'div'>, 'children'>, UpdateNoticeOptions {
+  /** The app's updates */
   updates: AppUpdates
+  /** Markup for the notice, called only while there is one */
   children: (notice: Notice) => ReactNode
 }
 
 function Root(props: RootProps) {
   const { updates, minAttention, children, ...rest } = props
   const notice = useUpdateNotice(updates, { minAttention })
-  const container = useRef<HTMLDivElement>(null)
+  const id = useId()
+  useAnnouncement(id, notice?.announce)
+
+  if (!notice) {
+    return null
+  }
 
   return (
-    <>
-      <Announcer announce={notice?.announce} container={container} />
-      {notice && (
-        <div
-          ref={container}
-          data-attention={notice.attention}
-          data-reason={notice.reason}
-          {...rest}
-        >
-          <ShownNotice.Provider value={{ notice, refresh: updates.refresh }}>
-            {children(notice)}
-          </ShownNotice.Provider>
-        </div>
-      )}
-    </>
+    <div
+      data-attention={notice.attention}
+      data-reason={notice.reason}
+      {...rest}
+      data-usher-notice={id}
+    >
+      <ShownNotice.Provider value={{ notice, refresh: updates.refresh }}>
+        {children(notice)}
+      </ShownNotice.Provider>
+    </div>
   )
 }
 
-function RefreshButton(props: ComponentProps<'button'>) {
+type ButtonProps = ComponentProps<'button'>
+
+const unlessPrevented =
+  (onClick: ButtonProps['onClick'], act: () => void) =>
+  (event: MouseEvent<HTMLButtonElement>) => {
+    onClick?.(event)
+
+    if (!event.defaultPrevented) {
+      act()
+    }
+  }
+
+function RefreshButton({ onClick, ...props }: ButtonProps) {
   const { notice, refresh } = useShown('Refresh')
   const refreshing = useRefreshing(refresh)
 
@@ -207,23 +200,28 @@ function RefreshButton(props: ComponentProps<'button'>) {
       type="button"
       disabled={refreshing}
       data-refreshing={refreshing || undefined}
-      onClick={() => void notice.refresh()}
       {...props}
+      onClick={unlessPrevented(onClick, () => void notice.refresh())}
     />
   )
 }
 
-function Close(props: ComponentProps<'button'>) {
+function Close({ onClick, ...props }: ButtonProps) {
   const { notice } = useShown('Close')
 
   return notice.closable ? (
-    <button type="button" onClick={notice.close} {...props} />
+    <button
+      type="button"
+      {...props}
+      onClick={unlessPrevented(onClick, notice.close)}
+    />
   ) : null
 }
 
 /**
  * Headless parts for an update notice: `Root` renders while there is a notice
  * and announces it, `Refresh` is disabled while a refresh runs, and `Close`
- * renders nothing at urgent attention
+ * renders nothing at urgent attention. A part's `onClick` runs first and can
+ * call `preventDefault()` to take over
  */
 export const UpdateNotice = { Root, Refresh: RefreshButton, Close }

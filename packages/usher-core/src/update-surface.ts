@@ -1,7 +1,7 @@
-import type { Readable } from './readable'
 import type { AppUpdates } from './types'
 import {
-  createUpdateNotice,
+  createNoticeStore,
+  type NoticeStore,
   type UpdateNotice,
   type UpdateNoticeOptions,
 } from './update-notice'
@@ -32,17 +32,14 @@ function safely(label: string, fn: () => void) {
 const MAX_PASSES = 5
 
 class SurfaceConnection {
-  readonly #notice: Readable<UpdateNotice | undefined>
+  readonly #notice: NoticeStore
   readonly #show: (notice: UpdateNotice) => void
   readonly #hide: () => void
   #shown: UpdateNotice | undefined
   #syncing = false
   #again = false
 
-  constructor(
-    notice: Readable<UpdateNotice | undefined>,
-    surface: UpdateSurface,
-  ) {
+  constructor(notice: NoticeStore, surface: UpdateSurface) {
     this.#notice = notice
     this.#show = shown => surface.show(shown)
     this.#hide = () => surface.hide()
@@ -63,6 +60,7 @@ class SurfaceConnection {
 
     if (!safely('show', () => this.#show(wanted))) {
       this.#shown = undefined
+      this.#notice.discard(wanted)
       safely('hide', this.#hide)
     }
   }
@@ -120,7 +118,7 @@ export function connectUpdateSurface(
   surface: UpdateSurface,
 ): () => void {
   return new SurfaceConnection(
-    createUpdateNotice(updates, surface),
+    createNoticeStore(updates, surface),
     surface,
   ).connect()
 }

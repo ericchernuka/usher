@@ -334,7 +334,9 @@ import { UpdateNotice } from '@rndsqr/react-usher'
 </UpdateNotice.Root>
 ```
 
-`Root` renders its element only while there is a notice, with `data-attention` and `data-reason` for styling. Beside it, `Root` keeps two visually hidden live regions mounted, a `status` and an `alert`, and copies the notice's text into the one that matches `announce`, leaving out the text of buttons. A screen reader hears a prompt politely and an urgent notice assertively, once each. The regions stay mounted because a live region that is inserted together with its text is not reliably announced. For the same reason the text is set a tenth of a second after the region is emptied. `Refresh` is disabled, with `data-refreshing`, while a refresh is in flight. `Close` renders nothing at urgent. The parts ship no wording and no styles beyond hiding those two regions. They never move focus and never close on a timer. Any prop you pass to a part overrides its default.
+`Root` renders its element only while there is a notice, with `data-attention` and `data-reason` for styling. `Refresh` is disabled, with `data-refreshing`, while a refresh is in flight. `Close` renders nothing at urgent. A part's own `onClick` runs before its action and can call `preventDefault()` to take the action over. The parts ship no wording and no styles, never move focus, and never close on a timer.
+
+`Root` also announces the notice. The package keeps one `status` and one `alert` region per document, visually hidden, and `Root` puts the notice's wording into the one that matches `announce`, so a screen reader hears a prompt politely and an urgent notice assertively. The wording is the text inside `Root` without buttons, links and anything hidden from assistive technology, and it is announced again when it changes. Two `Root`s showing the same notice announce it once.
 
 ## Testing update UI
 
@@ -344,7 +346,11 @@ import { UpdateNotice } from '@rndsqr/react-usher'
 import { createTestTab } from '@rndsqr/usher-core/testing'
 
 const tab = createTestTab()
-tab.deploy({ ...running, version: 'next', buildTime: '2026-11-12T00:00:00Z' })
+tab.deploy({
+  ...running,
+  version: 'next',
+  buildTime: new Date(tab.now()).toISOString(),
+})
 
 const appUpdates = createAppUpdates({ running, versionUrl: '/version.json' }, tab)
 render(<App appUpdates={appUpdates} />)
@@ -353,7 +359,7 @@ await tab.advance(12 * HOUR)
 // the app now shows its prompt
 ```
 
-`deploy` sets the build facts every version check gets, and `advance` moves time forward, running the checks and timers that fall due. Before the first `deploy` the tab is offline.
+`deploy` sets the build facts every version check gets, and `advance` moves time forward, running the checks and timers that fall due. Before the first `deploy` the tab is offline. A tab is outdated from the build time of the build it sees, so take build times from `tab.now()`, the test tab's own clock, which does not follow the real one.
 
 ## Skew protection
 

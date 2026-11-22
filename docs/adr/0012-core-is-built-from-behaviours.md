@@ -28,7 +28,7 @@ The build plugin, the adapter contract and the asset fallback handler do not cha
 
 - A listener hears about one fact. Subscribing to `refresh` does not start version checks, and the caveat in ADR 0011 that a listener should compare what it reads is gone.
 - A declarative React surface and an imperative toast get the same close rules and the same `announce` value from one notice.
-- Each observed fact has one owner. The rollback signal remembers that a rollback was seen and escalation remembers outdated since, where the store used to hold both for a function that took them back as arguments.
+- Each observed fact has one owner. The sticky urgency signal remembers the rollback or forced update it last saw and escalation remembers outdated since, where the store used to hold both for a function that took them back as arguments.
 - An app cannot compose something wrong, such as leaving out rollback detection, because it cannot compose.
 - The signal contract can change freely. Tests cross the public interface, so they do not pin it either.
 - A tab is recognised by identity, so a test tab only works with the copy of core that made it. Core is a peer dependency of the plugin and the React package to keep that to one copy, and the error names the cause when it is not.

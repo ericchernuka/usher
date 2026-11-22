@@ -67,20 +67,17 @@ export function escalation(options: EscalationOptions): Signal {
   }
 }
 
-function sticky(
-  reason: 'rollback' | 'forced',
-  detected: (builds: Builds) => boolean,
-): Signal {
-  let seen = false
+export function stickyUrgency(): Signal {
+  let reason: 'rollback' | 'forced' | undefined
 
   return {
     observe(builds) {
-      seen ||= detected(builds)
+      if (isForcedUpdate(builds)) {
+        reason = 'forced'
+      } else if (isRollback(builds)) {
+        reason = 'rollback'
+      }
     },
-    ask: () => (seen ? { claim: { attention: 'urgent', reason } } : undefined),
+    ask: () => reason && { claim: { attention: 'urgent', reason } },
   }
 }
-
-export const rollback = () => sticky('rollback', isRollback)
-
-export const forcedUpdate = () => sticky('forced', isForcedUpdate)

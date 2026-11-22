@@ -38,7 +38,12 @@ function Body({ notice }: { notice: Notice }) {
         <strong>{title}</strong>
         <p>{blocked ? 'Clear your draft first, then refresh.' : description}</p>
       </div>
-      <UpdateNotice.Refresh onClick={() => void refresh()}>
+      <UpdateNotice.Refresh
+        onClick={event => {
+          event.preventDefault()
+          void refresh()
+        }}
+      >
         Refresh
       </UpdateNotice.Refresh>
       <UpdateNotice.Close aria-label="Close">×</UpdateNotice.Close>

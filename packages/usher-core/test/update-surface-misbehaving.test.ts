@@ -2,7 +2,7 @@ import { vi } from 'vitest'
 import { connectUpdateSurface } from '../src/index'
 import { server } from './mocks/node'
 import { serveBuild } from './mocks/overrides'
-import { describe, expect, newer, older, test } from './fixtures'
+import { DISMISSAL_KEY, describe, expect, newer, older, test } from './fixtures'
 
 describe('surfaces that misbehave', () => {
   test('given show() closes synchronously, then hide() waits for show() to return', async ({
@@ -119,5 +119,46 @@ describe('surfaces that misbehave', () => {
     await app.poll()
 
     expect(log).toEqual(['passive:outdated', 'hide', 'urgent:rollback'])
+  })
+
+  test('given show() throws and the cleanup hide() reports a close, then the prompt is not dismissed, and the retry shows the latest build', async ({
+    app,
+    tab,
+  }) => {
+    tab.setSystemTime('2026-11-12T04:00:00Z')
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    server.use(serveBuild(newer))
+    const store = app.create()
+    const shown: Array<string | undefined> = []
+    let failed: { close: () => void } | undefined
+    let ready = false
+
+    app.track(
+      connectUpdateSurface(store, {
+        show: notice => {
+          if (!ready) {
+            failed = notice
+
+            throw new Error('toast library threw after opening')
+          }
+
+          shown.push(notice.latest.version)
+        },
+        hide: () => failed?.close(),
+      }),
+    )
+    await tab.waitForResponse()
+
+    expect(store.state.get()).toMatchObject({
+      attention: 'prompt',
+      reason: 'outdated',
+    })
+    expect(tab.storage.getItem(DISMISSAL_KEY)).toBeNull()
+
+    ready = true
+    server.use(serveBuild({ ...newer, version: 'ccc' }))
+    await app.poll()
+
+    expect(shown).toEqual(['ccc'])
   })
 })

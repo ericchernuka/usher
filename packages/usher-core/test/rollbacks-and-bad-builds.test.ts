@@ -3,6 +3,31 @@ import { serveBuild } from './mocks/overrides'
 import { HOUR, running, describe, expect, newer, older, test } from './fixtures'
 
 describe('a rollback', () => {
+  test('given a forced update was seen, when an older commit is then deployed, then the reason becomes rollback, and a later forced update makes it forced again', async ({
+    app,
+    tab,
+  }) => {
+    const forced = {
+      ...newer,
+      buildTime: '2026-11-11T15:30:00.000Z',
+      forceUpdateBuiltBefore: '2026-11-11T15:30:00.000Z',
+    }
+
+    server.use(serveBuild(forced))
+    const store = app.create()
+    app.subscribe(store)
+    await tab.waitForResponse()
+    expect(store.state.get().reason).toBe('forced')
+
+    server.use(serveBuild(older))
+    await app.poll()
+    expect(store.state.get().reason).toBe('rollback')
+
+    server.use(serveBuild(forced))
+    await app.poll()
+    expect(store.state.get().reason).toBe('forced')
+  })
+
   test('given the server redeploys an older commit, then the tab is urgent at once', async ({
     app,
     tab,

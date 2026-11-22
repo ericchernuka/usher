@@ -30,6 +30,9 @@ export function createTestTab(): TestTab {
     deploy(build: BuildFacts) {
       served = build
     },
-    advance: fake.runFor,
+    async advance(ms: number) {
+      await fake.waitForResponse()
+      await fake.runFor(ms)
+    },
   })
 }

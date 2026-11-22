@@ -1,6 +1,6 @@
 import { createPromptDismissal } from './prompt-dismissal'
 import { createRefresh } from './refresh'
-import { escalation, forcedUpdate, rollback } from './signals'
+import { escalation, stickyUrgency } from './signals'
 import { createTab, type Tab } from './tab'
 import type { AppUpdates, AppUpdatesOptions } from './types'
 import { createUpdateState } from './update-state'
@@ -50,7 +50,7 @@ export function createAppUpdates(
     state: createUpdateState(tab, {
       running: options.running,
       latest: createVersionCheck(tab, options),
-      signals: [forcedUpdate(), rollback(), escalation(options)],
+      signals: [stickyUrgency(), escalation(options)],
       dismissal: createPromptDismissal(tab, options),
     }),
     refresh: createRefresh(tab, options),
