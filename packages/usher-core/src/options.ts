@@ -36,6 +36,14 @@ function level(name: string, fallback: number) {
   )
 }
 
+function callback(name: string) {
+  return valibot.optional(
+    valibot.function(
+      issue => `${name} must be a function, got ${String(issue.input)}`,
+    ),
+  )
+}
+
 const versionUrlMessage = (issue: valibot.BaseIssue<unknown>) =>
   `versionUrl must be the URL of version.json, got ${String(issue.input)}`
 
@@ -86,6 +94,8 @@ const Options = valibot.pipe(
       valibot.string('storageKey must be a string'),
       'usher',
     ),
+    reload: callback('reload'),
+    onCheckProblem: callback('onCheckProblem'),
   }),
   valibot.partialCheck(
     [['promptAfter'], ['urgentAfter']],
@@ -105,8 +115,9 @@ const Options = valibot.pipe(
 )
 
 /**
- * Options with every default applied and every rule checked. `reload` is not
- * here: its default is the environment's, so the store reads it.
+ * Options with every default applied and every rule checked. `reload` and
+ * `onCheckProblem` are checked here, but the store reads them from the options
+ * it was given, where they keep their types.
  */
 export type ResolvedOptions = valibot.InferOutput<typeof Options>
 
