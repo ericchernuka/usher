@@ -25,6 +25,20 @@ test('given a test tab, when a build is deployed and time passes, then the app e
   stop()
 })
 
+test('given a build deployed at the time the tab shows, when exactly the prompt threshold passes, then the prompt is due', async () => {
+  const tab = createTestTab()
+  tab.deploy({ ...newer, buildTime: new Date(tab.now()).toISOString() })
+  const updates = createAppUpdates({ running, versionUrl }, tab)
+  const stop = updates.state.subscribe(() => {})
+
+  await tab.advance(12 * HOUR - 1)
+  expect(updates.state.get().attention).toBe('passive')
+
+  await tab.advance(1)
+  expect(updates.state.get().attention).toBe('prompt')
+  stop()
+})
+
 test('given a build deployed before the app subscribes, when less time passes than a check may take, then the first check still lands', async () => {
   const tab = createTestTab()
   tab.deploy(newer)

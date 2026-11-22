@@ -359,13 +359,13 @@ An action has to settle. React keeps overlapping transitions in the same root pe
 
 `Root` announces the notice with the wording its `announcement` prop returns. The prop is required, and an empty string announces nothing.
 
-Each `Root` keeps a `status` and an `alert` region of its own beside the notice, visually hidden and present before there is anything to say. It puts the wording into the one that matches `announce`, so a screen reader hears a prompt politely and an urgent notice assertively, when the notice appears and again when the wording changes. Because the regions sit where the `Root` is rendered, a notice inside a modal dialog, a portal or another document is announced there. A `Root` given `hidden` or `aria-hidden` stays silent. Two `Root`s that give wording for the same notice both announce it, so give the wording to one and an empty string to the other. The wording is the app's to give because only the app knows which of its text is the message: reading it back out of the markup means guessing what is hidden, decorative or a control.
+Each `Root` keeps a `status` and an `alert` region of its own beside the notice, visually hidden and present before there is anything to say. It puts the wording into the one that matches `announce`, so a screen reader hears a prompt politely and an urgent notice assertively, when the notice appears and again when the wording changes. Because the regions sit where the `Root` is rendered, a notice inside a modal dialog, a portal or another document is announced there. A `Root` given `hidden` or `aria-hidden` stays silent. A notice on the page behind an open modal dialog is not heard while the dialog is open, since the page is inert then, and is not said again when it closes. The regions are hidden with styles set from script, so they need no inline style attribute and work under a strict content security policy. Two `Root`s that give wording for the same notice both announce it, so give the wording to one and an empty string to the other. The wording is the app's to give because only the app knows which of its text is the message: reading it back out of the markup means guessing what is hidden, decorative or a control.
 
 ## Testing update UI
 
 `createTestTab()` is a tab with virtual time. Pass it as the second argument to `createAppUpdates`, from core or from `/client`:
 
-```ts
+```tsx
 import { createTestTab } from '@rndsqr/usher-core/testing'
 import { createAppUpdates, runningBuild } from '@rndsqr/usher-plugin/client'
 
@@ -383,7 +383,7 @@ await tab.advance(12 * HOUR)
 // the app now shows its prompt
 ```
 
-`deploy` sets the build facts every version check gets, and `advance` moves time forward, running the checks and timers that fall due. Before the first `deploy` the tab is offline. The tab's clock starts at the real time and then moves only when advanced. A tab is outdated from the build time of the newer build, so give a deployed build the time `tab.now()` to start the count there, and keep the running build's commit time so the deploy is not taken for a rollback.
+`deploy` sets the build facts every version check gets, and `advance` moves time forward, running the checks and timers that fall due. Before the first `deploy` the tab is offline. The tab's clock starts at the real time, on a whole second, and then moves only when advanced. A tab is outdated from the build time of the newer build, so give a deployed build the time `tab.now()` to start the count there, and keep the running build's commit time so the deploy is not taken for a rollback.
 
 ## Skew protection
 
