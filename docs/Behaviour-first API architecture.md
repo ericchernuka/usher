@@ -40,7 +40,7 @@ Around the handle:
 
 - `connectUpdateSurface(appUpdates, surface)` drives an imperative toast or banner. Its signature did not change.
 - `createUpdateNotice(appUpdates, { minAttention })` is the notice a surface should show, as a `Readable`. It carries the state, `refresh()`, `close()`, `closable` and `announce`.
-- `@rndsqr/react-usher` has a hook per behaviour (`useUpdateState(appUpdates.state)`, `useRefreshing(appUpdates.refresh)`, `useRefreshBlocker(appUpdates.refresh, isDirty)`), `useUpdateNotice`, and the headless `UpdateNotice.Root`, `.Refresh` and `.Close` parts.
+- `@rndsqr/react-usher` needs React 19.2. It has a hook per behaviour (`useUpdateState(appUpdates.state)`, `useRefreshing(appUpdates.refresh)`, `useRefreshBlocker(appUpdates.refresh, isDirty)`), `useUpdateNotice`, and the headless `UpdateNotice.Root`, `.Refresh` and `.Close` parts.
 - `@rndsqr/usher-core/testing` exports `createTestTab()`, a tab with virtual time. It is passed as the second argument to `createAppUpdates`, and it has `deploy(build)` and `advance(ms)`.
 
 Options, defaults and validation messages are unchanged.
@@ -99,11 +99,13 @@ The React parts read the same notice, so a declarative banner and an imperative 
 The app owns the markup and the wording. It should not also have to own the accessibility rules, so the parts apply them, and a prop on a part overrides its default.
 
 - `Root` renders its element only while there is a notice, with `data-attention` and `data-reason` for styling.
-- The React package keeps one `status` and one `alert` region per document, visually hidden and made when the first `Root` mounts. `Root` puts the notice's wording into the one that matches `announce`: it empties both, and 100 ms later sets the text. Nothing is announced at passive.
-- The wording is the text inside `Root`, without buttons, links, and anything hidden from assistive technology. `Root` watches that text, so a change of reason at the same attention, or a message the app swaps in, is announced as well.
-- Two `Root`s showing the same notice announce it once, because they share the regions.
-- A part's own `onClick` runs before its action and can call `preventDefault()` to take the action over.
+- The React package keeps one `status` and one `alert` region per document, visually hidden and made when the first `Root` mounts. Each `Root` claims its notice's wording at the priority `announce` gives, and a region holds the wording claimed for it. When a claim adds wording, the region is emptied and set 100 ms later. Nothing is announced at passive.
+- The wording is the text inside `Root`, without buttons, links, and anything hidden from the page or from assistive technology. `Root` watches that text and its own visibility, so a change of reason at the same attention, a message the app swaps in, or a notice being revealed is announced as well.
+- Claims are kept per `Root`, so one `Root` leaving does not silence another, a polite and an assertive notice do not cancel each other, and the same wording from several `Root`s is announced once.
+- A part's own `onClick` runs before the part acts.
 - `Refresh` is disabled, with `data-refreshing`, while a refresh is in flight. `Close` renders nothing at urgent.
+- `Refresh` takes an `action`, following React's convention for Action props: it receives the refresh to call, runs in a transition the part starts, and keeps the button pending until it settles. Without one, a press refreshes outside any transition, because React holds every transition pending until all Actions complete and a slow reload should not do that to an app that did not ask for it.
+- The notice is read through `useDeferredValue`, like the update state, so its arrival is not a blocking update and can animate with a view transition.
 - The parts never move focus and never close a notice on a timer.
 
 The first version put `role="status"` or `role="alert"` on `Root`'s own element, which mounts together with its content. A browser test with a virtual screen reader showed that a prompt mounted that way was not announced, while text placed into a region that was already mounted was.

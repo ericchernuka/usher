@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { startTransition, useState } from 'react'
 import { UpdateNotice } from '@rndsqr/react-usher'
 import type { UpdateNotice as Notice } from '@rndsqr/usher-core'
 import { appUpdates } from './updates'
@@ -28,10 +28,6 @@ function Body({ notice }: { notice: Notice }) {
   const [blocked, setBlocked] = useState(false)
   const { title, description } = copyFor(notice)
 
-  async function refresh() {
-    setBlocked((await notice.refresh()) === 'blocked')
-  }
-
   return (
     <>
       <div>
@@ -39,9 +35,9 @@ function Body({ notice }: { notice: Notice }) {
         <p>{blocked ? 'Clear your draft first, then refresh.' : description}</p>
       </div>
       <UpdateNotice.Refresh
-        onClick={event => {
-          event.preventDefault()
-          void refresh()
+        action={async refresh => {
+          const outcome = await refresh()
+          startTransition(() => setBlocked(outcome === 'blocked'))
         }}
       >
         Refresh

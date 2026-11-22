@@ -274,4 +274,111 @@ describe('what a screen reader hears', () => {
     expect(await announcements()).toEqual([])
     await view.unmount()
   })
+
+  it('given another app prompts while an urgent notice is about to be announced, then both are announced', async () => {
+    const first = createTestTab()
+    first.deploy({ ...older, buildTime: new Date(first.now()).toISOString() })
+    const second = createTestTab()
+    second.deploy({ ...newer, buildTime: new Date(second.now()).toISOString() })
+
+    const urgent = createAppUpdates(
+      { running: runningBuild, versionUrl },
+      first,
+    )
+
+    const prompting = createAppUpdates(
+      { running: runningBuild, versionUrl, storageKey: 'billing' },
+      second,
+    )
+
+    const view = await render(
+      <>
+        <UpdateNotice.Root updates={urgent}>
+          {() => <p>Refresh now</p>}
+        </UpdateNotice.Root>
+        <UpdateNotice.Root updates={prompting}>
+          {() => <p>An update is ready</p>}
+        </UpdateNotice.Root>
+      </>,
+    )
+
+    await Promise.all([first.advance(0), second.advance(13 * HOUR)])
+
+    await expect
+      .element(view.getByRole('alert'))
+      .toHaveTextContent('Refresh now')
+    await expect
+      .element(view.getByRole('status'))
+      .toHaveTextContent('An update is ready')
+    await view.unmount()
+  })
+
+  it('given a second notice for the same update mounts later and then leaves, then nothing is repeated and the first stays announced', async () => {
+    const tab = createTestTab()
+    tab.deploy({ ...older, buildTime: new Date(tab.now()).toISOString() })
+    const updates = createAppUpdates({ running: runningBuild, versionUrl }, tab)
+
+    const one = (
+      <UpdateNotice.Root updates={updates}>
+        {shown => <p>Update available: {shown.attention}</p>}
+      </UpdateNotice.Root>
+    )
+
+    const view = await render(one)
+    await tab.advance(0)
+    await expect
+      .element(view.getByRole('alert'))
+      .toHaveTextContent('Update available: urgent')
+
+    await view.rerender(
+      <>
+        {one}
+        <UpdateNotice.Root updates={updates}>
+          {shown => <p>Update available: {shown.attention}</p>}
+        </UpdateNotice.Root>
+      </>,
+    )
+    await settled()
+    await view.rerender(one)
+
+    await expect
+      .element(view.getByRole('alert'))
+      .toHaveTextContent('Update available: urgent')
+    expect(await announcements()).toEqual([
+      'assertive: Update available: urgent',
+    ])
+    await view.unmount()
+  })
+
+  it('given a notice inside a hidden section, when the section is revealed, then the notice is announced, without text hidden by a style', async () => {
+    const tab = createTestTab()
+    tab.deploy({ ...older, buildTime: new Date(tab.now()).toISOString() })
+    const updates = createAppUpdates({ running: runningBuild, versionUrl }, tab)
+
+    const section = (hidden: boolean) => (
+      <section hidden={hidden}>
+        <UpdateNotice.Root updates={updates}>
+          {() => (
+            <>
+              <p>Please refresh</p>
+              <p style={{ display: 'none' }}>for small screens</p>
+            </>
+          )}
+        </UpdateNotice.Root>
+      </section>
+    )
+
+    const view = await render(section(true))
+    await tab.advance(0)
+    await expect.poll(() => updates.state.get().attention).toBe('urgent')
+    expect(await announcements()).toEqual([])
+
+    await view.rerender(section(false))
+
+    await expect
+      .element(view.getByRole('alert'))
+      .toHaveTextContent('Please refresh')
+    expect(await announcements()).toEqual(['assertive: Please refresh'])
+    await view.unmount()
+  })
 })

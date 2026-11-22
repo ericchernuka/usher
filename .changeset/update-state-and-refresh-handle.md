@@ -26,7 +26,9 @@ Options, defaults, the update states and `connectUpdateSurface(appUpdates, surfa
 
 New in core: `createUpdateNotice(appUpdates, { minAttention })` gives a declarative surface the notice that `connectUpdateSurface` drives. Every update notice now carries `closable` and `announce`.
 
-New in React: `useUpdateNotice(appUpdates, { minAttention })` and the headless `UpdateNotice.Root`, `UpdateNotice.Refresh` and `UpdateNotice.Close` parts. `Root` announces a prompt politely and an urgent notice assertively through live regions it keeps mounted.
+New in React: `useUpdateNotice(appUpdates, { minAttention })` and the headless `UpdateNotice.Root`, `UpdateNotice.Refresh` and `UpdateNotice.Close` parts. `Root` announces a prompt politely and an urgent notice assertively through one pair of live regions per document. `Refresh` takes an `action` that receives the refresh to call and runs in a transition.
+
+`@rndsqr/react-usher` now needs React 19.2. It uses `useEffectEvent`, `use` and `ref` as a prop.
 
 New entry `@rndsqr/usher-core/testing`: `createTestTab()` is a tab with virtual time. Pass it as the second argument to `createAppUpdates`, from core or from `@rndsqr/usher-plugin/client`, then call `tab.deploy(build)` and `await tab.advance(ms)`.
 

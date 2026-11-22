@@ -9,7 +9,7 @@ The [glossary](GLOSSARY.md) defines the domain terms. The [architecture document
 | `@rndsqr/usher-plugin/vite`       | `usher()`: writes `version.json`, embeds the build facts, runs a skew-protection adapter             | Vite       |
 | `@rndsqr/usher-plugin/adapter`    | `SkewProtectionAdapter` and its types, for writing an adapter for another host                       | Nothing    |
 | `@rndsqr/usher-plugin/client`     | `createAppUpdates()` with the build facts filled in, and `runningBuild`                              | The plugin |
-| `@rndsqr/react-usher`             | `useUpdateState`, `useRefreshing`, `useRefreshBlocker`, `useUpdateNotice`, `UpdateNotice`            | React      |
+| `@rndsqr/react-usher`             | `useUpdateState`, `useRefreshing`, `useRefreshBlocker`, `useUpdateNotice`, `UpdateNotice`            | React 19.2 |
 | `@rndsqr/usher-cloudflare`        | `cloudflarePages()`, `cloudflareWorkers()`: adapters that serve old chunks from R2                   | Cloudflare |
 | `@rndsqr/usher-cloudflare/worker` | `createAssetFallback()`: the same handler, for apps that own their Worker                            | Cloudflare |
 | `@rndsqr/usher-core`              | `createAppUpdates(options)`, `connectUpdateSurface()` and `createUpdateNotice()`, with no build tool | Nothing    |
@@ -334,9 +334,26 @@ import { UpdateNotice } from '@rndsqr/react-usher'
 </UpdateNotice.Root>
 ```
 
-`Root` renders its element only while there is a notice, with `data-attention` and `data-reason` for styling. `Refresh` is disabled, with `data-refreshing`, while a refresh is in flight. `Close` renders nothing at urgent. A part's own `onClick` runs before its action and can call `preventDefault()` to take the action over. The parts ship no wording and no styles, never move focus, and never close on a timer.
+`Root` renders its element only while there is a notice, with `data-attention` and `data-reason` for styling. `Refresh` is disabled, with `data-refreshing`, while a refresh is in flight. `Close` renders nothing at urgent. A part's own `onClick` runs before the part acts. The parts ship no wording and no styles, never move focus, and never close on a timer. The notice is deferred, like the update state, so its arrival never blocks input and can be animated with a view transition.
 
-`Root` also announces the notice. The package keeps one `status` and one `alert` region per document, visually hidden, and `Root` puts the notice's wording into the one that matches `announce`, so a screen reader hears a prompt politely and an urgent notice assertively. The wording is the text inside `Root` without buttons, links and anything hidden from assistive technology, and it is announced again when it changes. Two `Root`s showing the same notice announce it once.
+To decide what a press on `Refresh` does, give it an `action`. It receives the refresh to call and runs in a transition, as React's Action props do, and the button stays disabled until it settles:
+
+```tsx
+<UpdateNotice.Refresh
+  action={async refresh => {
+    if ((await refresh()) === 'blocked' && confirm('Discard changes?')) {
+      discardChanges()
+      await refresh()
+    }
+  }}
+>
+  Refresh
+</UpdateNotice.Refresh>
+```
+
+An action has to settle. React keeps every transition pending until all Actions complete, so one that never resolves holds the app's other pending states too.
+
+`Root` also announces the notice. The package keeps one `status` and one `alert` region per document, visually hidden, and puts the wording of each notice into the one that matches `announce`, so a screen reader hears a prompt politely and an urgent notice assertively. The wording is the text inside `Root` without buttons, links and anything hidden from the page or from assistive technology. It is announced again when it changes or is revealed. Notices with the same wording are announced once, however many `Root`s show them.
 
 ## Testing update UI
 

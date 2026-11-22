@@ -1,27 +1,30 @@
 import {
   createContext,
-  useContext,
+  use,
+  useCallback,
   useDeferredValue,
-  useId,
   useEffect,
+  useEffectEvent,
   useMemo,
-  useRef,
+  useState,
   useSyncExternalStore,
+  useTransition,
   type ComponentProps,
-  type MouseEvent,
   type ReactNode,
+  type Ref,
 } from 'react'
 import {
   createUpdateNotice,
+  type AppUpdates,
   type Readable,
   type Refresh,
   type RefreshBlocker,
+  type RefreshOutcome,
   type UpdateNotice as Notice,
   type UpdateNoticeOptions,
-  type AppUpdates,
   type UpdateState,
 } from '@rndsqr/usher-core'
-import { announce, prepareAnnouncements, spoken, withdraw } from './announcer'
+import { claim, prepareAnnouncements, release, spoken } from './announcer'
 
 function useReadable<Value>(readable: Readable<Value>): Value {
   return useSyncExternalStore(readable.subscribe, readable.get, readable.get)
@@ -45,28 +48,22 @@ export function useRefreshBlocker(
   refresh: Pick<Refresh, 'addBlocker'>,
   shouldBlock: boolean | RefreshBlocker,
 ): void {
-  const latest = useRef(shouldBlock)
-
-  useEffect(() => {
-    latest.current = shouldBlock
-  }, [shouldBlock])
+  const blocks = useEffectEvent(
+    () => shouldBlock === true || (shouldBlock !== false && shouldBlock()),
+  )
 
   const registered = shouldBlock !== false
 
-  useEffect(() => {
-    if (!registered) {
-      return undefined
-    }
-
-    return refresh.addBlocker(() => {
-      const current = latest.current
-
-      return current === true || (current !== false && current())
-    })
-  }, [refresh, registered])
+  useEffect(
+    () => (registered ? refresh.addBlocker(() => blocks()) : undefined),
+    [refresh, registered],
+  )
 }
 
-/** Read the notice to show, for a component that renders its own markup */
+/**
+ * Read the notice to show, for a component that renders its own markup,
+ * deferred so its arrival never blocks input
+ */
 export function useUpdateNotice(
   updates: AppUpdates,
   options: UpdateNoticeOptions = {},
@@ -78,7 +75,7 @@ export function useUpdateNotice(
     [updates, minAttention],
   )
 
-  return useReadable(notice)
+  return useDeferredValue(useReadable(notice))
 }
 
 interface Shown {
@@ -89,7 +86,7 @@ interface Shown {
 const ShownNotice = createContext<Shown | undefined>(undefined)
 
 function useShown(part: string): Shown {
-  const shown = useContext(ShownNotice)
+  const shown = use(ShownNotice)
 
   if (!shown) {
     throw new Error(
@@ -100,51 +97,63 @@ function useShown(part: string): Shown {
   return shown
 }
 
-function useAnnouncement(id: string, priority: Notice['announce'] | undefined) {
+function forward<Node>(ref: Ref<Node> | undefined, node: Node | null) {
+  if (ref && 'current' in ref) {
+    ref.current = node
+  } else {
+    ref?.(node)
+  }
+}
+
+function useAnnouncement(
+  element: HTMLElement | null,
+  priority: Notice['announce'] | undefined,
+) {
   useEffect(() => {
-    prepareAnnouncements()
+    prepareAnnouncements(document)
   }, [])
 
   useEffect(() => {
-    const container = document.querySelector(`[data-usher-notice="${id}"]`)
-
-    if (!container || !priority || priority === 'off') {
+    if (!element || !priority || priority === 'off') {
       return undefined
     }
 
-    let said = ''
-
     const sync = () => {
-      const text = spoken(container)
-
-      if (text === said) {
-        return
-      }
-
-      said = text
+      const text = spoken(element)
 
       if (text) {
-        announce(id, priority, text)
+        claim(element, priority, text)
       } else {
-        withdraw(id)
+        release(element)
       }
     }
 
-    const observer = new MutationObserver(sync)
+    const wording = new MutationObserver(sync)
+    const hiding = new MutationObserver(sync)
+    const size = new ResizeObserver(sync)
 
-    observer.observe(container, {
+    wording.observe(element, {
       subtree: true,
       childList: true,
       characterData: true,
+      attributes: true,
     })
 
+    hiding.observe(element.ownerDocument.documentElement, {
+      subtree: true,
+      attributeFilter: ['aria-hidden', 'hidden'],
+    })
+
+    size.observe(element)
     sync()
 
     return () => {
-      observer.disconnect()
-      withdraw(id)
+      wording.disconnect()
+      hiding.disconnect()
+      size.disconnect()
+      release(element)
     }
-  }, [id, priority])
+  }, [element, priority])
 }
 
 interface RootProps
@@ -156,10 +165,19 @@ interface RootProps
 }
 
 function Root(props: RootProps) {
-  const { updates, minAttention, children, ...rest } = props
+  const { updates, minAttention, children, ref, ...rest } = props
   const notice = useUpdateNotice(updates, { minAttention })
-  const id = useId()
-  useAnnouncement(id, notice?.announce)
+  const [element, setElement] = useState<HTMLDivElement | null>(null)
+
+  const attach = useCallback(
+    (node: HTMLDivElement | null) => {
+      setElement(node)
+      forward(ref, node)
+    },
+    [ref],
+  )
+
+  useAnnouncement(element, notice?.announce)
 
   if (!notice) {
     return null
@@ -170,58 +188,69 @@ function Root(props: RootProps) {
       data-attention={notice.attention}
       data-reason={notice.reason}
       {...rest}
-      data-usher-notice={id}
+      ref={attach}
     >
-      <ShownNotice.Provider value={{ notice, refresh: updates.refresh }}>
+      <ShownNotice value={{ notice, refresh: updates.refresh }}>
         {children(notice)}
-      </ShownNotice.Provider>
+      </ShownNotice>
     </div>
   )
 }
 
-type ButtonProps = ComponentProps<'button'>
+interface RefreshProps extends ComponentProps<'button'> {
+  /**
+   * What a press does in place of refreshing, given the refresh to call, and
+   * awaited in a transition that keeps the button pending, so it must settle
+   * because React holds every transition pending until all Actions complete
+   */
+  action?: (refresh: () => Promise<RefreshOutcome>) => void | Promise<void>
+}
 
-const unlessPrevented =
-  (onClick: ButtonProps['onClick'], act: () => void) =>
-  (event: MouseEvent<HTMLButtonElement>) => {
-    onClick?.(event)
-
-    if (!event.defaultPrevented) {
-      act()
-    }
-  }
-
-function RefreshButton({ onClick, ...props }: ButtonProps) {
+function RefreshButton({ action, onClick, ...props }: RefreshProps) {
   const { notice, refresh } = useShown('Refresh')
   const refreshing = useRefreshing(refresh)
+  const [pending, startTransition] = useTransition()
+  const busy = refreshing || pending
 
   return (
     <button
       type="button"
-      disabled={refreshing}
-      data-refreshing={refreshing || undefined}
+      disabled={busy}
+      data-refreshing={busy || undefined}
       {...props}
-      onClick={unlessPrevented(onClick, () => void notice.refresh())}
+      onClick={event => {
+        onClick?.(event)
+
+        if (action) {
+          startTransition(async () => {
+            await action(notice.refresh)
+          })
+        } else {
+          void notice.refresh()
+        }
+      }}
     />
   )
 }
 
-function Close({ onClick, ...props }: ButtonProps) {
+function Close({ onClick, ...props }: ComponentProps<'button'>) {
   const { notice } = useShown('Close')
 
   return notice.closable ? (
     <button
       type="button"
       {...props}
-      onClick={unlessPrevented(onClick, notice.close)}
+      onClick={event => {
+        onClick?.(event)
+        notice.close()
+      }}
     />
   ) : null
 }
 
 /**
  * Headless parts for an update notice: `Root` renders while there is a notice
- * and announces it, `Refresh` is disabled while a refresh runs, and `Close`
- * renders nothing at urgent attention. A part's `onClick` runs first and can
- * call `preventDefault()` to take over
+ * and announces it, `Refresh` runs its `action` or a refresh and is disabled
+ * meanwhile, and `Close` renders nothing at urgent attention
  */
 export const UpdateNotice = { Root, Refresh: RefreshButton, Close }
