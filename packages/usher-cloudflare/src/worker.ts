@@ -90,7 +90,7 @@ export function createAssetFallback<Binding extends string>(
     // Pages answers a missing file with index.html and a 200, so HTML is a miss.
     const isMiss =
       current.status === 404 ||
-      (current.headers.get('content-type') ?? '').includes('text/html')
+      current.headers.get('content-type')?.includes('text/html')
 
     if (!isChunkRead(request) || !isMiss) {
       return current

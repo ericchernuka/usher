@@ -75,7 +75,7 @@ class SurfaceConnection {
     this.hide = () => surface.hide()
   }
 
-  shown: { key: string; notice: UpdateNotice } | undefined
+  shown: UpdateNotice | undefined
 
   closed: string | undefined
 
@@ -98,16 +98,16 @@ class SurfaceConnection {
       this.closed = undefined
     }
 
-    if (!wanted || key === this.closed) {
+    if (!wanted || this.closed) {
       return this.remove()
     }
 
-    if (key === this.shown?.key) {
+    if (this.shown && keyOf(this.shown) === key) {
       return
     }
 
     const notice = this.makeNotice(wanted)
-    this.shown = { key: keyOf(wanted), notice }
+    this.shown = notice
 
     if (!safely('show', () => this.show(notice))) {
       this.shown = undefined
@@ -139,7 +139,7 @@ class SurfaceConnection {
       ...state,
       refresh: () => this.updates.refresh(),
       close: () => {
-        if (this.shown?.notice === notice) {
+        if (this.shown === notice) {
           this.sync(() => this.close(notice))
         }
       },
@@ -180,8 +180,7 @@ class SurfaceConnection {
   }
 
   connect = () => {
-    const onChange = () => this.sync()
-    const unsubscribe = this.updates.subscribe(onChange)
+    const unsubscribe = this.updates.subscribe(() => this.sync())
     this.sync()
 
     return () => {

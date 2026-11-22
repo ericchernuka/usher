@@ -87,9 +87,7 @@ export class LatestBuild {
   }
 
   private schedulePoll = () => {
-    if (this.watching) {
-      this.poll.arm(this.options.pollInterval - this.sinceCheck())
-    }
+    this.poll.arm(this.options.pollInterval - this.sinceCheck())
   }
 
   private onPoll = () => {
@@ -101,10 +99,7 @@ export class LatestBuild {
   }
 
   private recheck = () => {
-    if (
-      this.options.env.isVisible() &&
-      this.sinceCheck() >= MIN_FOCUS_CHECK_GAP_MS
-    ) {
+    if (this.sinceCheck() >= MIN_FOCUS_CHECK_GAP_MS) {
       void this.check()
     }
   }
