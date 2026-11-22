@@ -22,7 +22,7 @@ import {
   type UpdateNoticeOptions,
   type UpdateState,
 } from '@rndsqr/usher-core'
-import { claim, release, settle } from './announcer'
+import { claim, prepareAnnouncements, release } from './announcer'
 
 function useReadable<Value>(readable: Readable<Value>): Value {
   return useSyncExternalStore(readable.subscribe, readable.get, readable.get)
@@ -101,7 +101,7 @@ function useAnnouncement(
 ) {
   const [owner] = useState(() => Symbol('update notice'))
 
-  useEffect(settle, [])
+  useEffect(prepareAnnouncements, [])
 
   useEffect(() => {
     if (!wording || !priority || priority === 'off') {
@@ -159,7 +159,8 @@ interface RefreshProps extends ComponentProps<'button'> {
   action?: (refresh: () => Promise<RefreshOutcome>) => void | Promise<void>
 }
 
-function RefreshButton({ action, onClick, ...props }: RefreshProps) {
+function RefreshButton(props: RefreshProps) {
+  const { action, onClick, disabled, ...rest } = props
   const { notice, refresh } = useShown('Refresh')
   const refreshing = useRefreshing(refresh)
   const [pending, startTransition] = useTransition()
@@ -168,9 +169,9 @@ function RefreshButton({ action, onClick, ...props }: RefreshProps) {
   return (
     <button
       type="button"
-      disabled={busy}
       data-refreshing={busy || undefined}
-      {...props}
+      {...rest}
+      disabled={busy || disabled === true}
       onClick={event => {
         onClick?.(event)
 

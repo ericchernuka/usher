@@ -17,6 +17,7 @@ const claims = new Map<
 >()
 
 const regions = new Map<'polite' | 'assertive', Region>()
+let scheduled = false
 
 function regionFor(priority: 'polite' | 'assertive'): Region {
   const found = regions.get(priority)
@@ -66,7 +67,9 @@ function say(target: Region, text: string) {
   target.element.append(child)
 }
 
-export function settle() {
+function settle() {
+  scheduled = false
+
   for (const priority of PRIORITIES) {
     const target = regionFor(priority)
 
@@ -89,17 +92,24 @@ export function settle() {
   }
 }
 
+export function prepareAnnouncements() {
+  if (!scheduled) {
+    scheduled = true
+    queueMicrotask(settle)
+  }
+}
+
 export function claim(
   owner: symbol,
   priority: 'polite' | 'assertive',
   text: string,
 ) {
   claims.set(owner, { priority, text })
-  settle()
+  prepareAnnouncements()
 }
 
 export function release(owner: symbol) {
   if (claims.delete(owner)) {
-    settle()
+    prepareAnnouncements()
   }
 }

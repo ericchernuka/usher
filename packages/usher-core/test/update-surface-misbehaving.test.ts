@@ -1,5 +1,10 @@
 import { vi } from 'vitest'
-import { connectUpdateSurface } from '../src/index'
+import {
+  connectUpdateSurface,
+  type AppUpdates,
+  type UpdateNotice,
+  type UpdateState,
+} from '../src/index'
 import { server } from './mocks/node'
 import { serveBuild } from './mocks/overrides'
 import { DISMISSAL_KEY, describe, expect, newer, older, test } from './fixtures'
@@ -160,5 +165,74 @@ describe('surfaces that misbehave', () => {
     await app.poll()
 
     expect(shown).toEqual(['ccc'])
+  })
+
+  test('given a library closes an urgent toast after a newer build arrived, then it is shown again with that build', async ({
+    app,
+    tab,
+  }) => {
+    server.use(serveBuild(older))
+    const shown: UpdateNotice[] = []
+    const store = app.create()
+
+    app.track(
+      connectUpdateSurface(store, {
+        show: notice => shown.push(notice),
+        hide: () => {},
+      }),
+    )
+    await tab.waitForResponse()
+    server.use(serveBuild({ ...older, version: 'older-still' }))
+    await app.poll()
+
+    shown.at(-1)?.close()
+
+    expect(shown.map(notice => notice.latest.version)).toEqual([
+      'old',
+      'older-still',
+    ])
+  })
+
+  test('given show() makes the tab catch up and then reports the urgent toast closed, then the surface is still hidden', () => {
+    const listeners = new Set<() => void>()
+    const log: string[] = []
+
+    let state: UpdateState = {
+      attention: 'urgent',
+      reason: 'rollback',
+      latest: older,
+    }
+
+    const updates: AppUpdates = {
+      state: {
+        get: () => state,
+        subscribe(listener) {
+          listeners.add(listener)
+
+          return () => void listeners.delete(listener)
+        },
+        dismiss: () => false,
+      },
+      refresh: {
+        get: () => false,
+        subscribe: () => () => {},
+        run: async () => 'reloading',
+        addBlocker: () => () => {},
+      },
+    }
+
+    const disconnect = connectUpdateSurface(updates, {
+      show(notice) {
+        log.push('show')
+        state = { attention: 'none', reason: 'caught-up', latest: newer }
+        listeners.forEach(listener => listener())
+        notice.close()
+      },
+      hide: () => log.push('hide'),
+    })
+
+    expect(log).toEqual(['show', 'hide'])
+    disconnect()
+    expect(log).toEqual(['show', 'hide'])
   })
 })

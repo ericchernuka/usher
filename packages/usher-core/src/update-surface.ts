@@ -79,7 +79,7 @@ class SurfaceConnection {
         if (source.closable) {
           source.close()
         } else {
-          this.#forget()
+          this.#notice.renew(source)
           this.#sync()
         }
       },
