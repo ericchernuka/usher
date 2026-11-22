@@ -365,7 +365,41 @@ Each `Root` keeps a `status` and an `alert` region of its own beside the notice,
 
 ## Testing update UI
 
-`createTestTab()` is a tab with virtual time. Pass it as the second argument to `createAppUpdates`. With the plugin's `/client` entry, which needs Vite and so a runner built on it, such as Vitest:
+`createTestTab()` is a tab with virtual time. Pass it as the second argument to `createAppUpdates`:
+
+```tsx
+import { createAppUpdates } from '@rndsqr/usher-core'
+import { createTestTab } from '@rndsqr/usher-core/testing'
+
+const tab = createTestTab()
+const built = new Date(tab.now()).toISOString()
+const running = { version: 'one', commitTime: built, buildTime: built }
+
+const appUpdates = createAppUpdates(
+  { running, versionUrl: '/version.json' },
+  tab,
+)
+render(<App appUpdates={appUpdates} />)
+
+tab.deploy({ ...running, version: 'two' })
+await tab.advance(5 * MINUTE) // the next check sees the deploy
+await tab.advance(12 * HOUR)
+// the app now shows its prompt
+```
+
+`deploy` sets the build facts every version check gets, and `advance` moves time forward, running the checks and timers that fall due. Before the first `deploy` the tab is offline. The tab's clock starts at the real time and then moves only when advanced. The tab needs nothing from the test runner but real timers to wait on, so leave `setTimeout` unfaked while it advances.
+
+A tab is outdated from the build time of the newer build, so give a deployed build the time `tab.now()` to start the count there, and keep the running build's commit time so the deploy is not taken for a rollback.
+
+This recipe uses core, so it runs in any test runner. To test through the plugin's `/client` entry, the runner has to be built on Vite with `usher()` among its plugins, because the plugin supplies the build facts that entry imports. Vitest's browser mode needs nothing more. In Vitest's Node environments the plugin package also has to go through Vite, not Node's own loader:
+
+```ts
+// vitest.config.ts
+export default defineConfig({
+  plugins: [usher()],
+  ssr: { noExternal: ['@rndsqr/usher-plugin'] },
+})
+```
 
 ```tsx
 import { createTestTab } from '@rndsqr/usher-core/testing'
@@ -380,30 +414,9 @@ tab.deploy({
   version: 'next',
   buildTime: new Date(tab.now()).toISOString(),
 })
-await tab.advance(5 * MINUTE) // the next check sees the deploy
+await tab.advance(5 * MINUTE)
 await tab.advance(12 * HOUR)
-// the app now shows its prompt
 ```
-
-`deploy` sets the build facts every version check gets, and `advance` moves time forward, running the checks and timers that fall due. Before the first `deploy` the tab is offline. The tab needs nothing from the test runner but real timers to wait on, so leave `setTimeout` unfaked while it advances.
-
-In a runner without Vite, such as Jest, `/client` cannot be imported, because the plugin supplies its build facts. Use core's `createAppUpdates` there and give it the running build yourself:
-
-````ts
-import { createAppUpdates } from '@rndsqr/usher-core'
-import { createTestTab } from '@rndsqr/usher-core/testing'
-
-const tab = createTestTab()
-const built = new Date(tab.now()).toISOString()
-const running = { version: 'one', commitTime: built, buildTime: built }
-
-const appUpdates = createAppUpdates(
-  { running, versionUrl: '/version.json' },
-  tab,
-)
-
-tab.deploy({ ...running, version: 'two' })
-``` The tab's clock starts at the real time and then moves only when advanced. A tab is outdated from the build time of the newer build, so give a deployed build the time `tab.now()` to start the count there, and keep the running build's commit time so the deploy is not taken for a rollback.
 
 ## Skew protection
 
@@ -413,10 +426,8 @@ Skew protection is optional. Pass an adapter from a provider package, and the pl
 import { cloudflarePages, cloudflareWorkers } from '@rndsqr/usher-cloudflare'
 
 usher({ adapter: cloudflarePages() }) // { r2Binding? }
-usher({
-  adapter: cloudflareWorkers({ workerFile: 'dist-worker/index.mjs' }),
-}) // { r2Binding?, workerFile? }
-````
+usher({ adapter: cloudflareWorkers() }) // { r2Binding?, workerFile? }
+```
 
 | Adapter               | Writes                                                                                      | You configure                                                                           |
 | --------------------- | ------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
