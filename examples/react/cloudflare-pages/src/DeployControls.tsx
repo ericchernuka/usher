@@ -1,10 +1,11 @@
 import { useState } from 'react'
-import { devtools } from './devtools'
 
 const modes = ['advance', 'force', 'rollback', 'reset'] as const
 
 export function DeployControls() {
   const [served, setServed] = useState<string>()
+
+  const devtools = globalThis.__USHER_DEVTOOLS__
 
   if (!devtools) {
     return null

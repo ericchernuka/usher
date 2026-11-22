@@ -3,5 +3,10 @@
   "compilerOptions": {
     "types": ["vite/client", "@vitest/browser-playwright"]
   },
-  "include": ["src", "test", "*.config.ts"]
+  "include": [
+    "src",
+    "test",
+    "*.config.ts",
+    "../../examples/react/*/src/usher.d.ts"
+  ]
 }
