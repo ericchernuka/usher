@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import * as client from '../src/client'
 import { createAppUpdates, runningBuild as embeddedBuild } from '../src/client'
+import { createTestTab } from '@rndsqr/usher-core/testing'
 import { runningBuild } from './build-info.stub'
 
 const SECOND = 1_000
@@ -63,4 +64,23 @@ it('forwards the configured polling interval to the core store', async () => {
   } finally {
     stop()
   }
+})
+
+it('runs on a test tab, where a deploy and twelve hours bring the prompt', async () => {
+  vi.useRealTimers()
+  const tab = createTestTab()
+  const updates = createAppUpdates({}, tab)
+  const stop = updates.state.subscribe(() => {})
+
+  tab.deploy({
+    ...runningBuild,
+    version: 'next',
+    buildTime: new Date(tab.now()).toISOString(),
+  })
+  await tab.advance(5 * 60 * SECOND)
+  expect(updates.state.get().attention).toBe('passive')
+
+  await tab.advance(12 * 60 * 60 * SECOND)
+  expect(updates.state.get().attention).toBe('prompt')
+  stop()
 })

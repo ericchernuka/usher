@@ -94,8 +94,6 @@ async function announcements() {
   )
 }
 
-const regions = () => document.querySelectorAll('[data-usher-announcer]')
-
 describe('what a screen reader hears', () => {
   it('given a passive notice, then nothing is announced', async () => {
     const { tab, updates } = served(newer)
@@ -196,27 +194,19 @@ describe('what a screen reader hears', () => {
     await view.unmount()
   })
 
-  it('given two notices with the same wording, when the second mounts late and then leaves, then the wording is announced once and stays', async () => {
+  it('given two notices for one update, when only one is given wording, then the update is announced once', async () => {
     const { tab, updates } = served(older)
-    const view = await render(<Banner updates={updates} />)
-    await tab.advance(0)
-    await expect
-      .element(view.getByRole('alert'))
-      .toHaveTextContent('Update available: urgent')
 
-    await view.rerender(
+    const view = await render(
       <>
         <Banner updates={updates} />
-        <Banner updates={updates} minAttention="passive" />
+        <Banner updates={updates} announcement={() => ''} />
       </>,
     )
-    await settled()
-    await view.rerender(<Banner updates={updates} />)
 
-    await settled()
-    expect(view.getByRole('alert').element().textContent).toBe(
-      'Update available: urgent',
-    )
+    await tab.advance(0)
+    await expect.poll(() => updates.state.get().attention).toBe('urgent')
+
     expect(await announcements()).toEqual([
       'assertive: Update available: urgent',
     ])
@@ -239,8 +229,6 @@ describe('what a screen reader hears', () => {
     await view.rerender(staying)
 
     await expect.element(view.getByRole('alert')).toHaveTextContent('Stays')
-    await settled()
-    expect(view.getByRole('alert').element().textContent).toBe('Stays')
     expect(await announcements()).toEqual(['assertive: Stays'])
     await view.unmount()
   })
@@ -260,21 +248,27 @@ describe('what a screen reader hears', () => {
     )
 
     await Promise.all([urgent.tab.advance(0), prompting.tab.advance(13 * HOUR)])
+    await expect
+      .poll(() => prompting.updates.state.get().attention)
+      .toBe('prompt')
 
-    await expect
-      .element(view.getByRole('alert'))
-      .toHaveTextContent('Refresh now')
-    await expect
-      .element(view.getByRole('status'))
-      .toHaveTextContent('An update is ready')
+    expect((await announcements()).toSorted()).toEqual([
+      'assertive: Refresh now',
+      'polite: An update is ready',
+    ])
     await view.unmount()
   })
 
-  it('given no wording, then nothing is announced', async () => {
+  it('given no wording, or a root hidden from the page, then nothing is announced', async () => {
     const { tab, updates } = served(older)
 
     const view = await render(
-      <Banner updates={updates} announcement={() => ''} />,
+      <>
+        <Banner updates={updates} announcement={() => ''} />
+        <UpdateNotice.Root hidden updates={updates} announcement={wordingFor}>
+          {() => null}
+        </UpdateNotice.Root>
+      </>,
     )
 
     await tab.advance(0)
@@ -284,63 +278,7 @@ describe('what a screen reader hears', () => {
     await view.unmount()
   })
 
-  it('given something removed one live region, then it is made again without repeating what the other said', async () => {
-    const prompting = served(newer, 'billing')
-    const urgent = served(older)
-
-    const view = await render(
-      <>
-        <Banner
-          updates={prompting.updates}
-          announcement={() => 'An update is ready'}
-        />
-        <Rewordable updates={urgent.updates} />
-      </>,
-    )
-
-    await Promise.all([urgent.tab.advance(0), prompting.tab.advance(13 * HOUR)])
-    await expect
-      .element(view.getByRole('status'))
-      .toHaveTextContent('An update is ready')
-    const polite = view.getByRole('status').element()
-    document.querySelector('[data-usher-announcer="assertive"]')?.remove()
-    await view.getByRole('button', { name: 'Block' }).click()
-
-    await expect
-      .element(view.getByRole('alert'))
-      .toHaveTextContent('Save your work first')
-    expect(regions()).toHaveLength(2)
-    expect(view.getByRole('status').element()).toBe(polite)
-    expect(
-      (await announcements()).filter(phrase => phrase.startsWith('polite')),
-    ).toEqual(['polite: An update is ready'])
-    await view.unmount()
-  })
-
-  it('given two notices exchange their wording in one render, then both stay in the region and nothing is said again', async () => {
-    const { tab, updates } = served(older)
-
-    const pair = (first: string, second: string) => (
-      <>
-        <Banner updates={updates} announcement={() => first} />
-        <Banner updates={updates} announcement={() => second} />
-      </>
-    )
-
-    const view = await render(pair('One', 'Two'))
-    await tab.advance(0)
-    await expect.element(view.getByRole('alert')).toHaveTextContent('OneTwo')
-    const said = Array.from(view.getByRole('alert').element().children)
-
-    await view.rerender(pair('Two', 'One'))
-    await settled()
-
-    expect(Array.from(view.getByRole('alert').element().children)).toEqual(said)
-    expect(await announcements()).toEqual(['assertive: One', 'assertive: Two'])
-    await view.unmount()
-  })
-
-  it('given a notice inside an open modal dialog, then it is announced from inside the dialog, and from the page again once the dialog has closed', async () => {
+  it('given a notice inside an open modal dialog, then its live region is inside the dialog too and the wording is announced', async () => {
     const { tab, updates } = served(newer)
 
     const view = await render(
@@ -357,18 +295,8 @@ describe('what a screen reader hears', () => {
       .element(view.getByRole('status'))
       .toHaveTextContent('Update available: prompt')
     expect(dialog?.contains(view.getByRole('status').element())).toBe(true)
-
+    expect(await announcements()).toEqual(['polite: Update available: prompt'])
     dialog?.close()
-    await tab.advance(12 * HOUR)
-
-    await expect.poll(() => updates.state.get().attention).toBe('urgent')
-    await expect
-      .poll(() => regions()[1]?.textContent)
-      .toBe('Update available: urgent')
-    expect(Array.from(regions(), region => region.parentElement)).toEqual([
-      document.body,
-      document.body,
-    ])
     await view.unmount()
   })
 })

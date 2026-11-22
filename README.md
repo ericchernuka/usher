@@ -359,7 +359,7 @@ An action has to settle. React keeps overlapping transitions in the same root pe
 
 `Root` announces the notice with the wording its `announcement` prop returns. The prop is required, and an empty string announces nothing.
 
-The package keeps one `status` and one `alert` region in the document, visually hidden, and adds the wording to the one that matches `announce`, so a screen reader hears a prompt politely and an urgent notice assertively. Wording is announced when the notice appears and again when the wording changes. The same wording at the same politeness is announced once, however many `Root`s give it, and it leaves the region when the last of them does. The regions are in the document that runs the app, so a notice rendered into another document, such as an iframe, is announced in the app's own. While a modal `<dialog>` is open they move inside it, because the rest of the page is inert to a screen reader until it closes. The wording is the app's to give because only the app knows which of its text is the message: reading it back out of the markup means guessing what is hidden, decorative or a control.
+Each `Root` keeps a `status` and an `alert` region of its own beside the notice, visually hidden and present before there is anything to say. It puts the wording into the one that matches `announce`, so a screen reader hears a prompt politely and an urgent notice assertively, when the notice appears and again when the wording changes. Because the regions sit where the `Root` is rendered, a notice inside a modal dialog, a portal or another document is announced there. A `Root` given `hidden` or `aria-hidden` stays silent. Two `Root`s that give wording for the same notice both announce it, so give the wording to one and an empty string to the other. The wording is the app's to give because only the app knows which of its text is the message: reading it back out of the markup means guessing what is hidden, decorative or a control.
 
 ## Testing update UI
 
@@ -367,23 +367,23 @@ The package keeps one `status` and one `alert` region in the document, visually 
 
 ```ts
 import { createTestTab } from '@rndsqr/usher-core/testing'
+import { createAppUpdates, runningBuild } from '@rndsqr/usher-plugin/client'
 
 const tab = createTestTab()
-const built = new Date(tab.now()).toISOString()
-const running = { version: 'one', commitTime: built, buildTime: built }
-tab.deploy({ ...running, version: 'two' })
-
-const appUpdates = createAppUpdates(
-  { running, versionUrl: '/version.json' },
-  tab,
-)
+const appUpdates = createAppUpdates({}, tab)
 render(<App appUpdates={appUpdates} />)
 
+tab.deploy({
+  ...runningBuild,
+  version: 'next',
+  buildTime: new Date(tab.now()).toISOString(),
+})
+await tab.advance(5 * MINUTE) // the next check sees the deploy
 await tab.advance(12 * HOUR)
 // the app now shows its prompt
 ```
 
-`deploy` sets the build facts every version check gets, and `advance` moves time forward, running the checks and timers that fall due. Before the first `deploy` the tab is offline. A tab is outdated from the later of the two build times, so take both the running and the deployed build's times from `tab.now()`, the test tab's own clock, which does not follow the real one.
+`deploy` sets the build facts every version check gets, and `advance` moves time forward, running the checks and timers that fall due. Before the first `deploy` the tab is offline. The tab's clock starts at the real time and then moves only when advanced. A tab is outdated from the build time of the newer build, so give a deployed build the time `tab.now()` to start the count there, and keep the running build's commit time so the deploy is not taken for a rollback.
 
 ## Skew protection
 
