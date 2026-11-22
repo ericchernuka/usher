@@ -50,6 +50,8 @@ export default { fetch: createAssetFallback(${JSON.stringify(options)}) };
 export function cloudflarePages(
   options: CloudflarePagesOptions = {},
 ): SkewProtectionAdapter {
+  const { r2Binding } = options
+
   return {
     name: 'cloudflare-pages',
     files(build) {
@@ -63,7 +65,7 @@ export function cloudflarePages(
         clientFiles: [
           {
             fileName: '_worker.js',
-            source: renderWorker(build, 'cloudflarePages', options.r2Binding),
+            source: renderWorker(build, 'cloudflarePages', r2Binding),
           },
           {
             fileName: '_routes.json',
@@ -89,13 +91,15 @@ export function cloudflarePages(
 export function cloudflareWorkers(
   options: CloudflareWorkersOptions = {},
 ): SkewProtectionAdapter {
+  const { r2Binding } = options
+
   return {
     name: 'cloudflare-workers',
     files: build => ({
       privateFiles: [
         {
           fileName: options.workerFile ?? DEFAULT_WORKER_FILE,
-          source: renderWorker(build, 'cloudflareWorkers', options.r2Binding),
+          source: renderWorker(build, 'cloudflareWorkers', r2Binding),
         },
       ],
     }),
