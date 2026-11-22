@@ -81,7 +81,7 @@ Core is built from behaviours, and `createAppUpdates` composes them. It exports 
 | `environment.ts`      | Nothing. Describes what core needs from a tab: clocks, timers, fetch, storage, visibility, focus and reload.                                             |
 | `fake-environment.ts` | The fake tab with virtual time that core's tests and `/testing` share.                                                                                   |
 
-`environment.ts` is the one internal seam. Its browser adapter is the only code that touches globals, and the tests replace it with the fake. It is not part of the public interface: an app that tests its own update UI uses `createTestTab()` from `/testing`, which exposes `deploy` and `advance` and not the seam.
+`environment.ts` is the one internal seam. Its browser adapter is the only code that touches globals, and the tests replace it with the fake. It is not part of the public interface: an app that tests its own update UI uses `createTestTab()` from `/testing`, which exposes `now`, `deploy` and `advance` and not the seam.
 
 Each behaviour holds timers, listeners and requests only while it has a subscriber, and it subscribes to what it reads only while it has one itself. Subscribing to the refresh starts nothing else.
 

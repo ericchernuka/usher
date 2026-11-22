@@ -54,6 +54,19 @@ test('given time passes before the first check, then the count still starts from
   stop()
 })
 
+test('given a deployed build with a field set to undefined, then the tab reads it as the server would send it', async () => {
+  const tab = createTestTab()
+  const deployed = JSON.parse(JSON.stringify(newer))
+  tab.deploy({ ...deployed, forceUpdateBuiltBefore: undefined })
+  const updates = createAppUpdates({ running, versionUrl }, tab)
+  const stop = updates.state.subscribe(() => {})
+
+  await tab.advance(0)
+
+  expect(updates.state.get().latest).toEqual(newer)
+  stop()
+})
+
 test('given a runtime without MessageChannel or Response, as a test runner with a simulated DOM can be, then the test tab still works', async () => {
   const removed = {
     MessageChannel: globalThis.MessageChannel,
