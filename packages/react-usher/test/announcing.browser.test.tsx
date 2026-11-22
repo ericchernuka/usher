@@ -339,4 +339,36 @@ describe('what a screen reader hears', () => {
     expect(await announcements()).toEqual(['assertive: One', 'assertive: Two'])
     await view.unmount()
   })
+
+  it('given a notice inside an open modal dialog, then it is announced from inside the dialog, and from the page again once the dialog has closed', async () => {
+    const { tab, updates } = served(newer)
+
+    const view = await render(
+      <dialog>
+        <Banner updates={updates} />
+      </dialog>,
+    )
+
+    const dialog = view.container.querySelector('dialog')
+    dialog?.showModal()
+    await tab.advance(13 * HOUR)
+
+    await expect
+      .element(view.getByRole('status'))
+      .toHaveTextContent('Update available: prompt')
+    expect(dialog?.contains(view.getByRole('status').element())).toBe(true)
+
+    dialog?.close()
+    await tab.advance(12 * HOUR)
+
+    await expect.poll(() => updates.state.get().attention).toBe('urgent')
+    await expect
+      .poll(() => regions()[1]?.textContent)
+      .toBe('Update available: urgent')
+    expect(Array.from(regions(), region => region.parentElement)).toEqual([
+      document.body,
+      document.body,
+    ])
+    await view.unmount()
+  })
 })
