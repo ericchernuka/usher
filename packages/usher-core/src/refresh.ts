@@ -66,13 +66,21 @@ export function createRefresh(
       return Promise.resolve('blocked')
     }
 
-    const attempt = perform().finally(() => {
+    // The executor runs at once, so `settle` is set before it is called.
+    let settle!: (outcome: Promise<RefreshOutcome>) => void
+
+    const attempt = new Promise<RefreshOutcome>(resolve => {
+      settle = resolve
+    }).finally(() => {
       inFlight = undefined
       onChange()
     })
 
+    // Recorded before `reload` runs, so a reload that asks for a refresh joins
+    // this attempt instead of starting another.
     inFlight = attempt
     onChange()
+    settle(perform())
 
     return attempt
   }

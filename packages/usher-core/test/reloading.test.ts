@@ -1,4 +1,5 @@
 import { vi } from 'vitest'
+import type { AppUpdates } from '../src/index'
 import { describe, expect, test } from './fixtures'
 
 describe('refreshing', () => {
@@ -46,6 +47,26 @@ describe('refreshing', () => {
 
     expect(store.isRefreshing()).toBe(false)
     expect(heard).toEqual([true, false, true, false])
+  })
+
+  test('given a reload that asks for a refresh itself, then it finds one in flight and joins it', async ({
+    app,
+  }) => {
+    const inFlight: boolean[] = []
+    const joined: Array<ReturnType<AppUpdates['refresh']>> = []
+
+    const reload = vi.fn<() => void>(() => {
+      inFlight.push(store.isRefreshing())
+      joined.push(store.refresh())
+    })
+
+    const store = app.create({ reload })
+
+    expect(await store.refresh()).toBe('reloading')
+    expect(reload).toHaveBeenCalledTimes(1)
+    expect(inFlight).toEqual([true])
+    expect(await joined[0]).toBe('reloading')
+    expect(store.isRefreshing()).toBe(false)
   })
 
   test('given the app supplies its own reload, then refresh delegates to it, and false or a throw means it was declined', async ({
