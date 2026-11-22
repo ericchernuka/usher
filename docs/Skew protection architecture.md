@@ -62,7 +62,7 @@ The handler is `createAssetFallback()` in `@rndsqr/usher-cloudflare/worker`, one
 
 ## Update state
 
-Core's public interface is its behaviours, and `createAppUpdates` composes them. See [ADR 0012](adr/0012-behaviours-are-the-public-interface.md) and the [design document](Behaviour-first%20API%20architecture.md). Dependencies point one way: the update state reads the version check and the dismissal, the notice reads the update state and the refresh, and nothing reads upward.
+Core is built from behaviours, and `createAppUpdates` composes them. It exports the update state and the refresh through the handle, plus the notice and the test tab; the rest are internal. See [ADR 0012](adr/0012-core-is-built-from-behaviours.md) and the [design document](Behaviour-first%20API%20architecture.md). Dependencies point one way: the update state reads the version check and the dismissal, the notice reads the update state and the refresh, and nothing reads upward.
 
 | Module                | Owns                                                                                                                                                     |
 | --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |

@@ -28,7 +28,7 @@ export function insideTab(tab: Tab): Inside {
   const inside = insides.get(tab)
 
   if (!inside) {
-    throw new Error('[usher] tab must come from createTab()')
+    throw new Error('[usher] tab must come from createTestTab()')
   }
 
   return inside
