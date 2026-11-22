@@ -119,6 +119,7 @@ function Announcer({ priority, wording }: AnnouncerProps) {
     for (const region of [polite.current, assertive.current]) {
       if (region) {
         Object.assign(region.style, unseen)
+        region.hidden = false
       }
     }
   }, [])
@@ -141,8 +142,8 @@ function Announcer({ priority, wording }: AnnouncerProps) {
 
   return (
     <>
-      <output ref={polite} aria-live="polite" />
-      <div ref={assertive} role="alert" aria-live="assertive" />
+      <output ref={polite} aria-live="polite" hidden />
+      <div ref={assertive} role="alert" aria-live="assertive" hidden />
     </>
   )
 }
@@ -154,7 +155,8 @@ interface RootProps
   /**
    * Wording a screen reader hears when the notice appears or the wording
    * changes, politely for a prompt and assertively for urgent attention,
-   * with an empty string for a root that should stay silent
+   * with an empty string for a root that should stay silent, as one given
+   * `hidden`, `inert` or `aria-hidden` always does
    */
   announcement: (notice: Notice) => string
   /** Markup for the notice, called only while there is one */
@@ -165,7 +167,12 @@ function Root(props: RootProps) {
   const { updates, minAttention, announcement, children, ...rest } = props
   const notice = useUpdateNotice(updates, { minAttention })
   const hiding = rest['aria-hidden']
-  const silent = rest.hidden === true || hiding === true || hiding === 'true'
+
+  const silent =
+    rest.hidden === true ||
+    rest.inert === true ||
+    hiding === true ||
+    hiding === 'true'
 
   return (
     <>
