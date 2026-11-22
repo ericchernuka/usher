@@ -114,6 +114,15 @@ test('given only the refresh is subscribed, then no version check is made', asyn
   stop()
 })
 
+test('given a notice made for a declarative surface, then it holds only get and subscribe', () => {
+  const updates = createAppUpdates({ running, versionUrl }, createTestTab())
+
+  expect(Object.keys(createUpdateNotice(updates)).toSorted()).toEqual([
+    'get',
+    'subscribe',
+  ])
+})
+
 test('given a notice read declaratively, then it says how to present itself and closing follows the surface rules', async () => {
   const tab = createTestTab()
   const updates = createAppUpdates({ running, versionUrl }, tab)
