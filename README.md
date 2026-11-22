@@ -308,7 +308,7 @@ function copyFor({ attention, reason }: UpdateNotice) {
 
 `show` is called once per change of attention or reason, with a new notice each time. The surface owns its toast id and its wording. The default minimum attention is `prompt`; use `minAttention: 'passive'` for a persistent update banner.
 
-`notice.close()` means the user closed the surface. For a prompt it dismisses the prompt for every tab and then calls `hide()`. For a passive notice it calls `hide()` and stays hidden until attention or reason changes. For an urgent notice it calls `show()` again with a new notice, because urgent attention cannot be closed and some libraries remove a toast regardless. Outside `connectUpdateSurface`, closing an urgent notice does nothing. A notice that is no longer the one shown ignores `close()`, so a library that fires `onClose` during a programmatic hide is safe.
+`notice.close()` means the user closed the surface. For a prompt it dismisses the prompt for every tab and then calls `hide()`. For a passive notice it calls `hide()` and stays hidden until attention or reason changes. A notice read with `createUpdateNotice` or the React parts keeps that close while it has a reader. If its last reader leaves and returns, as inside a hidden `<Activity>`, the close is kept only if the update state did not change in between. For an urgent notice it calls `show()` again with a new notice, because urgent attention cannot be closed and some libraries remove a toast regardless. Outside `connectUpdateSurface`, closing an urgent notice does nothing. A notice that is no longer the one shown ignores `close()`, so a library that fires `onClose` during a programmatic hide is safe.
 
 Give urgent notices no timeout. A toast library that closes one on its own timer makes the connection show it again, and after five such rounds in one pass it stops and logs an error.
 
@@ -323,7 +323,11 @@ A component that renders its own markup reads the same notice, with the same clo
 ```tsx
 import { UpdateNotice } from '@rndsqr/react-usher'
 
-;<UpdateNotice.Root updates={appUpdates} minAttention="passive">
+;<UpdateNotice.Root
+  updates={appUpdates}
+  minAttention="passive"
+  announcement={notice => copyFor(notice).title}
+>
   {notice => (
     <>
       <p>{copyFor(notice).title}</p>
@@ -353,16 +357,9 @@ To decide what a press on `Refresh` does, give it an `action`. It receives the r
 
 An action has to settle. React keeps overlapping transitions in the same root pending until all their Actions complete, so one that never resolves holds the app's other pending states too. A press without an `action` starts no transition.
 
-`Root` also announces the notice, with the wording its `announcement` prop returns:
+`Root` announces the notice with the wording its `announcement` prop returns. The prop is required, and an empty string announces nothing.
 
-```tsx
-<UpdateNotice.Root
-  updates={appUpdates}
-  announcement={notice => `${copyFor(notice).title}. ${copyFor(notice).description}`}
->
-```
-
-The package keeps one `status` and one `alert` region in the document, visually hidden, and adds the wording to the one that matches `announce`, so a screen reader hears a prompt politely and an urgent notice assertively. Wording is announced when the notice appears and again when the wording changes. The same wording at the same politeness is announced once, however many `Root`s give it, and it leaves the region when the last of them does. An empty string announces nothing. The wording is the app's to give because only the app knows which of its text is the message: reading it back out of the markup means guessing what is hidden, decorative or a control.
+The package keeps one `status` and one `alert` region in the document, visually hidden, and adds the wording to the one that matches `announce`, so a screen reader hears a prompt politely and an urgent notice assertively. Wording is announced when the notice appears and again when the wording changes. The same wording at the same politeness is announced once, however many `Root`s give it, and it leaves the region when the last of them does. The regions are in the document that runs the app, so a notice rendered into another document, such as an iframe, is announced in the app's own. The wording is the app's to give because only the app knows which of its text is the message: reading it back out of the markup means guessing what is hidden, decorative or a control.
 
 ## Testing update UI
 

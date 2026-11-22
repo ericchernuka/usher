@@ -18,7 +18,8 @@ export type UpdateNotice = Exclude<UpdateState, { attention: 'none' }> & {
   /**
    * Close by the user, which dismisses a prompt for every tab, hides a
    * passive notice until attention or reason changes, and does nothing on
-   * an urgent notice or one that is no longer shown
+   * a notice that is no longer shown or an urgent one, which
+   * `connectUpdateSurface` shows again when a library reports it closed
    */
   close: () => void
 }
@@ -50,6 +51,7 @@ function reaches(
 
 export interface NoticeStore extends Readable<UpdateNotice | undefined> {
   discard: (notice: UpdateNotice) => void
+  renew: (notice: UpdateNotice) => void
 }
 
 class Notices implements NoticeStore {
@@ -122,16 +124,16 @@ class Notices implements NoticeStore {
   }
 
   #start = () => {
+    if (this.#state.get() !== this.#left) {
+      this.#closed = undefined
+    }
+
     this.#unsubscribe = this.#state.subscribe(() => {
       if (!this.#closing) {
         this.#reconcile()
         this.#listeners.notify()
       }
     })
-
-    if (this.#state.get() !== this.#left) {
-      this.#closed = undefined
-    }
 
     this.#reconcile()
   }
@@ -146,6 +148,11 @@ class Notices implements NoticeStore {
     if (this.#shown === notice) {
       this.#shown = undefined
     }
+  }
+
+  renew = (notice: UpdateNotice) => {
+    this.discard(notice)
+    this.#reconcile()
   }
 
   get = () => this.#shown

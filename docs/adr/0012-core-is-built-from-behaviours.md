@@ -26,7 +26,7 @@ The build plugin, the adapter contract and the asset fallback handler do not cha
 
 ## Consequences
 
-- A listener hears about one fact. Subscribing to `refresh` does not start version checks, and the caveat in ADR 0011 that a listener should compare what it reads is gone.
+- A listener hears about one fact. Subscribing to `refresh` does not start version checks, and a listener on the state or the refresh no longer has to compare what it reads, as ADR 0011 warned. The notice is the exception: it tells its listeners about every state change, so a surface whose `show` threw can try again.
 - A declarative React surface and an imperative toast get the same close rules and the same `announce` value from one notice.
 - Each observed fact has one owner. The sticky urgency signal remembers the rollback or forced update it last saw and escalation remembers outdated since, where the store used to hold both for a function that took them back as arguments.
 - An app cannot compose something wrong, such as leaving out rollback detection, because it cannot compose.

@@ -394,6 +394,31 @@ describe('UpdateNotice', () => {
     await view.unmount()
   })
 
+  it('given refresh is passed disabled={false}, then it is still disabled while its action runs', async () => {
+    const { updates, view } = await outdated(13)
+    const working = Promise.withResolvers<void>()
+    const action = vi.fn<() => Promise<void>>(() => working.promise)
+
+    await view.rerender(
+      <UpdateNotice.Root updates={updates} announcement={() => 'Update'}>
+        {() => (
+          <UpdateNotice.Refresh disabled={false} action={action}>
+            Refresh
+          </UpdateNotice.Refresh>
+        )}
+      </UpdateNotice.Root>,
+    )
+
+    const button = view.getByRole('button', { name: 'Refresh' })
+    await button.click()
+    await expect.element(button).toBeDisabled()
+
+    working.resolve()
+    await expect.element(button).toBeEnabled()
+    expect(action).toHaveBeenCalledTimes(1)
+    await view.unmount()
+  })
+
   it('given a part outside the root, then rendering fails naming the part', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
 

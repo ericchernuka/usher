@@ -127,6 +127,43 @@ test('given a passive notice was closed, when its reader leaves and returns with
   stop()
 })
 
+test('given a passive notice was closed and its only reader left, when a newer build is deployed after it returns, then it stays closed', async () => {
+  const tab = createTestTab()
+  const buildTime = new Date(tab.now()).toISOString()
+  tab.deploy({ ...newer, buildTime })
+  const updates = createAppUpdates({ running, versionUrl }, tab)
+  const notice = createUpdateNotice(updates, { minAttention: 'passive' })
+  const leave = notice.subscribe(() => {})
+  await tab.advance(0)
+  notice.get()?.close()
+  leave()
+
+  tab.deploy({ ...newer, version: 'ccc', buildTime })
+  const stop = notice.subscribe(() => {})
+  await tab.advance(5 * 60_000)
+
+  expect(updates.state.get().latest?.version).toBe('ccc')
+  expect(notice.get()).toBeUndefined()
+  stop()
+})
+
+test('given a returning reader closes the prompt it is given as it subscribes, then the prompt is dismissed and no notice comes back', async () => {
+  const tab = createTestTab()
+  tab.deploy({ ...newer, buildTime: new Date(tab.now()).toISOString() })
+  const updates = createAppUpdates({ running, versionUrl }, tab)
+  const notice = createUpdateNotice(updates, { minAttention: 'passive' })
+  const leave = notice.subscribe(() => {})
+  await tab.advance(0)
+  leave()
+  await tab.advance(13 * HOUR)
+
+  const stop = notice.subscribe(() => notice.get()?.close())
+
+  expect(updates.state.get().reason).toBe('dismissed')
+  expect(notice.get()).toBeUndefined()
+  stop()
+})
+
 test('given a reader that closes every notice it is given, when attention is urgent, then the notice stays and the reader is not called again', async () => {
   const tab = createTestTab()
   tab.deploy({ ...older, buildTime: new Date(tab.now()).toISOString() })

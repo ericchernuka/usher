@@ -316,4 +316,27 @@ describe('what a screen reader hears', () => {
     ).toEqual(['polite: An update is ready'])
     await view.unmount()
   })
+
+  it('given two notices exchange their wording in one render, then both stay in the region and nothing is said again', async () => {
+    const { tab, updates } = served(older)
+
+    const pair = (first: string, second: string) => (
+      <>
+        <Banner updates={updates} announcement={() => first} />
+        <Banner updates={updates} announcement={() => second} />
+      </>
+    )
+
+    const view = await render(pair('One', 'Two'))
+    await tab.advance(0)
+    await expect.element(view.getByRole('alert')).toHaveTextContent('OneTwo')
+    const said = Array.from(view.getByRole('alert').element().children)
+
+    await view.rerender(pair('Two', 'One'))
+    await settled()
+
+    expect(Array.from(view.getByRole('alert').element().children)).toEqual(said)
+    expect(await announcements()).toEqual(['assertive: One', 'assertive: Two'])
+    await view.unmount()
+  })
 })
