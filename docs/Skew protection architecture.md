@@ -64,16 +64,17 @@ The handler is `createAssetFallback()` in `@rndsqr/usher-cloudflare/worker`, one
 
 Inside core, the store composes five sources, and dependencies point one way. No source knows about another source or about the store.
 
-| Module                | Owns                                                                                                                                        |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `app-updates.ts`      | Subscribers, the published snapshot, sticky urgency, and the one deadline timer for the next change of attention.                           |
-| `attention.ts`        | Nothing. A pure function from running facts, latest facts, server time, the dismissal and thresholds to a state and its next deadline.      |
-| `latest-build.ts`     | The last valid build facts observed, the poll schedule, the in-flight request and its 30-second timeout, and focus and visibility rechecks. |
-| `server-clock.ts`     | The offset between server time and monotonic time.                                                                                          |
-| `prompt-dismissal.ts` | The shared dismissal timestamp, in memory and in localStorage, and the storage event subscription.                                          |
-| `refresh.ts`          | Refresh blockers and the one refresh attempt that concurrent callers share.                                                                 |
-| `options.ts`          | Nothing. Validates the duration options and applies their defaults.                                                                         |
-| `environment.ts`      | Nothing. Describes what core needs from a tab: clocks, timers, fetch, storage, visibility, focus and reload.                                |
+| Module                | Owns                                                                                                                                                     |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `app-updates.ts`      | Subscribers, the published snapshot, sticky urgency, and the one deadline timer for the next change of attention.                                        |
+| `attention.ts`        | Nothing. A pure function from running facts, latest facts, server time, the dismissal and thresholds to a state and its next deadline.                   |
+| `latest-build.ts`     | The last valid build facts observed, the poll schedule, the in-flight request and its 30-second timeout, and focus and visibility rechecks.              |
+| `visible-timer.ts`    | One pending timer for its owner: the browser timer, the visibility subscription while armed, and the wait for a delay longer than a browser timer holds. |
+| `server-clock.ts`     | The offset between server time and monotonic time.                                                                                                       |
+| `prompt-dismissal.ts` | The shared dismissal timestamp, in memory and in localStorage, and the storage event subscription.                                                       |
+| `refresh.ts`          | Refresh blockers and the one refresh attempt that concurrent callers share.                                                                              |
+| `options.ts`          | Nothing. Validates the duration options and applies their defaults.                                                                                      |
+| `environment.ts`      | Nothing. Describes what core needs from a tab: clocks, timers, fetch, storage, visibility, focus and reload.                                             |
 
 `environment.ts` is the one internal seam. Its browser adapter is the only code that touches globals, and the tests replace it with a fake tab that has virtual time. It is not part of the public interface: an app that tests its own update UI can fake the five-method `AppUpdates` interface by hand.
 

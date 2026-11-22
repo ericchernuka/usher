@@ -4,34 +4,60 @@ import type { Environment } from './environment'
 const MAX_TIMER_MS = 2 ** 31 - 1
 
 /**
- * One pending timer that only runs in a visible tab. Arming replaces whatever
- * was pending. Arming in a hidden tab leaves nothing pending, so the owner arms
- * again when the tab becomes visible.
+ * One pending timer that only runs in a visible tab. `arm` takes a function
+ * that says how long is left, and `callback` runs once nothing is left and the
+ * tab is visible. Arming replaces whatever was pending.
  *
- * A delay longer than a browser timer can hold is shortened, so `callback` can
- * run early. It must check whether its work is due and arm again if not.
+ * The timer asks how long is left each time it wakes: when its browser timer
+ * fires and when the tab's visibility changes. So a hidden tab holds no browser
+ * timer and catches up when it returns, a delay longer than a browser timer can
+ * hold is waited out in parts, and an owner whose clock jumped is corrected at
+ * the next wake.
  */
 export function createVisibleTimer(
-  env: Pick<Environment, 'isVisible' | 'startTimer'>,
+  env: Pick<Environment, 'isVisible' | 'startTimer' | 'onVisibilityChange'>,
   callback: () => void,
 ) {
-  let cancelPending: (() => void) | undefined
+  let disarm: (() => void) | undefined
 
   function cancel() {
-    cancelPending?.()
-    cancelPending = undefined
+    disarm?.()
+    disarm = undefined
   }
 
   return {
-    arm(delay: number) {
+    arm(remaining: () => number) {
       cancel()
+      let cancelTimer: (() => void) | undefined
 
-      if (env.isVisible()) {
-        cancelPending = env.startTimer(
-          callback,
-          Math.min(Math.max(0, delay), MAX_TIMER_MS),
-        )
+      function wait() {
+        cancelTimer?.()
+
+        cancelTimer = env.isVisible()
+          ? env.startTimer(
+              wake,
+              Math.min(Math.max(0, remaining()), MAX_TIMER_MS),
+            )
+          : undefined
       }
+
+      function wake() {
+        if (env.isVisible() && remaining() <= 0) {
+          cancel()
+          callback()
+        } else {
+          wait()
+        }
+      }
+
+      const stopWatching = env.onVisibilityChange(wake)
+
+      disarm = () => {
+        cancelTimer?.()
+        stopWatching()
+      }
+
+      wait()
     },
     cancel,
   }

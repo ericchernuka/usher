@@ -122,8 +122,9 @@ describe('subscribing', () => {
     await tab.advance(13 * HOUR)
 
     tab.setVisibility('visible')
-
     expect(store.getState().attention).toBe('prompt')
+    await tab.flush()
+
     expect(tab.pendingTimers()).toBe(0)
   })
 })
