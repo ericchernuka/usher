@@ -118,6 +118,7 @@ function notifyAll(listeners: ReadonlySet<{ listener: () => void }>) {
 
 export class AppUpdatesStore implements AppUpdates {
   readonly #running: BuildFacts
+  readonly #env: Environment
   readonly #thresholds: Thresholds
   readonly #clock: ReturnType<typeof createServerClock>
   readonly #dismissal: ReturnType<typeof createPromptDismissal>
@@ -128,10 +129,12 @@ export class AppUpdatesStore implements AppUpdates {
   #state: UpdateState = { attention: 'none', reason: 'unknown' }
   #stickyUrgency: StickyUrgency | undefined
   #outdatedSince: number | undefined
+  #stopWatchingVisibility: (() => void) | undefined
 
   constructor(options: AppUpdatesOptions, env: Environment) {
     const resolved = resolveOptions(options)
     this.#running = resolved.running
+    this.#env = env
     this.#thresholds = resolved
     this.#clock = createServerClock(env)
     this.#deadline = createVisibleTimer(env, this.#evaluate)
@@ -203,12 +206,17 @@ export class AppUpdatesStore implements AppUpdates {
   }
 
   #start = () => {
+    // The clock can jump while the tab is away, so every visibility change
+    // re-evaluates, before the latest build decides whether to check again.
+    this.#stopWatchingVisibility = this.#env.onVisibilityChange(this.#evaluate)
     this.#dismissal.start(this.#evaluate)
     this.#latestBuild.start(this.#evaluate)
     this.#evaluate()
   }
 
   #stop = () => {
+    this.#stopWatchingVisibility?.()
+    this.#stopWatchingVisibility = undefined
     this.#deadline.cancel()
     this.#latestBuild.stop()
     this.#dismissal.stop()
