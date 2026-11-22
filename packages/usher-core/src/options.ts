@@ -59,8 +59,18 @@ function output<Schema extends valibot.GenericSchema>(
 }
 
 export interface VersionCheckOptions {
+  /** URL of the serving deployment's version.json */
   versionUrl: string
+  /**
+   * Milliseconds between version checks in a visible tab, at least
+   * 10 seconds and 5 minutes by default
+   */
   pollInterval?: number
+  /**
+   * Handler for a version check answer that is not build facts, called
+   * once per outage so the app can report a deployment whose tabs cannot
+   * detect updates, and never for network errors or timeouts
+   */
   onCheckProblem?: (problem: CheckProblem) => void | Promise<void>
 }
 
@@ -89,7 +99,16 @@ export const resolveVersionCheck = (options: VersionCheckOptions) =>
   output(valibot.safeParse(VersionCheck, options, { abortEarly: true }))
 
 export interface EscalationOptions {
+  /**
+   * Milliseconds a tab may stay outdated before prompt attention, 12 hours
+   * by default, or `false` for no prompt level
+   */
   promptAfter?: number | false
+  /**
+   * Milliseconds a tab may stay outdated before urgent attention, later
+   * than `promptAfter` and 24 hours by default, or `false` for no urgent
+   * level from escalation
+   */
   urgentAfter?: number | false
 }
 
@@ -112,7 +131,15 @@ export const resolveEscalation = (options: EscalationOptions) =>
   output(valibot.safeParse(Escalation, options, { abortEarly: true }))
 
 export interface PromptDismissalOptions {
+  /**
+   * Milliseconds a prompt dismissal quiets prompt attention, by default
+   * until urgent attention starts
+   */
   promptSnooze?: number
+  /**
+   * Prefix for the localStorage keys, `usher` by default, set per app
+   * when apps share an origin
+   */
   storageKey?: string
 }
 
@@ -133,6 +160,10 @@ export const resolvePromptDismissal = (options: PromptDismissalOptions) =>
   output(valibot.safeParse(PromptDismissal, options, { abortEarly: true }))
 
 export interface RefreshOptions {
+  /**
+   * Document load a refresh performs, `location.reload()` by default, that
+   * returns or resolves `false` when it knows the load did not happen
+   */
   reload?: () => void | boolean | Promise<void | boolean>
 }
 

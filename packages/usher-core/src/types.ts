@@ -57,20 +57,30 @@ export type CheckProblem =
   | { kind: 'not-json'; versionUrl: string; contentType: string | null }
   | { kind: 'not-build-facts'; versionUrl: string; issues: string }
 
+/** Options for `createAppUpdates`, checked when it is called */
 export interface AppUpdatesOptions
   extends
     VersionCheckOptions,
     EscalationOptions,
     PromptDismissalOptions,
     RefreshOptions {
+  /** Build facts of the running build */
   running: BuildFacts
 }
 
+/** Update state of the tab, checked for a new build while subscribed */
 export interface Updates extends Readable<UpdateState> {
+  /**
+   * Prompt dismissal for every tab, `true` only when it lowered a prompt
+   * and `false` with nothing written otherwise
+   */
   dismiss: () => boolean
 }
 
+/** The app's updates, one per app at module scope */
 export interface AppUpdates {
+  /** Update state and prompt dismissal */
   state: Updates
+  /** Refresh onto the latest build, with its blockers */
   refresh: Refresh
 }

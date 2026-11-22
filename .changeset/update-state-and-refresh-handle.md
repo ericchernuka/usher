@@ -29,3 +29,5 @@ New in core: `createUpdateNotice(appUpdates, { minAttention })` gives a declarat
 New in React: `useUpdateNotice(appUpdates, { minAttention })` and the headless `UpdateNotice.Root`, `UpdateNotice.Refresh` and `UpdateNotice.Close` parts. `Root` announces a prompt politely and an urgent notice assertively through live regions it keeps mounted.
 
 New entry `@rndsqr/usher-core/testing`: `createTestTab()` is a tab with virtual time. Pass it as the second argument to `createAppUpdates`, from core or from `@rndsqr/usher-plugin/client`, then call `tab.deploy(build)` and `await tab.advance(ms)`.
+
+`@rndsqr/usher-core` is now a peer dependency of `@rndsqr/usher-plugin` and `@rndsqr/react-usher`. Install it in the app, as the README already said to, so there is one copy.

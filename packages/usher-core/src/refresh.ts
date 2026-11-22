@@ -2,12 +2,23 @@ import { resolveRefresh, type RefreshOptions } from './options'
 import { createListeners, type Readable } from './readable'
 import { insideTab, type Tab } from './tab'
 
+/** Synchronous veto on a refresh that blocks by returning `true` or throwing */
 export type RefreshBlocker = () => boolean
 
+/**
+ * Result of a refresh: `reloading` once `reload` ran, `blocked` by a refresh
+ * blocker, or `declined` when `reload` returned `false` or threw
+ */
 export type RefreshOutcome = 'reloading' | 'blocked' | 'declined'
 
+/** Refresh behaviour whose value is whether a refresh is in flight */
 export interface Refresh extends Readable<boolean> {
+  /**
+   * Refresh attempt shared by concurrent callers, with nothing remembered
+   * afterwards so any outcome can be retried
+   */
   run: () => Promise<RefreshOutcome>
+  /** Refresh blocker registration that returns its own removal */
   addBlocker: (blocker: RefreshBlocker) => () => void
 }
 

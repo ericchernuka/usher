@@ -26,14 +26,20 @@ function useReadable<Value>(readable: Readable<Value>): Value {
   return useSyncExternalStore(readable.subscribe, readable.get, readable.get)
 }
 
+/** Read the update state, deferred so a change never blocks input */
 export function useUpdateState(state: Readable<UpdateState>): UpdateState {
   return useDeferredValue(useReadable(state))
 }
 
+/** Read whether a refresh is in flight, without starting version checks */
 export function useRefreshing(refresh: Readable<boolean>): boolean {
   return useReadable(refresh)
 }
 
+/**
+ * Block refreshes while mounted, with a boolean or a function that may be
+ * written inline because the latest one is called
+ */
 export function useRefreshBlocker(
   refresh: Pick<Refresh, 'addBlocker'>,
   shouldBlock: boolean | RefreshBlocker,
@@ -59,6 +65,7 @@ export function useRefreshBlocker(
   }, [refresh, registered])
 }
 
+/** Read the notice to show, for a component that renders its own markup */
 export function useUpdateNotice(
   updates: AppUpdates,
   options: UpdateNoticeOptions = {},
@@ -214,4 +221,9 @@ function Close(props: ComponentProps<'button'>) {
   ) : null
 }
 
+/**
+ * Headless parts for an update notice: `Root` renders while there is a notice
+ * and announces it, `Refresh` is disabled while a refresh runs, and `Close`
+ * renders nothing at urgent attention
+ */
 export const UpdateNotice = { Root, Refresh: RefreshButton, Close }

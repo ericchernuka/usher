@@ -26,7 +26,7 @@ pnpm add @rndsqr/react-usher        # React hooks
 pnpm add -D @rndsqr/usher-cloudflare # skew protection on Pages or Workers
 ```
 
-Declare `@rndsqr/usher-core` yourself even though the other packages depend on it. The app imports `connectUpdateSurface` and the types from it, and strict package managers resolve only what the app declares.
+`@rndsqr/usher-core` is a peer dependency of the plugin and the React package, so the app installs it once and every package shares that copy. The app also imports `connectUpdateSurface` and the types from it.
 
 ```ts
 // vite.config.ts

@@ -1,5 +1,5 @@
 import { expect, test, vi } from 'vitest'
-import { createAppUpdates, createUpdateNotice } from '../src/index'
+import { createAppUpdates, createUpdateNotice, type Tab } from '../src/index'
 import { createTestTab } from '../src/testing'
 import { HOUR, newer, older, running } from './fixtures'
 
@@ -72,8 +72,10 @@ test('given a notice read declaratively, then it says how to present itself and 
   expect(notice.get()).toBeUndefined()
 })
 
-test('given a tab that was not made by the library, then creating the app fails saying so', () => {
-  expect(() =>
-    createAppUpdates({ running, versionUrl }, { now: Date.now }),
-  ).toThrow(/tab must come from createTestTab\(\)/)
+test('given a tab from another copy of the library, then creating the app fails saying how to fix it', () => {
+  const foreign: Tab = JSON.parse('{}')
+
+  expect(() => createAppUpdates({ running, versionUrl }, foreign)).toThrow(
+    /not made by this copy of @rndsqr\/usher-core.*only one version/,
+  )
 })

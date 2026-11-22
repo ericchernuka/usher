@@ -4,14 +4,24 @@ import type { AppUpdates, Attention, UpdateState } from './types'
 
 type Noticeable = Exclude<UpdateState, { attention: 'none' }>
 
+/** What an update surface is asked to show, new for every change of attention or reason */
 export type UpdateNotice = Exclude<UpdateState, { attention: 'none' }> & {
+  /** Whether the user may close the notice, `false` at urgent attention */
   readonly closable: boolean
+  /** Politeness for a screen reader, for a library that owns its live region */
   readonly announce: 'off' | 'polite' | 'assertive'
+  /** Refresh requested by the user */
   refresh: () => Promise<RefreshOutcome>
+  /**
+   * Close by the user, which dismisses a prompt for every tab, hides a
+   * passive notice until attention or reason changes, and does nothing on
+   * a notice that is no longer shown
+   */
   close: () => void
 }
 
 export interface UpdateNoticeOptions {
+  /** Lowest attention that shows a notice, `prompt` by default */
   minAttention?: Exclude<Attention, 'none'> | undefined
 }
 
@@ -127,6 +137,7 @@ class NoticeStore {
   subscribe = (listener: () => void) => this.#listeners.subscribe(listener)
 }
 
+/** Create the notice a declarative surface should show, live while subscribed */
 export function createUpdateNotice(
   updates: AppUpdates,
   options: UpdateNoticeOptions = {},
