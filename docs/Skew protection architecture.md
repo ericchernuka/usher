@@ -69,7 +69,7 @@ Core is built from behaviours, and `createAppUpdates` composes them. It exports 
 | `readable.ts`         | The `Readable` contract, and a set of listeners that starts its owner on the first subscriber and stops it after the last.                               |
 | `tab.ts`              | A tab: the environment and the server clock. Behaviours reach both through it, and apps see only `now()`.                                                |
 | `version-check.ts`    | The last valid build facts observed, the poll schedule, the in-flight request and its 30-second timeout, focus and visibility rechecks, check problems.  |
-| `signals.ts`          | The three signals and each one's memory: outdated since for escalation, and sticky urgency for rollback and forced update.                               |
+| `signals.ts`          | The two signals and each one's memory: outdated since for escalation, and the reason last seen for sticky urgency.                                       |
 | `prompt-dismissal.ts` | The shared dismissal timestamp, in memory and in localStorage, and the storage event subscription.                                                       |
 | `update-state.ts`     | The signals' trackers, the published snapshot, and the one deadline timer for the next change of attention.                                              |
 | `refresh.ts`          | Refresh blockers, the one refresh attempt that concurrent callers share, and whether it is in flight.                                                    |
@@ -89,7 +89,7 @@ The update state has a single `evaluate()`, which the version check, the dismiss
 
 A tab is outdated since the build time of the first build it saw supersede its own, clamped to its own build time. `escalation()` keeps that time and measures the prompt and urgent thresholds from it. Later deploys do not move it, and a response that matches the running version clears it. See [ADR 0005](adr/0005-escalate-from-outdated-since.md).
 
-Escalation compares source versions, `rollback()` compares commit times, and `forcedUpdate()` compares running-build time against the forced-update cutoff. Rollback and forced-update knowledge remains urgent after later deployments, including a deployment that matches the running version.
+Escalation compares source versions. Sticky urgency compares commit times for a rollback and running-build time against the forced-update cutoff, and keeps the reason it saw last. Rollback and forced-update knowledge remains urgent after later deployments, including a deployment that matches the running version.
 
 `server-clock.ts` anchors the response's Date header to monotonic time, so changing the user's clock cannot move a tab's time outdated. Before a Date header is available, it uses the local clock. Missing Date headers keep the last estimate, and changes under two seconds are treated as header rounding. Cross-origin version responses need `Access-Control-Expose-Headers: Date` for clock correction.
 

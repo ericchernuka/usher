@@ -318,13 +318,44 @@ describe('UpdateNotice', () => {
     function Banner() {
       const notice = useUpdateNotice(updates)
 
-      return notice ? <p role="alert">{notice.reason}</p> : null
+      return notice ? <p data-testid="banner">{notice.reason}</p> : null
     }
 
     const view = await render(<Banner />)
     await tab.advance(0)
 
-    await expect.element(view.getByRole('alert')).toHaveTextContent('rollback')
+    await expect
+      .element(view.getByTestId('banner'))
+      .toHaveTextContent('rollback')
+    await view.unmount()
+  })
+
+  it('given a part has its own onClick, then it runs before the action, and preventing default takes the action over', async () => {
+    const { updates, view } = await outdated(13)
+    const clicked = vi.fn<() => void>()
+    const run = vi.spyOn(updates.refresh, 'run')
+
+    await view.rerender(
+      <UpdateNotice.Root updates={updates}>
+        {() => (
+          <>
+            <UpdateNotice.Refresh onClick={clicked}>
+              Refresh
+            </UpdateNotice.Refresh>
+            <UpdateNotice.Close onClick={event => event.preventDefault()}>
+              Keep
+            </UpdateNotice.Close>
+          </>
+        )}
+      </UpdateNotice.Root>,
+    )
+
+    await view.getByRole('button', { name: 'Refresh' }).click()
+    expect(clicked).toHaveBeenCalledTimes(1)
+    expect(run).toHaveBeenCalledTimes(1)
+
+    await view.getByRole('button', { name: 'Keep' }).click()
+    expect(updates.state.get().attention).toBe('prompt')
     await view.unmount()
   })
 

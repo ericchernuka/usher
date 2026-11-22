@@ -7,7 +7,7 @@ import type { Action, Scenario, World } from './model/world'
 
 interface Run {
   stop: () => void
-  stickyUrgency: boolean
+  stickyUrgency: 'rollback' | 'forced' | undefined
   promptQuietUntil: number
 }
 
@@ -101,16 +101,21 @@ function stickyUrgencyInvariant(
   accepted: BuildFacts[],
 ) {
   const state = harness.store.state.get()
-  run.stickyUrgency ||= accepted.some(
-    build =>
-      Date.parse(build.commitTime) < Date.parse(running.commitTime) ||
+
+  for (const build of accepted) {
+    if (
       Date.parse(build.forceUpdateBuiltBefore ?? '') >
-        Date.parse(running.buildTime),
-  )
+      Date.parse(running.buildTime)
+    ) {
+      run.stickyUrgency = 'forced'
+    } else if (Date.parse(build.commitTime) < Date.parse(running.commitTime)) {
+      run.stickyUrgency = 'rollback'
+    }
+  }
 
   if (run.stickyUrgency) {
     expect(state.attention).toBe('urgent')
-    expect(['rollback', 'forced']).toContain(state.reason)
+    expect(state.reason).toBe(run.stickyUrgency)
   }
 }
 
@@ -148,7 +153,7 @@ async function runScenario(scenario: Scenario) {
 
   const run: Run = {
     stop: harness.store.state.subscribe(() => {}),
-    stickyUrgency: false,
+    stickyUrgency: undefined,
     promptQuietUntil: -Infinity,
   }
 

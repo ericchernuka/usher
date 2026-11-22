@@ -25,6 +25,18 @@ test('given a test tab, when a build is deployed and time passes, then the app e
   stop()
 })
 
+test('given a build deployed before the app subscribes, when less time passes than a check may take, then the first check still lands', async () => {
+  const tab = createTestTab()
+  tab.deploy(newer)
+  const updates = createAppUpdates({ running, versionUrl }, tab)
+  const stop = updates.state.subscribe(() => {})
+
+  await tab.advance(30_000)
+
+  expect(updates.state.get().latest).toEqual(newer)
+  stop()
+})
+
 test('given only the refresh is subscribed, then no version check is made', async () => {
   const tab = createTestTab()
   tab.deploy(newer)

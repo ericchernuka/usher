@@ -53,7 +53,7 @@ export function createAppUpdates(options, tab = createTab()) {
     state: createUpdateState(tab, {
       running: options.running,
       latest: createVersionCheck(tab, options),
-      signals: [forcedUpdate(), rollback(), escalation(options)],
+      signals: [stickyUrgency(), escalation(options)],
       dismissal: createPromptDismissal(tab, options),
     }),
     refresh: createRefresh(tab, options),
@@ -66,8 +66,7 @@ export function createAppUpdates(options, tab = createTab()) {
 | Tab              | The environment and the server clock                             |
 | Version check    | The latest build, the poll schedule, the request, check problems |
 | Escalation       | Outdated since                                                   |
-| Rollback         | Whether a rollback was seen                                      |
-| Forced update    | Whether a covering cutoff was seen                               |
+| Sticky urgency   | The rollback or forced update last seen                          |
 | Prompt dismissal | The shared dismissal time, in memory and in storage              |
 | Update state     | The published state and the one deadline timer                   |
 | Refresh          | Refresh blockers and the one shared attempt                      |
@@ -87,7 +86,7 @@ The update state evaluates in one pass:
 4. The loudest claim is published. On a tie the earlier signal in the list wins.
 5. One timer is set for the earliest time a claim may change or a snooze ends.
 
-The order forced update, rollback, escalation reproduces the old precedence. Only escalation's prompt claim says it is dismissable, so urgent attention cannot be dismissed by construction. "A dismissal lasts until urgent" is no longer a special case: the dismissal quiets the prompt claim, and escalation's urgent claim is louder when it arrives.
+Sticky urgency is one signal and not two, because it keeps one reason: the one last seen, with a forced update ahead of a rollback when one build is both. A tab that saw a forced update and then a rollback says `rollback`. Listing it before escalation puts either reason ahead of an urgent `outdated`. Only escalation's prompt claim says it is dismissable, so urgent attention cannot be dismissed by construction. "A dismissal lasts until urgent" is no longer a special case: the dismissal quiets the prompt claim, and escalation's urgent claim is louder when it arrives.
 
 ### Notice and surface
 
@@ -100,7 +99,10 @@ The React parts read the same notice, so a declarative banner and an imperative 
 The app owns the markup and the wording. It should not also have to own the accessibility rules, so the parts apply them, and a prop on a part overrides its default.
 
 - `Root` renders its element only while there is a notice, with `data-attention` and `data-reason` for styling.
-- `Root` keeps two visually hidden live regions mounted, a `status` and an `alert`. When `announce` changes it empties them, and 100 ms later it puts the notice's text, without the text of buttons, into the one that matches. Nothing is announced at passive.
+- The React package keeps one `status` and one `alert` region per document, visually hidden and made when the first `Root` mounts. `Root` puts the notice's wording into the one that matches `announce`: it empties both, and 100 ms later sets the text. Nothing is announced at passive.
+- The wording is the text inside `Root`, without buttons, links, and anything hidden from assistive technology. `Root` watches that text, so a change of reason at the same attention, or a message the app swaps in, is announced as well.
+- Two `Root`s showing the same notice announce it once, because they share the regions.
+- A part's own `onClick` runs before its action and can call `preventDefault()` to take the action over.
 - `Refresh` is disabled, with `data-refreshing`, while a refresh is in flight. `Close` renders nothing at urgent.
 - The parts never move focus and never close a notice on a timer.
 
@@ -154,18 +156,18 @@ When the first real need arrives, build it inside core, then export the contract
 
 - The handle changed shape, so every call site changed: `appUpdates.refresh()` became `appUpdates.refresh.run()`.
 - `Readable`, the notice and the test tab are new compatibility promises.
-- The attention rules used to be one function that read top to bottom. They are now three signals and a combining step, which needs the five-step list above to follow.
+- The attention rules used to be one function that read top to bottom. They are now two signals and a combining step, which needs the five-step list above to follow.
 - `UpdateNotice.Root` is the least settled part. Hidden regions, copied text and a delay are more machinery than a role on a `div`, and they have not been heard on a real screen reader.
 
 ## Decisions this touches
 
-| ADR                                | Effect                                                               |
-| ---------------------------------- | -------------------------------------------------------------------- |
-| 0001 One `outdated` reason         | Stands. Each signal owns its reasons.                                |
-| 0003 No selector in the React hook | Stands. Each readable is narrow, so there is nothing to select from. |
-| 0004 Environment is internal       | Stands. `/testing` promises two driver methods and not the seam.     |
-| 0005 Escalate from outdated since  | Stands. Outdated since moved from the store into escalation.         |
-| 0007 Forced-update cutoff          | Stands, inside the forced-update signal.                             |
-| 0010 Classes with `#private`       | Stands for the update state, the notice and the surface connection.  |
-| 0011 Refreshing is store state     | Superseded in part by ADR 0012. Check problems stay a callback.      |
-| 0002, 0006, 0008, 0009             | Untouched.                                                           |
+| ADR                                | Effect                                                                                                                                  |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| 0001 One `outdated` reason         | Stands. Each signal owns its reasons.                                                                                                   |
+| 0003 No selector in the React hook | Stands. Each readable is narrow, so there is nothing to select from. The package now holds one piece of module state, the live regions. |
+| 0004 Environment is internal       | Stands. `/testing` promises two driver methods and not the seam.                                                                        |
+| 0005 Escalate from outdated since  | Stands. Outdated since moved from the store into escalation.                                                                            |
+| 0007 Forced-update cutoff          | Stands, inside the sticky urgency signal.                                                                                               |
+| 0010 Classes with `#private`       | Stands for the update state, the notice and the surface connection.                                                                     |
+| 0011 Refreshing is store state     | Superseded in part by ADR 0012. Check problems stay a callback.                                                                         |
+| 0002, 0006, 0008, 0009             | Untouched.                                                                                                                              |

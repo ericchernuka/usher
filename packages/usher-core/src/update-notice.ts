@@ -45,7 +45,11 @@ function reaches(
   )
 }
 
-class NoticeStore {
+export interface NoticeStore extends Readable<UpdateNotice | undefined> {
+  discard: (notice: UpdateNotice) => void
+}
+
+class Notices implements NoticeStore {
   readonly #state: AppUpdates['state']
   readonly #refresh: AppUpdates['refresh']
   readonly #minAttention: Attention
@@ -128,8 +132,13 @@ class NoticeStore {
 
   #stop = () => {
     this.#unsubscribe?.()
-    this.#closed = undefined
     this.#shown = undefined
+  }
+
+  discard = (notice: UpdateNotice) => {
+    if (this.#shown === notice) {
+      this.#shown = undefined
+    }
   }
 
   get = () => this.#shown
@@ -137,10 +146,17 @@ class NoticeStore {
   subscribe = (listener: () => void) => this.#listeners.subscribe(listener)
 }
 
+export function createNoticeStore(
+  updates: AppUpdates,
+  options: UpdateNoticeOptions,
+): NoticeStore {
+  return new Notices(updates, options)
+}
+
 /** Create the notice a declarative surface should show, live while subscribed */
 export function createUpdateNotice(
   updates: AppUpdates,
   options: UpdateNoticeOptions = {},
 ): Readable<UpdateNotice | undefined> {
-  return new NoticeStore(updates, options)
+  return createNoticeStore(updates, options)
 }

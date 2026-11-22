@@ -1,6 +1,7 @@
 import { virtual } from '@guidepup/virtual-screen-reader'
 import { createAppUpdates } from '@rndsqr/usher-core'
 import { createTestTab } from '@rndsqr/usher-core/testing'
+import { createRef, useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { render } from 'vitest-browser-react'
 import { UpdateNotice } from '../src/index'
@@ -54,6 +55,20 @@ async function announcements() {
 
   return (await virtual.spokenPhraseLog()).filter(phrase =>
     /^(polite|assertive): \S/.test(phrase),
+  )
+}
+
+function Wording() {
+  const [blocked, setBlocked] = useState(false)
+
+  return (
+    <>
+      <p>{blocked ? 'Save your work first' : 'Please refresh'}</p>
+      <span aria-hidden="true">decoration</span>
+      <button type="button" onClick={() => setBlocked(true)}>
+        Block
+      </button>
+    </>
   )
 }
 
@@ -134,6 +149,129 @@ describe('what a screen reader hears', () => {
 
     await expect.element(view.getByRole('status')).toHaveTextContent('')
     expect(await announcements()).toEqual(['polite: Update available: prompt'])
+    await view.unmount()
+  })
+
+  it('given two notices on one page, then the update is announced once', async () => {
+    const tab = createTestTab()
+    tab.deploy({ ...older, buildTime: new Date(tab.now()).toISOString() })
+    const updates = createAppUpdates({ running: runningBuild, versionUrl }, tab)
+
+    const view = await render(
+      <>
+        <UpdateNotice.Root updates={updates} minAttention="passive">
+          {shown => <p>Update available: {shown.attention}</p>}
+        </UpdateNotice.Root>
+        <UpdateNotice.Root updates={updates}>
+          {shown => <p>Update available: {shown.attention}</p>}
+        </UpdateNotice.Root>
+      </>,
+    )
+
+    await tab.advance(0)
+
+    await expect
+      .element(view.getByRole('alert'))
+      .toHaveTextContent('Update available: urgent')
+    expect(await announcements()).toEqual([
+      'assertive: Update available: urgent',
+    ])
+    await view.unmount()
+  })
+
+  it('given the reason changes at the same attention, then the new wording is announced', async () => {
+    const tab = createTestTab()
+    const buildTime = new Date(tab.now()).toISOString()
+    tab.deploy({ ...older, buildTime })
+    const updates = createAppUpdates({ running: runningBuild, versionUrl }, tab)
+
+    const view = await render(
+      <UpdateNotice.Root updates={updates}>
+        {shown => <p>Refresh because of a {shown.reason}</p>}
+      </UpdateNotice.Root>,
+    )
+
+    await tab.advance(0)
+    await expect
+      .element(view.getByRole('alert'))
+      .toHaveTextContent('Refresh because of a rollback')
+
+    tab.deploy({ ...newer, buildTime, forceUpdateBuiltBefore: buildTime })
+    await tab.advance(5 * 60_000)
+
+    await expect
+      .element(view.getByRole('alert'))
+      .toHaveTextContent('Refresh because of a forced')
+    expect(await announcements()).toEqual([
+      'assertive: Refresh because of a rollback',
+      'assertive: Refresh because of a forced',
+    ])
+    await view.unmount()
+  })
+
+  it('given the wording inside a notice changes, then the new wording is announced, without text hidden from assistive technology', async () => {
+    const tab = createTestTab()
+    tab.deploy({ ...older, buildTime: new Date(tab.now()).toISOString() })
+    const updates = createAppUpdates({ running: runningBuild, versionUrl }, tab)
+
+    const view = await render(
+      <UpdateNotice.Root updates={updates}>
+        {() => <Wording />}
+      </UpdateNotice.Root>,
+    )
+
+    await tab.advance(0)
+    await expect
+      .element(view.getByRole('alert'))
+      .toHaveTextContent('Please refresh')
+    await view.getByRole('button', { name: 'Block' }).click()
+
+    await expect
+      .element(view.getByRole('alert'))
+      .toHaveTextContent('Save your work first')
+    expect(await announcements()).toEqual([
+      'assertive: Please refresh',
+      'assertive: Save your work first',
+    ])
+    await view.unmount()
+  })
+
+  it('given the app passes its own ref to the root, then it gets the element and the notice is still announced', async () => {
+    const tab = createTestTab()
+    tab.deploy({ ...older, buildTime: new Date(tab.now()).toISOString() })
+    const updates = createAppUpdates({ running: runningBuild, versionUrl }, tab)
+    const measured = createRef<HTMLDivElement>()
+
+    const view = await render(
+      <UpdateNotice.Root ref={measured} updates={updates}>
+        {shown => <p>Update available: {shown.attention}</p>}
+      </UpdateNotice.Root>,
+    )
+
+    await tab.advance(0)
+
+    await expect
+      .element(view.getByRole('alert'))
+      .toHaveTextContent('Update available: urgent')
+    expect(measured.current?.dataset['attention']).toBe('urgent')
+    await view.unmount()
+  })
+
+  it('given a root hidden from the page, then nothing is announced for it', async () => {
+    const tab = createTestTab()
+    tab.deploy({ ...older, buildTime: new Date(tab.now()).toISOString() })
+    const updates = createAppUpdates({ running: runningBuild, versionUrl }, tab)
+
+    const view = await render(
+      <UpdateNotice.Root hidden updates={updates}>
+        {shown => <p>Update available: {shown.attention}</p>}
+      </UpdateNotice.Root>,
+    )
+
+    await tab.advance(0)
+    await expect.poll(() => updates.state.get().attention).toBe('urgent')
+
+    expect(await announcements()).toEqual([])
     await view.unmount()
   })
 })
