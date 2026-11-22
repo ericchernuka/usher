@@ -21,17 +21,14 @@ export type {
   CheckProblem,
   UpdateReason,
   UpdateState,
+  Updates,
 } from './types'
 
 export {
   createUpdateNotice,
-  type Noticeable,
   type UpdateNotice,
   type UpdateNoticeOptions,
-  type UpdateNoticeParts,
 } from './update-notice'
-
-export type { Updates } from './update-state'
 
 export { connectUpdateSurface, type UpdateSurface } from './update-surface'
 

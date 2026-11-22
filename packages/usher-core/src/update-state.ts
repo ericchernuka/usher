@@ -2,38 +2,26 @@ import { sameBuildFacts, type BuildFacts } from './build-facts'
 import { resolveRunning } from './options'
 import type { PromptDismissal } from './prompt-dismissal'
 import { createListeners, type Readable } from './readable'
-import type { Asked, Claim, Moment, Signal } from './signals'
+import type { Asked, Moment, Signal } from './signals'
 import { insideTab, type Tab } from './tab'
+import type { UpdateState, Updates } from './types'
 import { createVisibleTimer } from './visible-timer'
 
-export type UpdateStateOf<Claimed extends Claim> =
-  | { attention: 'none'; reason: 'unknown'; latest?: undefined }
-  | { attention: 'none'; reason: 'caught-up'; latest: BuildFacts }
-  | { attention: 'passive'; reason: 'dismissed'; latest: BuildFacts }
-  | (Claimed & { latest: BuildFacts })
-
-export interface Updates<State> extends Readable<State> {
-  dismiss: () => boolean
-}
-
-export interface UpdateStateParts<Signals> {
+export interface UpdateStateParts {
   running: BuildFacts
   latest: Readable<BuildFacts | undefined>
-  signals: Signals
-  dismissal?: PromptDismissal
+  signals: ReadonlyArray<Signal>
+  dismissal: PromptDismissal
 }
 
-interface Verdict<Claimed extends Claim> {
-  state: UpdateStateOf<Claimed>
+interface Verdict {
+  state: UpdateState
   nextAt: number
 }
 
 const rank = { none: 0, passive: 1, prompt: 2, urgent: 3 }
 
-function sameState<Claimed extends Claim>(
-  next: UpdateStateOf<Claimed>,
-  current: UpdateStateOf<Claimed>,
-) {
+function sameState(next: UpdateState, current: UpdateState) {
   return (
     next.attention === current.attention &&
     next.reason === current.reason &&
@@ -44,65 +32,58 @@ function sameState<Claimed extends Claim>(
 }
 
 function quietUntil(
-  asked: Asked<Claim>,
-  dismissal: PromptDismissal | undefined,
+  { dismissableFrom }: Asked,
   dismissedAt: number | undefined,
+  promptSnooze: number | undefined,
 ) {
   if (
-    asked.claim.attention !== 'prompt' ||
-    asked.since === undefined ||
+    dismissableFrom === undefined ||
     dismissedAt === undefined ||
-    dismissedAt < asked.since
+    dismissedAt < dismissableFrom
   ) {
     return undefined
   }
 
-  return dismissal?.promptSnooze === undefined
-    ? Infinity
-    : dismissedAt + dismissal.promptSnooze
+  return promptSnooze === undefined ? Infinity : dismissedAt + promptSnooze
 }
 
-class UpdateState<Claimed extends Claim> implements Updates<
-  UpdateStateOf<Claimed>
-> {
+class UpdateStateStore implements Updates {
   readonly #tab: Tab
   readonly #running: BuildFacts
   readonly #latest: Readable<BuildFacts | undefined>
-  readonly #dismissal: PromptDismissal | undefined
-  readonly #trackers: Array<ReturnType<Signal<Claimed>['track']>>
+  readonly #dismissal: PromptDismissal
+  readonly #signals: ReadonlyArray<Signal>
   readonly #deadline: ReturnType<typeof createVisibleTimer>
   readonly #listeners = createListeners({
     start: () => this.#start(),
     stop: () => this.#stop(),
   })
-  #state: UpdateStateOf<Claimed> = { attention: 'none', reason: 'unknown' }
+
+  #state: UpdateState = { attention: 'none', reason: 'unknown' }
   #active = false
   #stops: Array<() => void> = []
 
-  constructor(
-    tab: Tab,
-    parts: UpdateStateParts<ReadonlyArray<Signal<Claimed>>>,
-  ) {
+  constructor(tab: Tab, parts: UpdateStateParts) {
     this.#tab = tab
     this.#running = resolveRunning(parts.running)
     this.#latest = parts.latest
     this.#dismissal = parts.dismissal
-    this.#trackers = parts.signals.map(signal => signal.track())
+    this.#signals = parts.signals
     this.#deadline = createVisibleTimer(insideTab(tab).env, this.#evaluate)
   }
 
   #asks = (moment: Moment, dismissedAt: number | undefined) =>
-    this.#trackers.flatMap(tracker => {
-      tracker.observe(moment)
-      const asked = tracker.ask(moment)
+    this.#signals.flatMap(signal => {
+      signal.observe(moment)
+      const asked = signal.ask(moment)
 
       if (!asked) {
         return []
       }
 
-      const until = quietUntil(asked, this.#dismissal, dismissedAt)
+      const until = quietUntil(asked, dismissedAt, this.#dismissal.promptSnooze)
 
-      const state: UpdateStateOf<Claimed> =
+      const state: UpdateState =
         until !== undefined && moment.now < until
           ? { attention: 'passive', reason: 'dismissed', latest: moment.latest }
           : { ...asked.claim, latest: moment.latest }
@@ -110,9 +91,7 @@ class UpdateState<Claimed extends Claim> implements Updates<
       return [{ state, changes: [asked.changesAt, until] }]
     })
 
-  #decide = (
-    dismissedAt = this.#dismissal?.get(),
-  ): Verdict<Claimed> | undefined => {
+  #decide = (dismissedAt = this.#dismissal.get()): Verdict | undefined => {
     const latest = this.#latest.get()
 
     if (!latest) {
@@ -122,7 +101,7 @@ class UpdateState<Claimed extends Claim> implements Updates<
     const moment = { running: this.#running, latest, now: this.#tab.now() }
     const asks = this.#asks(moment, dismissedAt)
 
-    const state = asks.reduce<UpdateStateOf<Claimed>>(
+    const state = asks.reduce<UpdateState>(
       (loudest, { state: next }) =>
         rank[next.attention] > rank[loudest.attention] ? next : loudest,
       { attention: 'none', reason: 'caught-up', latest },
@@ -137,7 +116,7 @@ class UpdateState<Claimed extends Claim> implements Updates<
     return { state, nextAt: Math.min(...upcoming, Infinity) }
   }
 
-  #apply = ({ state, nextAt }: Verdict<Claimed>) => {
+  #apply = ({ state, nextAt }: Verdict) => {
     if (this.#active) {
       if (nextAt === Infinity) {
         this.#deadline.cancel()
@@ -165,7 +144,7 @@ class UpdateState<Claimed extends Claim> implements Updates<
 
     this.#stops = [
       insideTab(this.#tab).env.onVisibilityChange(this.#evaluate),
-      ...(this.#dismissal ? [this.#dismissal.subscribe(this.#evaluate)] : []),
+      this.#dismissal.subscribe(this.#evaluate),
       this.#latest.subscribe(this.#evaluate),
     ]
 
@@ -183,9 +162,7 @@ class UpdateState<Claimed extends Claim> implements Updates<
   subscribe = (listener: () => void) => this.#listeners.subscribe(listener)
 
   dismiss = (): boolean => {
-    const dismissal = this.#dismissal
-
-    if (!dismissal || this.#state.attention !== 'prompt') {
+    if (this.#state.attention !== 'prompt') {
       return false
     }
 
@@ -196,18 +173,13 @@ class UpdateState<Claimed extends Claim> implements Updates<
       return false
     }
 
-    dismissal.record(at)
+    this.#dismissal.record(at)
     this.#apply(verdict)
 
     return true
   }
 }
 
-export function createUpdateState<const Claims extends ReadonlyArray<Claim>>(
-  tab: Tab,
-  parts: UpdateStateParts<{
-    readonly [Index in keyof Claims]: Signal<Claims[Index]>
-  }>,
-): Updates<UpdateStateOf<Claims[number]>> {
-  return new UpdateState<Claims[number]>(tab, parts)
+export function createUpdateState(tab: Tab, parts: UpdateStateParts): Updates {
+  return new UpdateStateStore(tab, parts)
 }

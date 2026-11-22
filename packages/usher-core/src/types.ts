@@ -5,8 +5,8 @@ import type {
   RefreshOptions,
   VersionCheckOptions,
 } from './options'
+import type { Readable } from './readable'
 import type { Refresh } from './refresh'
-import type { Updates } from './update-state'
 
 /**
  * How loudly the app should signal an update. Each surface picks its own threshold:
@@ -66,7 +66,11 @@ export interface AppUpdatesOptions
   running: BuildFacts
 }
 
+export interface Updates extends Readable<UpdateState> {
+  dismiss: () => boolean
+}
+
 export interface AppUpdates {
-  state: Updates<UpdateState>
+  state: Updates
   refresh: Refresh
 }

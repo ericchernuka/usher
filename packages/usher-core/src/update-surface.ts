@@ -1,17 +1,13 @@
 import type { Readable } from './readable'
+import type { AppUpdates } from './types'
 import {
   createUpdateNotice,
-  type Noticeable,
   type UpdateNotice,
   type UpdateNoticeOptions,
-  type UpdateNoticeParts,
 } from './update-notice'
-import type { UpdateState } from './types'
 
-export interface UpdateSurface<
-  State extends Noticeable = UpdateState,
-> extends UpdateNoticeOptions {
-  show(notice: UpdateNotice<State>): void
+export interface UpdateSurface extends UpdateNoticeOptions {
+  show(notice: UpdateNotice): void
   hide(): void
 }
 
@@ -29,17 +25,17 @@ function safely(label: string, fn: () => void) {
 
 const MAX_PASSES = 5
 
-class SurfaceConnection<State extends Noticeable> {
-  readonly #notice: Readable<UpdateNotice<State> | undefined>
-  readonly #show: (notice: UpdateNotice<State>) => void
+class SurfaceConnection {
+  readonly #notice: Readable<UpdateNotice | undefined>
+  readonly #show: (notice: UpdateNotice) => void
   readonly #hide: () => void
-  #shown: UpdateNotice<State> | undefined
+  #shown: UpdateNotice | undefined
   #syncing = false
   #again = false
 
   constructor(
-    notice: Readable<UpdateNotice<State> | undefined>,
-    surface: UpdateSurface<State>,
+    notice: Readable<UpdateNotice | undefined>,
+    surface: UpdateSurface,
   ) {
     this.#notice = notice
     this.#show = shown => surface.show(shown)
@@ -112,9 +108,9 @@ class SurfaceConnection<State extends Noticeable> {
   }
 }
 
-export function connectUpdateSurface<State extends Noticeable>(
-  updates: UpdateNoticeParts<State>,
-  surface: UpdateSurface<State>,
+export function connectUpdateSurface(
+  updates: AppUpdates,
+  surface: UpdateSurface,
 ): () => void {
   return new SurfaceConnection(
     createUpdateNotice(updates, surface),
