@@ -1,26 +1,14 @@
-import type { Refresh, RefreshOutcome } from './refresh'
+import type { RefreshOutcome } from './refresh'
 import { createListeners, type Readable } from './readable'
-import type { Attention, UpdateState } from './types'
-import type { Updates } from './update-state'
+import type { AppUpdates, Attention, UpdateState } from './types'
 
-export interface Noticeable {
-  attention: Attention
-  reason: string
-}
+type Noticeable = Exclude<UpdateState, { attention: 'none' }>
 
-export type UpdateNotice<State extends Noticeable = UpdateState> = Exclude<
-  State,
-  { attention: 'none' }
-> & {
+export type UpdateNotice = Exclude<UpdateState, { attention: 'none' }> & {
   readonly closable: boolean
   readonly announce: 'off' | 'polite' | 'assertive'
   refresh: () => Promise<RefreshOutcome>
   close: () => void
-}
-
-export interface UpdateNoticeParts<State extends Noticeable> {
-  state: Updates<State>
-  refresh: Pick<Refresh, 'run'>
 }
 
 export interface UpdateNoticeOptions {
@@ -36,34 +24,34 @@ const announce = {
   urgent: 'assertive',
 } as const
 
-const keyOf = (state: Noticeable) => `${state.attention}:${state.reason}`
+const keyOf = (state: UpdateState) => `${state.attention}:${state.reason}`
 
-function reaches<State extends Noticeable>(
-  state: State,
+function reaches(
+  state: UpdateState,
   minAttention: Attention,
-): state is Exclude<State, { attention: 'none' }> {
+): state is Noticeable {
   return (
     state.attention !== 'none' && rank[state.attention] >= rank[minAttention]
   )
 }
 
-class NoticeStore<State extends Noticeable> {
-  readonly #state: Updates<State>
-  readonly #refresh: Pick<Refresh, 'run'>
+class NoticeStore {
+  readonly #state: AppUpdates['state']
+  readonly #refresh: AppUpdates['refresh']
   readonly #minAttention: Attention
   readonly #listeners = createListeners({
     start: () => this.#start(),
     stop: () => this.#stop(),
   })
 
-  #shown: UpdateNotice<State> | undefined
+  #shown: UpdateNotice | undefined
   #closed: string | undefined
   #closing = false
   #unsubscribe: (() => void) | undefined
 
-  constructor(parts: UpdateNoticeParts<State>, options: UpdateNoticeOptions) {
-    this.#state = parts.state
-    this.#refresh = parts.refresh
+  constructor(updates: AppUpdates, options: UpdateNoticeOptions) {
+    this.#state = updates.state
+    this.#refresh = updates.refresh
     this.#minAttention = options.minAttention ?? 'prompt'
   }
 
@@ -83,7 +71,7 @@ class NoticeStore<State extends Noticeable> {
     }
   }
 
-  #close = (notice: UpdateNotice<State>) => {
+  #close = (notice: UpdateNotice) => {
     if (this.#shown !== notice) {
       return
     }
@@ -103,8 +91,8 @@ class NoticeStore<State extends Noticeable> {
     this.#listeners.notify()
   }
 
-  #notice = (wanted: Exclude<State, { attention: 'none' }>) => {
-    const notice: UpdateNotice<State> = {
+  #notice = (wanted: Noticeable) => {
+    const notice: UpdateNotice = {
       ...wanted,
       closable: wanted.attention !== 'urgent',
       announce: announce[wanted.attention],
@@ -139,9 +127,9 @@ class NoticeStore<State extends Noticeable> {
   subscribe = (listener: () => void) => this.#listeners.subscribe(listener)
 }
 
-export function createUpdateNotice<State extends Noticeable>(
-  parts: UpdateNoticeParts<State>,
+export function createUpdateNotice(
+  updates: AppUpdates,
   options: UpdateNoticeOptions = {},
-): Readable<UpdateNotice<State> | undefined> {
-  return new NoticeStore(parts, options)
+): Readable<UpdateNotice | undefined> {
+  return new NoticeStore(updates, options)
 }

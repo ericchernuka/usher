@@ -7,14 +7,13 @@ import {
 } from './build-facts'
 import { resolveEscalation, type EscalationOptions } from './options'
 
-export interface Claim {
-  attention: 'passive' | 'prompt' | 'urgent'
-  reason: string
-}
+export type Claim =
+  | { attention: 'passive' | 'prompt' | 'urgent'; reason: 'outdated' }
+  | { attention: 'urgent'; reason: 'rollback' | 'forced' }
 
-export interface Asked<Claimed extends Claim> {
-  claim: Claimed
-  since?: number | undefined
+export interface Asked {
+  claim: Claim
+  dismissableFrom?: number
   changesAt?: number | undefined
 }
 
@@ -22,56 +21,25 @@ export interface Moment extends Builds {
   now: number
 }
 
-interface SignalDefinition<Memory, Claimed extends Claim> {
-  initial: Memory
-  observe(memory: Memory, builds: Builds): Memory
-  ask(memory: Memory, moment: Moment): Asked<Claimed> | undefined
-}
-
-export interface Signal<Claimed extends Claim> {
-  track(): {
-    observe(builds: Builds): void
-    ask(moment: Moment): Asked<Claimed> | undefined
-  }
-}
-
-function defineSignal<Memory, const Claimed extends Claim>(
-  definition: SignalDefinition<Memory, Claimed>,
-): Signal<Claimed> {
-  return {
-    track() {
-      let memory = definition.initial
-
-      return {
-        observe(builds) {
-          memory = definition.observe(memory, builds)
-        },
-        ask: moment => definition.ask(memory, moment),
-      }
-    },
-  }
+export interface Signal {
+  observe: (builds: Builds) => void
+  ask: (moment: Moment) => Asked | undefined
 }
 
 const after = (start: number, duration: number | undefined) =>
   duration === undefined ? undefined : start + duration
 
-export interface EscalationClaim {
-  attention: 'passive' | 'prompt' | 'urgent'
-  reason: 'outdated'
-}
-
-export function escalation(
-  options: EscalationOptions = {},
-): Signal<EscalationClaim> {
+export function escalation(options: EscalationOptions): Signal {
   const { promptAfter, urgentAfter } = resolveEscalation(options)
+  let outdatedSince: number | undefined
 
-  return defineSignal<number | undefined, EscalationClaim>({
-    initial: undefined,
-    observe: (outdatedSince, builds) =>
-      isSuperseded(builds)
+  return {
+    observe(builds) {
+      outdatedSince = isSuperseded(builds)
         ? (outdatedSince ?? supersededAt(builds))
-        : undefined,
-    ask(outdatedSince, { now }) {
+        : undefined
+    },
+    ask({ now }) {
       if (outdatedSince === undefined) {
         return undefined
       }
@@ -92,23 +60,26 @@ export function escalation(
 
       return {
         claim: { attention: 'prompt', reason: 'outdated' },
-        since: promptStart,
+        dismissableFrom: promptStart,
         changesAt: urgentStart,
       }
     },
-  })
+  }
 }
 
-const sticky = <const Reason extends string>(
-  reason: Reason,
+function sticky(
+  reason: 'rollback' | 'forced',
   detected: (builds: Builds) => boolean,
-) =>
-  defineSignal({
-    initial: false,
-    observe: (seen: boolean, builds) => seen || detected(builds),
-    ask: seen =>
-      seen ? { claim: { attention: 'urgent', reason } } : undefined,
-  })
+): Signal {
+  let seen = false
+
+  return {
+    observe(builds) {
+      seen ||= detected(builds)
+    },
+    ask: () => (seen ? { claim: { attention: 'urgent', reason } } : undefined),
+  }
+}
 
 export const rollback = () => sticky('rollback', isRollback)
 

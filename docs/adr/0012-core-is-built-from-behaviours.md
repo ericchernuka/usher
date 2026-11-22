@@ -12,7 +12,7 @@ Two questions had to be kept apart: how core is built, and how much of that an a
 
 ## Decision
 
-Core is built from behaviours. Each one that holds a fact is a `Readable` with its own subscription: the version check, the prompt dismissal, the update state, the refresh and the update notice. A reason to refresh is a signal, a description with pure functions, and the update state publishes the loudest claim. `createAppUpdates(options)` composes them.
+Core is built from behaviours. Each one that holds a fact is a `Readable` with its own subscription: the version check, the prompt dismissal, the update state, the refresh and the update notice. A reason to refresh is a signal, which remembers what it has seen and makes a claim, and the update state publishes the loudest claim. `createAppUpdates(options)` composes them.
 
 The public interface is the part with a use today:
 
@@ -20,7 +20,7 @@ The public interface is the part with a use today:
 - `createUpdateNotice()` and `connectUpdateSurface()`, for declarative and imperative surfaces.
 - `@rndsqr/usher-core/testing` exports a tab with virtual time.
 
-`createTab`, `createVersionCheck`, `createPromptDismissal`, `createUpdateState`, `createRefresh`, the signals and `defineSignal` are internal.
+`createTab`, `createVersionCheck`, `createPromptDismissal`, `createUpdateState`, `createRefresh` and the signals are internal. There is one composition, so the state type is the written `UpdateState` union and nothing is inferred from the signals.
 
 The build plugin, the adapter contract and the asset fallback handler do not change.
 

@@ -13,13 +13,12 @@ import {
 } from 'react'
 import {
   createUpdateNotice,
-  type Noticeable,
   type Readable,
   type Refresh,
   type RefreshBlocker,
   type UpdateNotice as Notice,
   type UpdateNoticeOptions,
-  type UpdateNoticeParts,
+  type AppUpdates,
   type UpdateState,
 } from '@rndsqr/usher-core'
 
@@ -27,9 +26,7 @@ function useReadable<Value>(readable: Readable<Value>): Value {
   return useSyncExternalStore(readable.subscribe, readable.get, readable.get)
 }
 
-export function useUpdateState<State = UpdateState>(
-  state: Readable<State>,
-): State {
+export function useUpdateState(state: Readable<UpdateState>): UpdateState {
   return useDeferredValue(useReadable(state))
 }
 
@@ -62,10 +59,10 @@ export function useRefreshBlocker(
   }, [refresh, registered])
 }
 
-export function useUpdateNotice<State extends Noticeable>(
-  updates: UpdateNoticeParts<State>,
+export function useUpdateNotice(
+  updates: AppUpdates,
   options: UpdateNoticeOptions = {},
-): Notice<State> | undefined {
+): Notice | undefined {
   const { minAttention } = options
 
   const notice = useMemo(
@@ -164,13 +161,13 @@ function Announcer({ announce, container }: AnnouncerProps) {
   )
 }
 
-interface RootProps<State extends Noticeable>
+interface RootProps
   extends Omit<ComponentProps<'div'>, 'children'>, UpdateNoticeOptions {
-  updates: UpdateNoticeParts<State> & { refresh: Readable<boolean> }
-  children: (notice: Notice<State>) => ReactNode
+  updates: AppUpdates
+  children: (notice: Notice) => ReactNode
 }
 
-function Root<State extends Noticeable>(props: RootProps<State>) {
+function Root(props: RootProps) {
   const { updates, minAttention, children, ...rest } = props
   const notice = useUpdateNotice(updates, { minAttention })
   const container = useRef<HTMLDivElement>(null)
