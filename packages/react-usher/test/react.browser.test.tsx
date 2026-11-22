@@ -1,14 +1,10 @@
-import { Toast } from '@base-ui/react/toast'
 import { useSyncExternalStore } from 'react'
 import { render } from 'vitest-browser-react'
 import { configure } from 'vitest-browser-react/pure'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
-  connectUpdateSurface,
   createAppUpdates as createCoreUpdates,
-  type AppUpdates,
   type RefreshBlocker,
-  type UpdateNotice,
 } from '@rndsqr/usher-core'
 import { useRefreshBlocker, useRefreshing, useUpdateState } from '../src/index'
 import { captureNavigations } from '../../usher-core/test/navigation'
@@ -218,117 +214,5 @@ describe('useRefreshing', () => {
     reloaded.resolve(false)
     await expect.element(button).toBeEnabled()
     await view.unmount()
-  })
-})
-
-const TOAST_ID = 'app-update'
-
-function copyFor({ attention, reason }: UpdateNotice) {
-  if (reason === 'rollback' || reason === 'forced') {
-    return {
-      title: 'Please refresh',
-      description: 'This version has a known issue. Refresh to get the fix.',
-      action: 'Refresh now',
-    }
-  }
-
-  if (attention === 'urgent') {
-    return {
-      title: 'Please refresh',
-      description: "You're on an old version of the app. Refresh to update.",
-      action: 'Refresh now',
-    }
-  }
-
-  return {
-    title: 'A new version is available',
-    description: "Refresh when you're ready.",
-    action: 'Refresh',
-  }
-}
-
-function connectBaseUIToast(
-  appUpdates: AppUpdates,
-  toastManager: ReturnType<typeof Toast.createToastManager>,
-) {
-  return connectUpdateSurface(appUpdates, {
-    show(notice) {
-      const copy = copyFor(notice)
-      toastManager.add({
-        id: TOAST_ID,
-        type: 'app-update',
-        timeout: 0,
-        priority: notice.attention === 'urgent' ? 'high' : 'low',
-        title: copy.title,
-        description: copy.description,
-        actionProps: {
-          children: copy.action,
-          onClick: () => notice.refresh(),
-        },
-        onClose: () => notice.close(),
-      })
-    },
-    hide: () => toastManager.close(TOAST_ID),
-  })
-}
-
-function Toasts() {
-  const { toasts, close } = Toast.useToastManager()
-
-  return (
-    <>
-      {toasts
-        .filter(toast => toast.transitionStatus !== 'ending')
-        .map(toast => (
-          <button
-            type="button"
-            key={toast.id}
-            data-type={toast.type}
-            onClick={() => close(toast.id)}
-          >
-            {toast.title}
-          </button>
-        ))}
-    </>
-  )
-}
-
-async function setup(updates: AppUpdates) {
-  const toastManager = Toast.createToastManager()
-  const disconnect = connectBaseUIToast(updates, toastManager)
-
-  const view = await render(
-    <Toast.Provider toastManager={toastManager}>
-      <Toasts />
-    </Toast.Provider>,
-  )
-
-  const toast = view.getByRole('button')
-
-  return { ...view, toast, disconnect }
-}
-
-describe('Base UI recipe', () => {
-  it('shows the toast outside React and dismisses on close', async () => {
-    vi.setSystemTime(new Date('2026-11-12T04:00:00Z'))
-    vi.stubGlobal(
-      'fetch',
-      vi.fn<typeof fetch>(async () =>
-        Response.json({
-          ...older,
-          version: 'new',
-          commitTime: '2026-11-12T00:00:00Z',
-        }),
-      ),
-    )
-    const updates = createAppUpdates()
-    const { toast, unmount, disconnect } = await setup(updates)
-    await expect.element(toast).toHaveTextContent('A new version is available')
-
-    await toast.click()
-    await vi.waitFor(() => expect(updates.getState().attention).toBe('passive'))
-    await expect.element(toast).not.toBeInTheDocument()
-    disconnect()
-    await unmount()
   })
 })

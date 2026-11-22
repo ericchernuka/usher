@@ -9,11 +9,7 @@ export default defineConfig({
     },
   },
   optimizeDeps: {
-    include: [
-      'vitest-browser-react',
-      'vitest-browser-react/pure',
-      '@base-ui/react/toast',
-    ],
+    include: ['vitest-browser-react', 'vitest-browser-react/pure'],
   },
   test: {
     coverage,
