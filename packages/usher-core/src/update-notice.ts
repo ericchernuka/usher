@@ -18,7 +18,7 @@ export type UpdateNotice = Exclude<UpdateState, { attention: 'none' }> & {
   /**
    * Close by the user, which dismisses a prompt for every tab, hides a
    * passive notice until attention or reason changes, and does nothing on
-   * a notice that is no longer shown
+   * an urgent notice or one that is no longer shown
    */
   close: () => void
 }
@@ -65,6 +65,7 @@ class Notices implements NoticeStore {
   #closed: string | undefined
   #closing = false
   #unsubscribe: (() => void) | undefined
+  #left: UpdateState | undefined
 
   constructor(updates: AppUpdates, options: UpdateNoticeOptions) {
     this.#state = updates.state
@@ -89,7 +90,7 @@ class Notices implements NoticeStore {
   }
 
   #close = (notice: UpdateNotice) => {
-    if (this.#shown !== notice) {
+    if (this.#shown !== notice || !notice.closable) {
       return
     }
 
@@ -97,8 +98,6 @@ class Notices implements NoticeStore {
 
     if (notice.attention === 'passive') {
       this.#closed = keyOf(notice)
-    } else if (notice.attention === 'urgent') {
-      this.#shown = undefined
     } else if (this.#state.dismiss()) {
       this.#closed = keyOf(this.#state.get())
     }
@@ -130,12 +129,16 @@ class Notices implements NoticeStore {
       }
     })
 
+    if (this.#state.get() !== this.#left) {
+      this.#closed = undefined
+    }
+
     this.#reconcile()
   }
 
   #stop = () => {
     this.#unsubscribe?.()
-    this.#closed = undefined
+    this.#left = this.#state.get()
     this.#shown = undefined
   }
 

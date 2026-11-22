@@ -244,7 +244,11 @@ describe('UpdateNotice', () => {
     )
 
     const view = await render(
-      <UpdateNotice.Root updates={updates} minAttention="passive">
+      <UpdateNotice.Root
+        updates={updates}
+        minAttention="passive"
+        announcement={notice => notice.reason}
+      >
         {notice => (
           <>
             <p>{notice.reason}</p>
@@ -336,7 +340,7 @@ describe('UpdateNotice', () => {
     const run = vi.spyOn(updates.refresh, 'run')
 
     await view.rerender(
-      <UpdateNotice.Root updates={updates}>
+      <UpdateNotice.Root updates={updates} announcement={() => 'Update'}>
         {() => (
           <>
             <UpdateNotice.Refresh onClick={clicked}>
@@ -364,7 +368,7 @@ describe('UpdateNotice', () => {
     const run = vi.spyOn(updates.refresh, 'run')
 
     await view.rerender(
-      <UpdateNotice.Root updates={updates}>
+      <UpdateNotice.Root updates={updates} announcement={() => 'Update'}>
         {() => (
           <UpdateNotice.Refresh
             action={async refresh => {

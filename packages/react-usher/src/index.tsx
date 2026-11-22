@@ -1,7 +1,6 @@
 import {
   createContext,
   use,
-  useCallback,
   useDeferredValue,
   useEffect,
   useEffectEvent,
@@ -11,7 +10,6 @@ import {
   useTransition,
   type ComponentProps,
   type ReactNode,
-  type Ref,
 } from 'react'
 import {
   createUpdateNotice,
@@ -24,7 +22,7 @@ import {
   type UpdateNoticeOptions,
   type UpdateState,
 } from '@rndsqr/usher-core'
-import { claim, prepareAnnouncements, release, spoken } from './announcer'
+import { claim, release, settle } from './announcer'
 
 function useReadable<Value>(readable: Readable<Value>): Value {
   return useSyncExternalStore(readable.subscribe, readable.get, readable.get)
@@ -97,99 +95,43 @@ function useShown(part: string): Shown {
   return shown
 }
 
-function forward<Node>(ref: Ref<Node> | undefined, node: Node | null) {
-  if (ref && 'current' in ref) {
-    ref.current = node
-
-    return undefined
-  }
-
-  return ref?.(node)
-}
-
 function useAnnouncement(
-  element: HTMLElement | null,
   priority: Notice['announce'] | undefined,
+  wording: string,
 ) {
-  useEffect(() => {
-    prepareAnnouncements(document)
-  }, [])
+  const [owner] = useState(() => Symbol('update notice'))
+
+  useEffect(settle, [])
 
   useEffect(() => {
-    if (!element || !priority || priority === 'off') {
+    if (!wording || !priority || priority === 'off') {
       return undefined
     }
 
-    const sync = () => {
-      const text = spoken(element)
+    claim(owner, priority, wording)
 
-      if (text) {
-        claim(element, priority, text)
-      } else {
-        release(element)
-      }
-    }
-
-    const wording = new MutationObserver(sync)
-    const hiding = new MutationObserver(sync)
-    const size = new ResizeObserver(sync)
-
-    wording.observe(element, {
-      subtree: true,
-      childList: true,
-      characterData: true,
-      attributes: true,
-    })
-
-    hiding.observe(element.ownerDocument.documentElement, {
-      subtree: true,
-      attributeFilter: ['aria-hidden', 'hidden'],
-    })
-
-    size.observe(element)
-    sync()
-
-    return () => {
-      wording.disconnect()
-      hiding.disconnect()
-      size.disconnect()
-      release(element)
-    }
-  }, [element, priority])
+    return () => release(owner)
+  }, [owner, priority, wording])
 }
 
 interface RootProps
   extends Omit<ComponentProps<'div'>, 'children'>, UpdateNoticeOptions {
   /** The app's updates */
   updates: AppUpdates
+  /**
+   * Wording a screen reader hears when the notice appears or the wording
+   * changes, politely for a prompt and assertively for urgent attention, and
+   * once for any number of roots that give the same wording
+   */
+  announcement: (notice: Notice) => string
   /** Markup for the notice, called only while there is one */
   children: (notice: Notice) => ReactNode
 }
 
 function Root(props: RootProps) {
-  const { updates, minAttention, children, ref, ...rest } = props
+  const { updates, minAttention, announcement, children, ...rest } = props
   const notice = useUpdateNotice(updates, { minAttention })
-  const [element, setElement] = useState<HTMLDivElement | null>(null)
-
-  const attach = useCallback(
-    (node: HTMLDivElement) => {
-      setElement(node)
-      const detach = forward(ref, node)
-
-      return () => {
-        setElement(null)
-
-        if (detach) {
-          detach()
-        } else {
-          forward(ref, null)
-        }
-      }
-    },
-    [ref],
-  )
-
-  useAnnouncement(element, notice?.announce)
+  useAnnouncement(notice?.announce, notice ? announcement(notice) : '')
 
   if (!notice) {
     return null
@@ -200,7 +142,6 @@ function Root(props: RootProps) {
       data-attention={notice.attention}
       data-reason={notice.reason}
       {...rest}
-      ref={attach}
     >
       <ShownNotice value={{ notice, refresh: updates.refresh }}>
         {children(notice)}
@@ -262,7 +203,7 @@ function Close({ onClick, ...props }: ComponentProps<'button'>) {
 
 /**
  * Headless parts for an update notice: `Root` renders while there is a notice
- * and announces it, `Refresh` runs its `action` or a refresh and is disabled
+ * and announces its `announcement`, `Refresh` runs its `action` or a refresh and is disabled
  * meanwhile, and `Close` renders nothing at urgent attention
  */
 export const UpdateNotice = { Root, Refresh: RefreshButton, Close }

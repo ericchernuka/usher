@@ -111,6 +111,44 @@ test('given a passive notice was closed and its reader left, when the tab catche
   stopState()
 })
 
+test('given a passive notice was closed, when its reader leaves and returns with nothing changed, then it stays closed', async () => {
+  const tab = createTestTab()
+  tab.deploy({ ...newer, buildTime: new Date(tab.now()).toISOString() })
+  const updates = createAppUpdates({ running, versionUrl }, tab)
+  const notice = createUpdateNotice(updates, { minAttention: 'passive' })
+  const leave = notice.subscribe(() => {})
+  await tab.advance(0)
+  notice.get()?.close()
+  leave()
+
+  const stop = notice.subscribe(() => {})
+
+  expect(notice.get()).toBeUndefined()
+  stop()
+})
+
+test('given a reader that closes every notice it is given, when attention is urgent, then the notice stays and the reader is not called again', async () => {
+  const tab = createTestTab()
+  tab.deploy({ ...older, buildTime: new Date(tab.now()).toISOString() })
+  const updates = createAppUpdates({ running, versionUrl }, tab)
+  const notice = createUpdateNotice(updates)
+  let calls = 0
+
+  const stop = notice.subscribe(() => {
+    calls++
+    notice.get()?.close()
+  })
+
+  await tab.advance(0)
+  const urgent = notice.get()
+
+  expect(urgent).toMatchObject({ attention: 'urgent', closable: false })
+  expect(calls).toBeLessThan(5)
+  urgent?.close()
+  expect(notice.get()).toBe(urgent)
+  stop()
+})
+
 test('given overlapping advances, then time moves by their sum, and an advance that is not a duration is refused', async () => {
   const tab = createTestTab()
   const start = tab.now()

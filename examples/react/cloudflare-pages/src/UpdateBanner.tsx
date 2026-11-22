@@ -24,38 +24,46 @@ function copyFor({ attention, reason }: Notice) {
   }
 }
 
-function Body({ notice }: { notice: Notice }) {
-  const [blocked, setBlocked] = useState(false)
-  const { title, description } = copyFor(notice)
-
-  return (
-    <>
-      <div>
-        <strong>{title}</strong>
-        <p>{blocked ? 'Clear your draft first, then refresh.' : description}</p>
-      </div>
-      <UpdateNotice.Refresh
-        action={async refresh => {
-          const outcome = await refresh()
-          startTransition(() => setBlocked(outcome === 'blocked'))
-        }}
-      >
-        Refresh
-      </UpdateNotice.Refresh>
-      <UpdateNotice.Close aria-label="Close">×</UpdateNotice.Close>
-    </>
-  )
-}
+const keyOf = (notice: Notice) => `${notice.attention}:${notice.reason}`
 
 export function UpdateBanner() {
+  const [blockedAt, setBlockedAt] = useState<string>()
+
+  const copy = (notice: Notice) => ({
+    ...copyFor(notice),
+    ...(blockedAt === keyOf(notice) && {
+      description: 'Clear your draft first, then refresh.',
+    }),
+  })
+
   return (
     <UpdateNotice.Root
       className="banner"
       updates={appUpdates}
       minAttention="passive"
+      announcement={notice =>
+        `${copy(notice).title}. ${copy(notice).description}`
+      }
     >
       {notice => (
-        <Body key={`${notice.attention}:${notice.reason}`} notice={notice} />
+        <>
+          <div>
+            <strong>{copy(notice).title}</strong>
+            <p>{copy(notice).description}</p>
+          </div>
+          <UpdateNotice.Refresh
+            action={async refresh => {
+              const outcome = await refresh()
+
+              startTransition(() =>
+                setBlockedAt(outcome === 'blocked' ? keyOf(notice) : undefined),
+              )
+            }}
+          >
+            Refresh
+          </UpdateNotice.Refresh>
+          <UpdateNotice.Close aria-label="Close">×</UpdateNotice.Close>
+        </>
       )}
     </UpdateNotice.Root>
   )

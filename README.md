@@ -308,7 +308,7 @@ function copyFor({ attention, reason }: UpdateNotice) {
 
 `show` is called once per change of attention or reason, with a new notice each time. The surface owns its toast id and its wording. The default minimum attention is `prompt`; use `minAttention: 'passive'` for a persistent update banner.
 
-`notice.close()` means the user closed the surface. For a prompt it dismisses the prompt for every tab and then calls `hide()`. For a passive notice it calls `hide()` and stays hidden until attention or reason changes. For an urgent notice it calls `show()` again with a new notice, because urgent attention cannot be closed and some libraries remove a toast regardless. A notice that is no longer the one shown ignores `close()`, so a library that fires `onClose` during a programmatic hide is safe.
+`notice.close()` means the user closed the surface. For a prompt it dismisses the prompt for every tab and then calls `hide()`. For a passive notice it calls `hide()` and stays hidden until attention or reason changes. For an urgent notice it calls `show()` again with a new notice, because urgent attention cannot be closed and some libraries remove a toast regardless. Outside `connectUpdateSurface`, closing an urgent notice does nothing. A notice that is no longer the one shown ignores `close()`, so a library that fires `onClose` during a programmatic hide is safe.
 
 Give urgent notices no timeout. A toast library that closes one on its own timer makes the connection show it again, and after five such rounds in one pass it stops and logs an error.
 
@@ -353,7 +353,16 @@ To decide what a press on `Refresh` does, give it an `action`. It receives the r
 
 An action has to settle. React keeps overlapping transitions in the same root pending until all their Actions complete, so one that never resolves holds the app's other pending states too. A press without an `action` starts no transition.
 
-`Root` also announces the notice. The package keeps one `status` and one `alert` region per document, visually hidden, and adds the wording of each notice to the one that matches `announce`, so a screen reader hears a prompt politely and an urgent notice assertively. The wording is the text inside `Root` that is seen on the page, without buttons, links and anything hidden from assistive technology. It is announced again when it changes or is revealed, and notices with the same wording are announced once, however many `Root`s show them. `Root` notices changes inside itself, a change of its own size, and `hidden` or `aria-hidden` anywhere above it. A style rule elsewhere that reveals part of a notice without changing its size is not seen until the next change.
+`Root` also announces the notice, with the wording its `announcement` prop returns:
+
+```tsx
+<UpdateNotice.Root
+  updates={appUpdates}
+  announcement={notice => `${copyFor(notice).title}. ${copyFor(notice).description}`}
+>
+```
+
+The package keeps one `status` and one `alert` region in the document, visually hidden, and adds the wording to the one that matches `announce`, so a screen reader hears a prompt politely and an urgent notice assertively. Wording is announced when the notice appears and again when the wording changes. The same wording at the same politeness is announced once, however many `Root`s give it, and it leaves the region when the last of them does. An empty string announces nothing. The wording is the app's to give because only the app knows which of its text is the message: reading it back out of the markup means guessing what is hidden, decorative or a control.
 
 ## Testing update UI
 
@@ -363,20 +372,21 @@ An action has to settle. React keeps overlapping transitions in the same root pe
 import { createTestTab } from '@rndsqr/usher-core/testing'
 
 const tab = createTestTab()
-tab.deploy({
-  ...running,
-  version: 'next',
-  buildTime: new Date(tab.now()).toISOString(),
-})
+const built = new Date(tab.now()).toISOString()
+const running = { version: 'one', commitTime: built, buildTime: built }
+tab.deploy({ ...running, version: 'two' })
 
-const appUpdates = createAppUpdates({ running, versionUrl: '/version.json' }, tab)
+const appUpdates = createAppUpdates(
+  { running, versionUrl: '/version.json' },
+  tab,
+)
 render(<App appUpdates={appUpdates} />)
 
 await tab.advance(12 * HOUR)
 // the app now shows its prompt
 ```
 
-`deploy` sets the build facts every version check gets, and `advance` moves time forward, running the checks and timers that fall due. Before the first `deploy` the tab is offline. A tab is outdated from the build time of the build it sees, so take build times from `tab.now()`, the test tab's own clock, which does not follow the real one.
+`deploy` sets the build facts every version check gets, and `advance` moves time forward, running the checks and timers that fall due. Before the first `deploy` the tab is offline. A tab is outdated from the later of the two build times, so take both the running and the deployed build's times from `tab.now()`, the test tab's own clock, which does not follow the real one.
 
 ## Skew protection
 

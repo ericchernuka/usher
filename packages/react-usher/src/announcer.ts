@@ -3,8 +3,6 @@ const SETTLE_MS = 100
 const UNSEEN =
   'position:fixed;width:1px;height:1px;margin:-1px;padding:0;border:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap'
 
-const SKIPPED = 'button, a, [role="button"], [aria-hidden="true"]'
-
 const PRIORITIES = ['polite', 'assertive'] as const
 
 interface Region {
@@ -13,56 +11,35 @@ interface Region {
   pending: Map<string, ReturnType<typeof setTimeout>>
 }
 
-interface Announcer {
-  claims: Map<Element, { priority: 'polite' | 'assertive'; text: string }>
-  polite: Region
-  assertive: Region
-}
+const claims = new Map<
+  symbol,
+  { priority: 'polite' | 'assertive'; text: string }
+>()
 
-const announcers = new WeakMap<Document, Announcer>()
+const regions = new Map<'polite' | 'assertive', Region>()
 
-function region(doc: Document, priority: 'polite' | 'assertive'): Region {
-  const element = doc.createElement('div')
+function regionFor(priority: 'polite' | 'assertive'): Region {
+  const found = regions.get(priority)
+
+  if (found?.element.isConnected) {
+    return found
+  }
+
+  found?.pending.forEach(timer => clearTimeout(timer))
+
+  const element = document.createElement('div')
   element.setAttribute('role', priority === 'polite' ? 'status' : 'alert')
   element.setAttribute('aria-live', priority)
   element.setAttribute('aria-atomic', 'false')
   element.setAttribute('aria-relevant', 'additions text')
   element.dataset['usherAnnouncer'] = priority
   element.style.cssText = UNSEEN
-  doc.body.append(element)
+  document.body.append(element)
 
-  return { element, shown: new Map(), pending: new Map() }
-}
+  const made: Region = { element, shown: new Map(), pending: new Map() }
+  regions.set(priority, made)
 
-function retire(found: Region) {
-  found.pending.forEach(timer => clearTimeout(timer))
-  found.element.remove()
-}
-
-function announcerIn(doc: Document): Announcer {
-  const found = announcers.get(doc)
-
-  if (
-    found?.polite.element.isConnected &&
-    found.assertive.element.isConnected
-  ) {
-    return found
-  }
-
-  if (found) {
-    retire(found.polite)
-    retire(found.assertive)
-  }
-
-  const announcer: Announcer = {
-    claims: found?.claims ?? new Map(),
-    polite: region(doc, 'polite'),
-    assertive: region(doc, 'assertive'),
-  }
-
-  announcers.set(doc, announcer)
-
-  return announcer
+  return made
 }
 
 function withdraw(target: Region, wanted: ReadonlySet<string>) {
@@ -82,19 +59,19 @@ function withdraw(target: Region, wanted: ReadonlySet<string>) {
 }
 
 function say(target: Region, text: string) {
-  const child = target.element.ownerDocument.createElement('div')
+  const child = document.createElement('div')
   child.textContent = text
   target.pending.delete(text)
   target.shown.set(text, child)
   target.element.append(child)
 }
 
-function settle(announcer: Announcer) {
+export function settle() {
   for (const priority of PRIORITIES) {
-    const target = announcer[priority]
+    const target = regionFor(priority)
 
     const wanted = new Set(
-      Array.from(announcer.claims.values()).flatMap(claimed =>
+      Array.from(claims.values()).flatMap(claimed =>
         claimed.priority === priority ? [claimed.text] : [],
       ),
     )
@@ -112,57 +89,17 @@ function settle(announcer: Announcer) {
   }
 }
 
-export function prepareAnnouncements(doc: Document) {
-  settle(announcerIn(doc))
-}
-
 export function claim(
-  container: Element,
+  owner: symbol,
   priority: 'polite' | 'assertive',
   text: string,
 ) {
-  const announcer = announcerIn(container.ownerDocument)
-  announcer.claims.set(container, { priority, text })
-  settle(announcer)
+  claims.set(owner, { priority, text })
+  settle()
 }
 
-export function release(container: Element) {
-  const announcer = announcers.get(container.ownerDocument)
-
-  if (announcer?.claims.delete(container)) {
-    settle(announcer)
+export function release(owner: symbol) {
+  if (claims.delete(owner)) {
+    settle()
   }
-}
-
-function seen(text: Node) {
-  const parent = text.parentElement
-
-  if (!parent || parent.closest(SKIPPED)) {
-    return false
-  }
-
-  const range = text.ownerDocument?.createRange()
-  range?.selectNodeContents(text)
-
-  return (
-    range?.getClientRects().length !== 0 &&
-    getComputedStyle(parent).visibility === 'visible'
-  )
-}
-
-export function spoken(container: Element) {
-  const walker = container.ownerDocument.createTreeWalker(
-    container,
-    NodeFilter.SHOW_TEXT,
-  )
-
-  const words: string[] = []
-
-  while (walker.nextNode()) {
-    if (seen(walker.currentNode)) {
-      words.push(walker.currentNode.nodeValue ?? '')
-    }
-  }
-
-  return words.join(' ').replaceAll(/\s+/g, ' ').trim()
 }
