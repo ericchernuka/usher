@@ -264,7 +264,7 @@ describe('UpdateNotice', () => {
     const { updates, view } = await outdated(1)
     const notice = view.getByText('outdated')
     await expect.element(notice).toBeVisible()
-    expect(view.container.querySelector('[role]:not(button)')).toBeNull()
+    await expect.element(view.getByRole('status')).toHaveTextContent('')
 
     await view.getByRole('button', { name: 'Close' }).click()
     await expect.element(notice).not.toBeInTheDocument()
@@ -272,10 +272,14 @@ describe('UpdateNotice', () => {
     await view.unmount()
   })
 
-  it('announces a prompt politely, and closing it dismisses the prompt', async () => {
+  it('marks a prompt for styling, and closing it dismisses the prompt', async () => {
     const { updates, view } = await outdated(13)
-    const notice = view.getByRole('status')
-    await expect.element(notice).toHaveAttribute('data-attention', 'prompt')
+    const notice = view.getByRole('paragraph')
+    await expect.element(notice).toBeVisible()
+    expect(view.container.querySelector('[data-attention]')).toHaveAttribute(
+      'data-attention',
+      'prompt',
+    )
 
     await view.getByRole('button', { name: 'Close' }).click()
     await expect.element(notice).not.toBeInTheDocument()
@@ -283,11 +287,13 @@ describe('UpdateNotice', () => {
     await view.unmount()
   })
 
-  it('announces urgent attention as an alert with no close control, and disables refresh while the reload runs', async () => {
+  it('gives urgent attention no close control, and disables refresh while the reload runs', async () => {
     const { view, reloaded } = await outdated(25)
-    await expect
-      .element(view.getByRole('alert'))
-      .toHaveAttribute('data-reason', 'outdated')
+    await expect.element(view.getByRole('alert')).toHaveTextContent('outdated')
+    expect(view.container.querySelector('[data-attention]')).toHaveAttribute(
+      'data-attention',
+      'urgent',
+    )
     expect(view.getByRole('button', { name: 'Close' }).query()).toBeNull()
 
     const refresh = view.getByRole('button', { name: 'Refresh' })
