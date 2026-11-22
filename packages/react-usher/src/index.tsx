@@ -7,6 +7,8 @@ import {
   useRef,
   useSyncExternalStore,
   type ComponentProps,
+  type CSSProperties,
+  type RefObject,
   type ReactNode,
 } from 'react'
 import {
@@ -93,7 +95,58 @@ function useShown(part: string): Shown {
   return shown
 }
 
-const roles = { off: undefined, polite: 'status', assertive: 'alert' } as const
+const unseen: CSSProperties = {
+  position: 'absolute',
+  width: 1,
+  height: 1,
+  margin: -1,
+  overflow: 'hidden',
+  clipPath: 'inset(50%)',
+  whiteSpace: 'nowrap',
+}
+
+function spoken(container: HTMLElement | null) {
+  if (!container) {
+    return ''
+  }
+
+  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT)
+  const words: string[] = []
+
+  while (walker.nextNode()) {
+    const node = walker.currentNode
+
+    if (node instanceof Text && !node.parentElement?.closest('button')) {
+      words.push(node.data)
+    }
+  }
+
+  return words.join(' ').replaceAll(/\s+/g, ' ').trim()
+}
+
+interface AnnouncerProps {
+  announce: Notice['announce'] | undefined
+  container: RefObject<HTMLElement | null>
+}
+
+function Announcer({ announce, container }: AnnouncerProps) {
+  const polite = useRef<HTMLOutputElement>(null)
+  const assertive = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const text = spoken(container.current)
+
+    polite.current?.replaceChildren(announce === 'polite' ? text : '')
+    assertive.current?.replaceChildren(announce === 'assertive' ? text : '')
+  }, [announce, container])
+
+  return (
+    <>
+      <output ref={polite} style={unseen} />
+      <div ref={assertive} role="alert" style={unseen} />
+    </>
+  )
+}
 
 interface RootProps<State extends Noticeable>
   extends Omit<ComponentProps<'div'>, 'children'>, UpdateNoticeOptions {
@@ -104,22 +157,24 @@ interface RootProps<State extends Noticeable>
 function Root<State extends Noticeable>(props: RootProps<State>) {
   const { updates, minAttention, children, ...rest } = props
   const notice = useUpdateNotice(updates, { minAttention })
-
-  if (!notice) {
-    return null
-  }
+  const container = useRef<HTMLDivElement>(null)
 
   return (
-    <div
-      role={roles[notice.announce]}
-      data-attention={notice.attention}
-      data-reason={notice.reason}
-      {...rest}
-    >
-      <ShownNotice.Provider value={{ notice, refresh: updates.refresh }}>
-        {children(notice)}
-      </ShownNotice.Provider>
-    </div>
+    <>
+      <Announcer announce={notice?.announce} container={container} />
+      {notice && (
+        <div
+          ref={container}
+          data-attention={notice.attention}
+          data-reason={notice.reason}
+          {...rest}
+        >
+          <ShownNotice.Provider value={{ notice, refresh: updates.refresh }}>
+            {children(notice)}
+          </ShownNotice.Provider>
+        </div>
+      )}
+    </>
   )
 }
 

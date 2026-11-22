@@ -220,13 +220,13 @@ Two additions sit on the notice behaviour. `useUpdateNotice(appUpdates, { minAtt
 
 Headless means the app owns the markup. It should not also have to own the accessibility rules, so the parts apply them and every one can be overridden by a prop:
 
-- `Root` takes its role from `notice.announce`: none at passive, `role="status"` at prompt, `role="alert"` at urgent.
-- A notice is announced once. The behaviour makes a new notice only when attention or reason changes, so a re-render does not repeat it.
+- `Root` keeps two visually hidden live regions mounted, a `status` and an `alert`, and copies the notice's text into the one that matches `notice.announce`, leaving out the text of buttons. Nothing is announced at passive.
+- A notice is announced once. The text is copied when `announce` changes, so a re-render does not repeat it.
 - The parts never move focus. A notice must not interrupt typing, at any attention.
 - No part closes a notice on a timer.
 - `Close` has no default label, since wording is the app's.
 
-Whether a `status` region mounted together with its content is announced by every screen reader has not been tested with one. If it is not, `Root` keeps an empty region mounted and the rest of the design stands.
+The first version put `role="status"` or `role="alert"` on `Root`'s own element, which mounts together with its content. A browser test with a virtual screen reader showed that a prompt mounted that way was not announced, while text placed into a region that was already mounted was. That is why the regions are separate and stay mounted. The test runs in Chromium and WebKit. A virtual screen reader follows the specification and is not VoiceOver, NVDA or JAWS, so this has still not been heard on a real one.
 
 ## Testing
 

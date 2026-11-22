@@ -334,7 +334,7 @@ import { UpdateNotice } from '@rndsqr/react-usher'
 </UpdateNotice.Root>
 ```
 
-`Root` renders nothing without a notice. It sets `data-attention` and `data-reason`, with `role="status"` at prompt and `role="alert"` at urgent. `Refresh` is disabled, with `data-refreshing`, while a refresh is in flight. `Close` renders nothing at urgent. The parts ship no styles and no wording, never move focus, and never close on a timer. Any prop you pass overrides a default.
+`Root` renders its element only while there is a notice, with `data-attention` and `data-reason` for styling. Beside it, `Root` keeps two visually hidden live regions mounted, a `status` and an `alert`, and copies the notice's text into the one that matches `announce`, leaving out the text of buttons. A screen reader hears a prompt politely and an urgent notice assertively, once each. The regions stay mounted because a live region that is inserted together with its text is not reliably announced. `Refresh` is disabled, with `data-refreshing`, while a refresh is in flight. `Close` renders nothing at urgent. The parts ship no wording and no styles beyond hiding those two regions. They never move focus and never close on a timer. Any prop you pass to a part overrides its default.
 
 ## Behaviours
 
@@ -519,18 +519,18 @@ The promise resolves with the build facts now being served, once the server has 
 
 A pnpm workspace run by Turbo. `packages/*` are the libraries, built with tsdown. `examples/react/*` are sample Vite and React apps for Pages and Workers.
 
-| Script              | Runs                                                                                                                                                |
-| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pnpm check`        | Coverage first, then all checks in parallel                                                                                                         |
-| `pnpm build`        | tsdown for each package, then the examples                                                                                                          |
-| `pnpm check:types`  | `tsc` per package and example (plus Workers types for the edge tests)                                                                               |
-| `pnpm lint`         | oxlint, type-aware, with the vendored anti-slop rules (`tools/oxlint/anti-slop`) and the React Compiler rules                                       |
-| `pnpm format`       | oxfmt (`pnpm check:format` checks)                                                                                                                  |
-| `pnpm test`         | Vitest: Node for everything that doesn't need a browser, Chromium (browser mode) for what does; MSW for the network                                 |
-| `pnpm test:edge`    | The generated and composed workers in workerd, with R2 and asset serving                                                                            |
-| `pnpm coverage`     | V8 coverage, merged for Fallow; each package must reach 95% on lines, branches, functions and statements                                            |
-| `pnpm check:fallow` | Fallow with merged coverage (run `pnpm coverage` first): dead code, duplication, complexity, dependencies                                           |
-| `pnpm check:pack`   | Packs the four packages, installs the tarballs into a throwaway app outside the workspace, and runs its type check, production build and dev server |
+| Script              | Runs                                                                                                                                                                                                                                             |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `pnpm check`        | Coverage first, then all checks in parallel                                                                                                                                                                                                      |
+| `pnpm build`        | tsdown for each package, then the examples                                                                                                                                                                                                       |
+| `pnpm check:types`  | `tsc` per package and example (plus Workers types for the edge tests)                                                                                                                                                                            |
+| `pnpm lint`         | oxlint, type-aware, with the vendored anti-slop rules (`tools/oxlint/anti-slop`) and the React Compiler rules                                                                                                                                    |
+| `pnpm format`       | oxfmt (`pnpm check:format` checks)                                                                                                                                                                                                               |
+| `pnpm test`         | Vitest: Node for everything that doesn't need a browser, Chromium (browser mode) for what does, and WebKit as well for what a screen reader hears; MSW for the network. Install the browsers with `pnpm exec playwright install chromium webkit` |
+| `pnpm test:edge`    | The generated and composed workers in workerd, with R2 and asset serving                                                                                                                                                                         |
+| `pnpm coverage`     | V8 coverage, merged for Fallow; each package must reach 95% on lines, branches, functions and statements                                                                                                                                         |
+| `pnpm check:fallow` | Fallow with merged coverage (run `pnpm coverage` first): dead code, duplication, complexity, dependencies                                                                                                                                        |
+| `pnpm check:pack`   | Packs the four packages, installs the tarballs into a throwaway app outside the workspace, and runs its type check, production build and dev server                                                                                              |
 
 ### Releases
 

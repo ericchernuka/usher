@@ -26,6 +26,6 @@ Options, defaults, the update states and `connectUpdateSurface(appUpdates, surfa
 
 New in core: `createTab`, `createVersionCheck`, `createPromptDismissal`, `createUpdateState`, `createRefresh` and `createUpdateNotice`, the signals `escalation()`, `rollback()` and `forcedUpdate()`, and `defineSignal()` for an app's own reason to refresh. Every update notice now carries `closable` and `announce`.
 
-New in React: `useUpdateNotice(appUpdates, { minAttention })` and the headless `UpdateNotice.Root`, `UpdateNotice.Refresh` and `UpdateNotice.Close` parts.
+New in React: `useUpdateNotice(appUpdates, { minAttention })` and the headless `UpdateNotice.Root`, `UpdateNotice.Refresh` and `UpdateNotice.Close` parts. `Root` announces a prompt politely and an urgent notice assertively through live regions it keeps mounted.
 
 New entry `@rndsqr/usher-core/testing`: `createTestTab()` is a tab with virtual time. Pass it as the second argument to `createAppUpdates`, from core or from `@rndsqr/usher-plugin/client`, then call `tab.deploy(build)` and `await tab.advance(ms)`.

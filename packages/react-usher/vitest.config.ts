@@ -22,6 +22,14 @@ export default defineConfig({
           browser: chromium,
         },
       },
+      {
+        extends: true,
+        test: {
+          name: 'webkit',
+          include: ['test/announcing.browser.test.tsx'],
+          browser: { ...chromium, instances: [{ browser: 'webkit' }] },
+        },
+      },
     ],
   },
 })
