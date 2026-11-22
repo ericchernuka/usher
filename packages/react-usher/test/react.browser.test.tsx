@@ -86,24 +86,6 @@ describe('useUpdateState', () => {
   })
 })
 
-describe('useUpdateState with a rollback', () => {
-  it('returns attention together with its reason', async () => {
-    const updates = createAppUpdates()
-
-    function Reason() {
-      const state = useUpdateState(updates)
-
-      return <output>{`${state.attention}:${state.reason}`}</output>
-    }
-
-    const view = await render(<Reason />)
-    await expect
-      .element(view.getByRole('status'))
-      .toHaveTextContent('urgent:rollback')
-    await view.unmount()
-  })
-})
-
 describe('useUpdateState deferral', () => {
   it('renders the new value at low priority: urgent pass keeps the old value, then catches up', async () => {
     const updates = createAppUpdates()

@@ -16,9 +16,6 @@ class MemoryStorage {
   setItem(key: string, value: string) {
     this.#items.set(key, value)
   }
-  removeItem(key: string) {
-    this.#items.delete(key)
-  }
   clear() {
     this.#items.clear()
   }
@@ -86,12 +83,11 @@ const MAX_BROWSER_TIMER_MS = 2 ** 31 - 1
 const MAX_TIMERS_PER_ADVANCE = 20_000
 
 export interface FakeEnvironmentOptions {
-  start?: string
   fetch?: typeof fetch
 }
 
 export function createFakeEnvironment(options: FakeEnvironmentOptions = {}) {
-  let wall = Date.parse(options.start ?? '2026-11-11T16:00:00Z')
+  let wall = Date.parse('2026-11-11T16:00:00Z')
   let monotonic = 0
   let visible = true
   let reloads = 0
@@ -99,7 +95,7 @@ export function createFakeEnvironment(options: FakeEnvironmentOptions = {}) {
   let storageBlocked = false
   const timers = new Map<number, { due: number; callback: () => void }>()
 
-  const storage: Pick<Storage, 'getItem' | 'setItem' | 'removeItem' | 'clear'> =
+  const storage: Pick<Storage, 'getItem' | 'setItem' | 'clear'> =
     new MemoryStorage()
 
   const visibility = listeners<[]>()

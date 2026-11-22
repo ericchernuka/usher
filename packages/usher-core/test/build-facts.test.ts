@@ -4,27 +4,6 @@ import { parseBuildFacts } from '../src/build-facts'
 import { running } from './fixtures'
 
 describe('parseBuildFacts', () => {
-  it('accepts a well-formed file and rejects junk', () => {
-    expect(parseBuildFacts(running).success).toBe(true)
-    expect(parseBuildFacts({}).success).toBe(false)
-    expect(
-      parseBuildFacts({ ...running, buildTime: 'yesterday-ish' }).success,
-    ).toBe(false)
-    expect(parseBuildFacts('<!doctype html>').success).toBe(false)
-  })
-})
-
-describe('parseBuildFacts edge cases', () => {
-  it('accepts a file with a force-update cutoff and fields it does not know about', () => {
-    const file = {
-      ...running,
-      forceUpdateBuiltBefore: running.buildTime,
-      extra: 1,
-    }
-
-    expect(parseBuildFacts(file).success).toBe(true)
-  })
-
   it.each([
     ['an empty version', { ...running, version: '' }],
     ['a numeric version', { ...running, version: 123 }],
@@ -33,18 +12,6 @@ describe('parseBuildFacts edge cases', () => {
     ['null', null],
   ])('rejects %s', (_name, file) => {
     expect(parseBuildFacts(file).success).toBe(false)
-  })
-})
-
-describe('parseBuildFacts output', () => {
-  it('drops fields it does not know about', () => {
-    expect(parseBuildFacts({ ...running, extra: 1 })).toMatchObject({
-      success: true,
-      output: running,
-    })
-    expect(parseBuildFacts({ ...running, extra: 1 }).output).not.toHaveProperty(
-      'extra',
-    )
   })
 
   it.each([

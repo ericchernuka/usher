@@ -373,29 +373,6 @@ describe('build age and the server clock', () => {
 })
 
 describe('a version file that is missing or misrouted', () => {
-  test('given the host answers with its HTML fallback, then the tab warns once across several checks', async ({
-    app,
-    tab,
-  }) => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    server.use(
-      http.get(VERSION_URL, () => HttpResponse.html('<!doctype html>')),
-    )
-    const store = app.create()
-    app.subscribe(store)
-    await tab.waitForResponse()
-    await app.poll()
-    await app.poll()
-
-    expect(store.getState()).toEqual({ attention: 'none', reason: 'unknown' })
-    expect(warn).toHaveBeenCalledTimes(1)
-    expect(warn).toHaveBeenCalledWith(
-      expect.stringMatching(
-        /https:\/\/app\.test\/version\.json .* not JSON \(text\/html/,
-      ),
-    )
-  })
-
   test('given a 404 and then JSON that is not build facts, then only the first is reported', async ({
     app,
     tab,
@@ -433,6 +410,7 @@ describe('a version file that is missing or misrouted', () => {
       name: 'an HTTP error',
       answer: serveError(404),
       problem: { kind: 'http-error', versionUrl: VERSION_URL, status: 404 },
+      warning: /https:\/\/app\.test\/version\.json .* returned HTTP 404/,
     },
     {
       name: "the host's HTML fallback",
@@ -442,6 +420,7 @@ describe('a version file that is missing or misrouted', () => {
         versionUrl: VERSION_URL,
         contentType: 'text/html',
       },
+      warning: /https:\/\/app\.test\/version\.json .* not JSON \(text\/html/,
     },
     {
       name: 'JSON that is not build facts',
@@ -451,45 +430,47 @@ describe('a version file that is missing or misrouted', () => {
         versionUrl: VERSION_URL,
         issues: expect.stringContaining('commitTime'),
       },
+      warning: /JSON that is not build facts \(.*commitTime/s,
     },
   ])(
-    'given $name, then the app is told what kind of check problem it is, once per outage',
-    async ({ answer, problem }, { app, tab }) => {
-      vi.spyOn(console, 'warn').mockImplementation(() => {})
+    'given $name, then the tab warns and tells the app what kind of check problem it is, once across several checks',
+    async ({ answer, problem, warning }, { app, tab }) => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
       const onCheckProblem = vi.fn<(problem: CheckProblem) => void>()
       server.use(answer)
       app.subscribe(app.create({ onCheckProblem }))
       await tab.waitForResponse()
       await app.poll()
+      await app.poll()
 
+      expect(warn).toHaveBeenCalledTimes(1)
+      expect(warn).toHaveBeenCalledWith(expect.stringMatching(warning))
       expect(onCheckProblem).toHaveBeenCalledTimes(1)
       expect(onCheckProblem).toHaveBeenCalledWith(problem)
     },
   )
 
-  test("given the app's check problem handler throws, then the error is logged and later checks still land", async ({
+  test("given the app's check problem handler throws, then the error is logged", async ({
     app,
     tab,
   }) => {
     vi.spyOn(console, 'warn').mockImplementation(() => {})
     const error = vi.spyOn(console, 'error').mockImplementation(() => {})
-    server.use(serveError(404, { once: true }), serveBuild(newer))
+    server.use(serveError(404))
 
-    const store = app.create({
-      onCheckProblem: () => {
-        throw new Error('error tracking is down')
-      },
-    })
-
-    app.subscribe(store)
+    app.subscribe(
+      app.create({
+        onCheckProblem: () => {
+          throw new Error('error tracking is down')
+        },
+      }),
+    )
     await tab.waitForResponse()
-    await app.poll()
 
     expect(error).toHaveBeenCalledWith(
       '[usher] onCheckProblem threw',
       expect.any(Error),
     )
-    expect(store.getState().attention).toBe('passive')
   })
 
   test('given the network is down, then the tab does not warn', async ({

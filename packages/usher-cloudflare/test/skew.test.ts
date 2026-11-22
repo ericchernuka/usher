@@ -250,12 +250,16 @@ describe('createAssetFallback()', () => {
     const get = vi.fn<ChunkArchive['get']>(async () => null)
 
     const env = {
-      ASSETS: { fetch: async () => new Response('current', { status: 200 }) },
+      ASSETS: {
+        fetch: async () =>
+          new Response(new TextEncoder().encode('current'), { status: 200 }),
+      },
       CHUNK_ARCHIVE: archiveOf({ get }),
     }
 
     const res = await fallback(new Request('https://app.test/assets/x.js'), env)
 
+    expect(res.headers.has('content-type')).toBe(false)
     expect(await res.text()).toBe('current')
     expect(get).not.toHaveBeenCalled()
   })
