@@ -33,8 +33,14 @@ function listeners<Event extends unknown[]>() {
 
       return () => void all.delete(listener)
     },
-    emit: (...args: Event) =>
-      Array.from(all).forEach(listener => listener(...args)),
+    /** Like the DOM: a listener removed during the dispatch is not called. */
+    emit(...args: Event) {
+      for (const listener of Array.from(all)) {
+        if (all.has(listener)) {
+          listener(...args)
+        }
+      }
+    },
   }
 }
 

@@ -2,6 +2,7 @@ import { vi } from 'vitest'
 import { server } from './mocks/node'
 import { serveBuild } from './mocks/overrides'
 import {
+  HOUR,
   MINUTE,
   running,
   describe,
@@ -103,6 +104,26 @@ describe('subscribing', () => {
 
     expect(store.dismiss()).toBe(true)
 
+    expect(tab.pendingTimers()).toBe(0)
+  })
+
+  test('given the last subscriber leaves when a tab returns to an escalated state, then no timers remain', async ({
+    app,
+    tab,
+  }) => {
+    server.use(serveBuild(newer))
+    const store = app.create()
+    const first = app.subscribe(store)
+    await tab.waitForResponse()
+    let leave = noop
+    leave = app.subscribe(store, () => leave())
+    first()
+    tab.setVisibility('hidden')
+    await tab.advance(13 * HOUR)
+
+    tab.setVisibility('visible')
+
+    expect(store.getState().attention).toBe('prompt')
     expect(tab.pendingTimers()).toBe(0)
   })
 })
