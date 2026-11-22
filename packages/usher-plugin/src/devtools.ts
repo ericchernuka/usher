@@ -1,5 +1,5 @@
 import type { HtmlTagDescriptor } from 'vite'
-import { DEPLOY_PATH } from './dev-server'
+import { deployUrl } from './dev-server'
 import type { DeployMode } from './simulated-deploy'
 
 export function installDevtools(endpoint: string): void {
@@ -25,7 +25,7 @@ export function installDevtools(endpoint: string): void {
 export const devtoolsTags = (base: string): Array<HtmlTagDescriptor> => [
   {
     tag: 'script',
-    children: `(${installDevtools.toString()})(${JSON.stringify(base + DEPLOY_PATH)});`,
+    children: `(${installDevtools.toString()})(${JSON.stringify(deployUrl(base))});`,
     injectTo: 'head',
   },
 ]
