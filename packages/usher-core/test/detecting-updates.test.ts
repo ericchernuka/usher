@@ -11,10 +11,12 @@ import {
   serveNetworkError,
   serveRaw,
 } from './mocks/overrides'
+import { createFakeEnvironment } from '../src/fake-environment'
 import {
   HOUR,
   MINUTE,
   SECOND,
+  createStore,
   describe,
   expect,
   newer,
@@ -509,6 +511,30 @@ describe('a version file that is missing or misrouted', () => {
     await app.poll()
 
     expect(warn).not.toHaveBeenCalled()
+  })
+
+  test('given a browser that rejects an unreadable body with a DOMException named SyntaxError, as WebKit does, then it is still a problem with the file', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const onCheckProblem = vi.fn<(problem: CheckProblem) => void>()
+
+    const tab = createFakeEnvironment({
+      fetch: async () => ({
+        ok: true,
+        status: 200,
+        headers: { get: () => 'text/html' },
+        json: () => Promise.reject(new DOMException('bad', 'SyntaxError')),
+      }),
+    })
+
+    const stop = createStore(tab, { onCheckProblem }).state.subscribe(() => {})
+    await tab.waitForResponse()
+
+    expect(onCheckProblem).toHaveBeenCalledWith({
+      kind: 'not-json',
+      versionUrl: VERSION_URL,
+      contentType: 'text/html',
+    })
+    stop()
   })
 
   test('given the connection drops while the version file is arriving, then it counts as the network being down, not as a problem with the file', async ({
