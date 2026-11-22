@@ -209,7 +209,7 @@ export const appUpdates = createAppUpdates({
 | `not-json`        | The body was not JSON, as when a host answers with its HTML fallback. | `contentType`, `null` if absent |
 | `not-build-facts` | The JSON was the wrong shape.                                         | `issues`, in words for a person |
 
-Every problem also carries `versionUrl`. The handler runs once per outage, and again if the file recovers and breaks later. Network errors and timeouts do not call it, because a tab being offline is normal.
+Every problem also carries `versionUrl`. The handler runs once per outage, and again if the file recovers and breaks later. It may be async; a throw or a rejection is logged and does not stop later checks. Network errors and timeouts do not call it, because a tab being offline is normal.
 
 ### Refresh and unsaved work
 

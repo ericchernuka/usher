@@ -85,7 +85,7 @@ function returned(problem: CheckProblem) {
   return `JSON that is not build facts (${problem.issues})`
 }
 
-function reportCheckProblem(
+async function reportCheckProblem(
   problem: CheckProblem,
   tellApp: AppUpdatesOptions['onCheckProblem'],
 ) {
@@ -94,7 +94,7 @@ function reportCheckProblem(
   )
 
   try {
-    tellApp?.(problem)
+    await tellApp?.(problem)
   } catch (error) {
     console.error('[usher] onCheckProblem threw', error)
   }
@@ -145,7 +145,8 @@ export class AppUpdatesStore implements AppUpdates {
       pollInterval: resolved.pollInterval,
       env,
       clock: this.#clock,
-      onProblem: problem => reportCheckProblem(problem, options.onCheckProblem),
+      onProblem: problem =>
+        void reportCheckProblem(problem, options.onCheckProblem),
     })
   }
 

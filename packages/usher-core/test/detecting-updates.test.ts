@@ -450,28 +450,34 @@ describe('a version file that is missing or misrouted', () => {
     },
   )
 
-  test("given the app's check problem handler throws, then the error is logged", async ({
-    app,
-    tab,
-  }) => {
-    vi.spyOn(console, 'warn').mockImplementation(() => {})
-    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
-    server.use(serveError(404))
+  test.for([
+    {
+      name: 'throws',
+      onCheckProblem: () => {
+        throw new Error('error tracking is down')
+      },
+    },
+    {
+      name: 'is async and rejects',
+      onCheckProblem: async () => {
+        throw new Error('error tracking is down')
+      },
+    },
+  ])(
+    "given the app's check problem handler $name, then the error is logged",
+    async ({ onCheckProblem }, { app, tab }) => {
+      vi.spyOn(console, 'warn').mockImplementation(() => {})
+      const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+      server.use(serveError(404))
+      app.subscribe(app.create({ onCheckProblem }))
+      await tab.waitForResponse()
 
-    app.subscribe(
-      app.create({
-        onCheckProblem: () => {
-          throw new Error('error tracking is down')
-        },
-      }),
-    )
-    await tab.waitForResponse()
-
-    expect(error).toHaveBeenCalledWith(
-      '[usher] onCheckProblem threw',
-      expect.any(Error),
-    )
-  })
+      expect(error).toHaveBeenCalledWith(
+        '[usher] onCheckProblem threw',
+        expect.any(Error),
+      )
+    },
+  )
 
   test('given the network is down, then the tab does not warn', async ({
     app,

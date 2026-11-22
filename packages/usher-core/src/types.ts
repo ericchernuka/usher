@@ -81,9 +81,10 @@ export interface AppUpdatesOptions {
   /**
    * Called when a version check gets an answer that is not build facts, so the
    * app can report a deployment whose tabs cannot detect updates. It runs once
-   * per outage. Network errors and timeouts do not call it.
+   * per outage, and may be async: a throw or a rejection is logged. Network
+   * errors and timeouts do not call it.
    */
-  onCheckProblem?: (problem: CheckProblem) => void
+  onCheckProblem?: (problem: CheckProblem) => void | Promise<void>
   /** Storage key prefix; set one per app if apps share an origin. Default "usher". */
   storageKey?: string
 }
