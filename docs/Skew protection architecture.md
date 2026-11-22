@@ -70,7 +70,7 @@ Core is built from behaviours, and `createAppUpdates` composes them. It exports 
 | `tab.ts`              | A tab: the environment and the server clock. Behaviours reach both through it, and apps see only `now()`.                                                |
 | `version-check.ts`    | The last valid build facts observed, the poll schedule, the in-flight request and its 30-second timeout, focus and visibility rechecks, check problems.  |
 | `signals.ts`          | The two signals and each one's memory: outdated since for escalation, and the reason last seen for sticky urgency.                                       |
-| `prompt-dismissal.ts` | The shared dismissal timestamp, in memory and in localStorage, and the storage event subscription.                                                       |
+| `prompt-dismissal.ts` | The shared dismissal timestamp, in memory and in localStorage, the storage event subscription, and how long a dismissal quiets a dismissable claim.      |
 | `update-state.ts`     | The signals' trackers, the published snapshot, and the one deadline timer for the next change of attention.                                              |
 | `refresh.ts`          | Refresh blockers, the one refresh attempt that concurrent callers share, and whether it is in flight.                                                    |
 | `update-notice.ts`    | The notice a surface should show, and a local close.                                                                                                     |
@@ -85,7 +85,7 @@ Core is built from behaviours, and `createAppUpdates` composes them. It exports 
 
 Each behaviour holds timers, listeners and requests only while it has a subscriber, and it subscribes to what it reads only while it has one itself. Subscribing to the refresh starts nothing else.
 
-The update state has a single `evaluate()`, which the version check, the dismissal and visibility changes call. It asks each signal to observe the builds and then for its claim, turns a dismissed prompt claim into `passive` / `dismissed`, publishes the loudest claim, and sets the deadline timer for the earliest time a claim says it may change. The earlier signal in the list wins a tie, and the preset lists forced update, rollback, then escalation. Snapshot identity stays stable while attention, reason, and the latest build facts remain unchanged.
+The update state has a single `evaluate()`, which the version check, the dismissal and visibility changes call. It asks each signal to observe the builds and then for its claim, asks the dismissal whether a dismissable claim is quiet and turns it into `passive` / `dismissed`, publishes the loudest claim, and sets the deadline timer for the earliest time a claim says it may change. The earlier signal in the list wins a tie, and the preset lists forced update, rollback, then escalation. Snapshot identity stays stable while attention, reason, and the latest build facts remain unchanged.
 
 A tab is outdated since the build time of the first build it saw supersede its own, clamped to its own build time. `escalation()` keeps that time and measures the prompt and urgent thresholds from it. Later deploys do not move it, and a response that matches the running version clears it. See [ADR 0005](adr/0005-escalate-from-outdated-since.md).
 

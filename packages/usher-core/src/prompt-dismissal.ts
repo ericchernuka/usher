@@ -27,7 +27,15 @@ const later = (first: number | undefined, second: number | undefined) =>
 
 export interface PromptDismissal extends Readable<number | undefined> {
   record: (at: number) => void
-  readonly promptSnooze: number | undefined
+  /**
+   * End of the quiet that a dismissal at `dismissedAt` gives a prompt
+   * dismissable from `dismissableFrom`, `Infinity` without a snooze, or
+   * `undefined` when that dismissal does not quiet it
+   */
+  quietUntil: (
+    dismissableFrom: number | undefined,
+    dismissedAt: number | undefined,
+  ) => number | undefined
 }
 
 export function createPromptDismissal(
@@ -73,9 +81,19 @@ export function createPromptDismissal(
   })
 
   return {
-    promptSnooze,
     get: () => dismissedAt,
     subscribe: listeners.subscribe,
+    quietUntil(dismissableFrom, at) {
+      if (
+        dismissableFrom === undefined ||
+        at === undefined ||
+        at < dismissableFrom
+      ) {
+        return undefined
+      }
+
+      return promptSnooze === undefined ? Infinity : at + promptSnooze
+    },
     record(at) {
       dismissedAt = at
 
