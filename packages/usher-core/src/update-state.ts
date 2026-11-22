@@ -2,7 +2,7 @@ import { sameBuildFacts, type BuildFacts } from './build-facts'
 import { resolveRunning } from './options'
 import type { PromptDismissal } from './prompt-dismissal'
 import { createListeners, type Readable } from './readable'
-import type { Asked, Moment, Signal } from './signals'
+import type { Moment, Signal } from './signals'
 import { insideTab, type Tab } from './tab'
 import { attentionRank, type UpdateState, type Updates } from './types'
 import { createVisibleTimer } from './visible-timer'
@@ -27,22 +27,6 @@ function sameState(next: UpdateState, current: UpdateState) {
     current.latest !== undefined &&
     sameBuildFacts(next.latest, current.latest)
   )
-}
-
-function quietUntil(
-  { dismissableFrom }: Asked,
-  dismissedAt: number | undefined,
-  promptSnooze: number | undefined,
-) {
-  if (
-    dismissableFrom === undefined ||
-    dismissedAt === undefined ||
-    dismissedAt < dismissableFrom
-  ) {
-    return undefined
-  }
-
-  return promptSnooze === undefined ? Infinity : dismissedAt + promptSnooze
 }
 
 class UpdateStateStore implements Updates {
@@ -79,7 +63,10 @@ class UpdateStateStore implements Updates {
         return []
       }
 
-      const until = quietUntil(asked, dismissedAt, this.#dismissal.promptSnooze)
+      const until = this.#dismissal.quietUntil(
+        asked.dismissableFrom,
+        dismissedAt,
+      )
 
       const state: UpdateState =
         until !== undefined && moment.now < until
