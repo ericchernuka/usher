@@ -171,7 +171,7 @@ notice.get() // undefined, or the state plus refresh(), close() and closable
 
 This is the half of `SurfaceConnection` that decides what should be shown: the attention threshold, one notice per change of attention or reason, a passive close that holds until the pair changes, a prompt close that dismisses for every tab, and a stale notice whose `close()` does nothing. `closable` is `false` at urgent.
 
-`connectUpdateSurface(appUpdates, surface)` keeps its signature and becomes a driver over a notice. It keeps the parts that exist because imperative libraries misbehave: showing an urgent notice again after the library removed it, the limit of five passes, and isolating a surface that throws.
+`connectUpdateSurface(notice, surface)` becomes a driver over a notice. The surface is `show` and `hide` and nothing else, because `minAttention` now belongs to the notice. The driver keeps the parts that exist because imperative libraries misbehave: showing an urgent notice again after the library removed it, the limit of five passes, and isolating a surface that throws.
 
 ## The preset
 
@@ -298,7 +298,7 @@ There is a risk on this axis too. Composition lets two apps in one organisation 
     })
   ```
 
-  Nothing in escalation, the update state or the React package is edited. `watch` is the one contract addition this needs, since shipped signals read only builds. It is listed under open questions.
+  Nothing in escalation, the update state or the React package is edited. `watch` is not part of this design. The shipped signals read only builds, so the contract has no way to name an outside fact until a signal needs one. Adding it then breaks nothing.
 
 - **New sources fit the same seam.** Update state reads `Readable<BuildFacts | undefined>`. Build facts pushed over a WebSocket, read from an API response header or shared over a `BroadcastChannel` each implement that interface, and the version check does not learn about any of them.
 - **A framework binding is small.** It adapts `Readable` to the framework's store primitive, once per behaviour. Nothing framework-specific can leak into core, because core hands out nothing wider than `Readable`.
@@ -312,7 +312,6 @@ This is not a bundle-size argument. Core is small and an app using the preset sh
 - **More public surface.** Six methods and one function become eight factories and three contracts. `Signal`, `Claim` and `Readable` are compatibility promises from the day they ship, and the freedom ADR 0004 protects for the environment is given up for those three shapes.
 - **Wrong compositions become possible.** An app can omit `rollback()` and miss a rollback, or order signals so a tie goes the other way. The store allows neither. The preset is the defence, and it should stay the documented default.
 - **Checks that span behaviours move up.** Escalation and the dismissal no longer see each other's options, so a rule such as "`promptSnooze` needs a prompt level" is enforced by the preset and not by a hand-made composition.
-- **The handle changes shape.** `appUpdates.refresh()` becomes `appUpdates.refresh.run()`, and hooks take `appUpdates.state` or `appUpdates.refresh`. The edits are mechanical, and they touch every consumer.
 - **Indirection for the reader.** `resolveAttention` can be read top to bottom in one screen. The same rules across three signals and a combining step need the five-step list above to follow.
 
 ## Decisions this touches
@@ -331,20 +330,22 @@ This is not a bundle-size argument. Core is small and an app using the preset sh
 
 If the proposal is accepted, ADR 0011 gets a successor and the glossary gains **Behaviour**, **Signal** and **Claim**.
 
+## Decided
+
+- **No backwards compatibility.** Nothing depends on the current interface, so the new one replaces it in one release. The flat `AppUpdates` methods, the store class behind them and the surface's own `minAttention` are deleted, with no deprecated forwards.
+- **Nothing ships ahead of a need.** `defineSignal` has `name`, `initial`, `observe` and `claim`. `watch` waits for the first signal that reads an outside fact.
+- **`/testing` ships with the first release.**
+
 ## Sequence
 
-Each step leaves the test suite passing and can ship alone. The first three change nothing public.
+Each step leaves the test suite passing.
 
-1. Add `Readable` and give refresh and the dismissal their own subscriptions behind the current `AppUpdates`.
-2. Split `resolveAttention` into the three signals and the combining step. The model tests are the safety net, since they assert on published state and never on the function.
-3. Split `SurfaceConnection` into the notice and its driver.
-4. Export the behaviours, `defineSignal` and the `{ state, refresh }` handle. Move the hooks to behaviour arguments. This is the breaking release.
-5. Add `useUpdateNotice`, the `UpdateNotice` parts and `/testing`.
+1. Add `Readable`, `Tab` and `defineSignal`. Split `resolveAttention` into the three signals and the combining step inside `createUpdateState`. The model tests are the safety net, since they assert on published state and never on the function.
+2. Give refresh and the prompt dismissal their own subscriptions, and split `SurfaceConnection` into the notice and its driver.
+3. Replace the store with the preset and delete `AppUpdatesStore`. Move the hooks, examples and README to `appUpdates.state` and `appUpdates.refresh`.
+4. Add `/testing`, then `useUpdateNotice` and the `UpdateNotice` parts, tested through it.
 
 ## Open questions
 
-1. Should the breaking release keep the flat `AppUpdates` methods as deprecated forwards for one version, or is the consumer count low enough to cut over once?
-2. Does `defineSignal` ship `watch` at first, or only when the server-driven signal is built? Shipping it later is an addition and breaks nothing.
-3. Are `role="status"` and `role="alert"` the right defaults for `UpdateNotice.Root`, or should the parts leave live regions to the app?
-4. Should devtools gain a way to exercise a custom signal, or stay limited to the four modes that change build facts?
-5. Is `/testing` wanted now, or does it wait for a second app with update UI tests?
+1. Are `role="status"` and `role="alert"` the right defaults for `UpdateNotice.Root`, or should the parts leave live regions to the app?
+2. Should devtools gain a way to exercise a custom signal, or stay limited to the four modes that change build facts?
