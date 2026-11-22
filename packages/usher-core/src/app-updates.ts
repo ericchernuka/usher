@@ -59,18 +59,12 @@ export interface AppUpdates {
   addRefreshBlocker: (blocker: RefreshBlocker) => () => void
 }
 
-function sameState(next: UpdateState, current: UpdateState) {
-  if (next.attention !== current.attention || next.reason !== current.reason) {
-    return false
-  }
-
-  const [nextLatest, currentLatest] = [next.latest, current.latest]
-
-  if (!nextLatest || !currentLatest) {
-    return nextLatest === currentLatest
-  }
-
-  return sameBuildFacts(nextLatest, currentLatest)
+function sameState(next: Decision['state'], current: UpdateState) {
+  return (
+    next.attention === current.attention &&
+    next.reason === current.reason &&
+    sameBuildFacts(next.latest, current.latest)
+  )
 }
 
 function notifyAll(listeners: ReadonlySet<{ listener: () => void }>) {
@@ -164,7 +158,7 @@ export class AppUpdatesStore implements AppUpdates {
     }
   }
 
-  publish = (next: UpdateState) => {
+  publish = (next: Decision['state']) => {
     if (sameState(next, this.state)) {
       return
     }
@@ -181,11 +175,7 @@ export class AppUpdatesStore implements AppUpdates {
   }
 
   stop = () => {
-    if (!this.stopListening) {
-      return
-    }
-
-    this.stopListening()
+    this.stopListening?.()
     this.stopListening = undefined
     this.deadline.cancel()
     this.latestBuild.stop()
@@ -222,10 +212,7 @@ export class AppUpdatesStore implements AppUpdates {
     const at = this.clock.now()
     const decision = this.decide(at)
 
-    if (
-      decision?.state.attention !== 'passive' ||
-      decision.state.reason !== 'dismissed'
-    ) {
+    if (decision?.state.reason !== 'dismissed') {
       return false
     }
 

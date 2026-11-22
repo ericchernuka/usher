@@ -12,8 +12,6 @@ export type RefreshBlocker = () => boolean
  */
 export type RefreshOutcome = 'reloading' | 'blocked' | 'declined'
 
-type Reload = NonNullable<AppUpdatesOptions['reload']>
-
 function createBlockers() {
   const blockers = new Set<{ blocker: RefreshBlocker }>()
 
@@ -42,21 +40,21 @@ function createBlockers() {
   }
 }
 
-async function perform(reload: Reload): Promise<RefreshOutcome> {
-  try {
-    return (await reload()) === false ? 'declined' : 'reloading'
-  } catch (error) {
-    console.error('[usher] reload threw', error)
-
-    return 'declined'
-  }
-}
-
 export function createRefresh(
   reload: NonNullable<AppUpdatesOptions['reload']>,
 ) {
   const blockers = createBlockers()
   let inFlight: Promise<RefreshOutcome> | undefined
+
+  async function perform(): Promise<RefreshOutcome> {
+    try {
+      return (await reload()) === false ? 'declined' : 'reloading'
+    } catch (error) {
+      console.error('[usher] reload threw', error)
+
+      return 'declined'
+    }
+  }
 
   function request(): Promise<RefreshOutcome> {
     if (inFlight) {
@@ -67,13 +65,11 @@ export function createRefresh(
       return Promise.resolve('blocked')
     }
 
-    const attempt = perform(reload).finally(() => {
+    inFlight = perform().finally(() => {
       inFlight = undefined
     })
 
-    inFlight = attempt
-
-    return attempt
+    return inFlight
   }
 
   return { request, addBlocker: blockers.add }

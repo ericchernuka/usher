@@ -5,10 +5,7 @@ const StoredDismissal = valibot.pipe(
   valibot.string(),
   valibot.parseJson(),
   valibot.object({
-    dismissedAt: valibot.fallback(
-      valibot.optional(valibot.pipe(valibot.number(), valibot.finite())),
-      undefined,
-    ),
+    dismissedAt: valibot.pipe(valibot.number(), valibot.finite()),
   }),
 )
 

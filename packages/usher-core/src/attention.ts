@@ -19,7 +19,8 @@ export interface AttentionInput extends Builds {
 }
 
 export interface Decision {
-  state: UpdateState
+  /** Never `unknown`: a decision needs a latest build. */
+  state: Exclude<UpdateState, { reason: 'unknown' }>
   stickyUrgency: StickyUrgency | undefined
   outdatedSince: number | undefined
   nextAt: number | undefined
@@ -37,104 +38,78 @@ function detectSticky(input: AttentionInput): StickyUrgency | undefined {
   return input.stickyUrgency
 }
 
-function promptUntil(input: AttentionInput): number | undefined {
-  const at = input.dismissedAt
-  const snooze = input.thresholds.promptSnooze
+const after = (start: number | undefined, duration: number | undefined) =>
+  start === undefined || duration === undefined ? undefined : start + duration
 
-  return at !== undefined && snooze !== undefined ? at + snooze : undefined
+/** The server times at which the attention of a tab outdated since `since` can change. */
+function changeTimes(input: AttentionInput, since: number) {
+  return {
+    promptStart: after(since, input.thresholds.promptAfter),
+    urgentStart: after(since, input.thresholds.urgentAfter),
+    promptUntil: after(input.dismissedAt, input.thresholds.promptSnooze),
+  }
 }
 
-function outdatedSince(input: AttentionInput): number | undefined {
-  return isSuperseded(input)
-    ? (input.outdatedSince ?? supersededAt(input))
-    : undefined
-}
+type ChangeTimes = ReturnType<typeof changeTimes>
 
-interface Outdated {
-  input: AttentionInput
-  since: number
-}
-
-function startOf(
-  { input, since }: Outdated,
-  level: 'promptAfter' | 'urgentAfter',
-) {
-  const after = input.thresholds[level]
-
-  return after === undefined ? undefined : since + after
-}
-
-function nextAt(outdated: Outdated): number | undefined {
-  const serverTimes = [
-    startOf(outdated, 'promptAfter'),
-    startOf(outdated, 'urgentAfter'),
-    promptUntil(outdated.input),
-  ]
-
-  const future = serverTimes.flatMap(time =>
-    time !== undefined && time > outdated.input.now ? [time] : [],
-  )
-
-  return future.length ? Math.min(...future) : undefined
-}
-
-function attention(outdated: Outdated): UpdateState {
-  const { input } = outdated
-  const latest = input.latest
-  const promptStart = startOf(outdated, 'promptAfter')
-  const urgentStart = startOf(outdated, 'urgentAfter')
-
-  if (urgentStart !== undefined && input.now >= urgentStart) {
+function escalation(
+  { now, latest, dismissedAt }: AttentionInput,
+  { promptStart, urgentStart, promptUntil }: ChangeTimes,
+): Decision['state'] {
+  if (urgentStart !== undefined && now >= urgentStart) {
     return { attention: 'urgent', reason: 'outdated', latest }
   }
 
-  if (promptStart === undefined || input.now < promptStart) {
+  if (promptStart === undefined || now < promptStart) {
     return { attention: 'passive', reason: 'outdated', latest }
   }
-
-  const dismissedAt = input.dismissedAt
-  const until = promptUntil(input)
 
   const dismissed =
     dismissedAt !== undefined &&
     dismissedAt >= promptStart &&
-    (until === undefined || input.now < until)
+    (promptUntil === undefined || now < promptUntil)
 
   return dismissed
     ? { attention: 'passive', reason: 'dismissed', latest }
     : { attention: 'prompt', reason: 'outdated', latest }
 }
 
+function nextChange(times: ChangeTimes, now: number) {
+  const upcoming = Object.values(times).flatMap(time =>
+    time !== undefined && time > now ? [time] : [],
+  )
+
+  return upcoming.length ? Math.min(...upcoming) : undefined
+}
+
 export function resolveAttention(input: AttentionInput): Decision {
+  const { now, latest } = input
   const stickyUrgency = detectSticky(input)
-  const since = outdatedSince(input)
-  const latest = input.latest
 
-  if (stickyUrgency) {
-    return {
-      state: { attention: 'urgent', reason: stickyUrgency, latest },
-      stickyUrgency,
-      outdatedSince: since,
-      nextAt: undefined,
-    }
-  }
+  const outdatedSince = isSuperseded(input)
+    ? (input.outdatedSince ?? supersededAt(input))
+    : undefined
 
-  if (since === undefined) {
-    return {
-      state: { attention: 'none', reason: 'caught-up', latest },
-      stickyUrgency,
-      outdatedSince: since,
-      nextAt: undefined,
-    }
-  }
-
-  const outdated = { input, since }
-  const state = attention(outdated)
-
-  return {
+  const decision = (state: Decision['state'], nextAt?: number): Decision => ({
     state,
     stickyUrgency,
-    outdatedSince: since,
-    nextAt: state.attention === 'urgent' ? undefined : nextAt(outdated),
+    outdatedSince,
+    nextAt,
+  })
+
+  if (stickyUrgency) {
+    return decision({ attention: 'urgent', reason: stickyUrgency, latest })
   }
+
+  if (outdatedSince === undefined) {
+    return decision({ attention: 'none', reason: 'caught-up', latest })
+  }
+
+  const times = changeTimes(input, outdatedSince)
+  const state = escalation(input, times)
+
+  return decision(
+    state,
+    state.attention === 'urgent' ? undefined : nextChange(times, now),
+  )
 }

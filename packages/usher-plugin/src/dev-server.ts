@@ -11,9 +11,6 @@ import {
 
 export const DEPLOY_PATH = '__usher/deploy'
 
-const isRequestFor = (path: string, req: IncomingMessage) =>
-  req.url?.split('?')[0] === path
-
 function reply(
   res: ServerResponse,
   status: number,
@@ -25,19 +22,17 @@ function reply(
   res.end(body.text)
 }
 
-function versionMiddleware(
+/** Answers requests for `path`, whatever their query, and passes the rest on. */
+function route(
   path: string,
-  served: () => BuildFacts,
+  answer: (req: IncomingMessage, res: ServerResponse) => void,
 ): Connect.NextHandleFunction {
   return (req, res, next) => {
-    if (!isRequestFor(path, req)) {
-      return next()
+    if (req.url?.split('?')[0] === path) {
+      answer(req, res)
+    } else {
+      next()
     }
-
-    reply(res, 200, {
-      type: 'application/json',
-      text: JSON.stringify(served()),
-    })
   }
 }
 
@@ -67,15 +62,8 @@ async function deploy(
   })
 }
 
-function deployMiddleware(
-  path: string,
-  simulation: DeploySimulation,
-): Connect.NextHandleFunction {
-  return (req, res, next) => {
-    if (!isRequestFor(path, req)) {
-      return next()
-    }
-
+function answerDeploy(simulation: DeploySimulation) {
+  return (req: IncomingMessage, res: ServerResponse) => {
     if (req.method !== 'POST') {
       res.setHeader('Allow', 'POST')
 
@@ -113,10 +101,15 @@ export function serveDevelopment(
   const simulation = createDeploySimulation(serving.facts)
 
   middlewares.use(
-    versionMiddleware(serving.base + serving.fileName, simulation.served),
+    route(serving.base + serving.fileName, (_req, res) =>
+      reply(res, 200, {
+        type: 'application/json',
+        text: JSON.stringify(simulation.served()),
+      }),
+    ),
   )
 
   if (serving.devtools) {
-    middlewares.use(deployMiddleware(serving.base + DEPLOY_PATH, simulation))
+    middlewares.use(route(serving.base + DEPLOY_PATH, answerDeploy(simulation)))
   }
 }

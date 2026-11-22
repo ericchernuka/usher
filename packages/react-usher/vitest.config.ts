@@ -1,5 +1,5 @@
-import { playwright } from '@vitest/browser-playwright'
 import { defineConfig } from 'vitest/config'
+import { chromium, coverage } from '../../vitest.shared.ts'
 
 export default defineConfig({
   resolve: {
@@ -16,24 +16,14 @@ export default defineConfig({
     ],
   },
   test: {
-    coverage: {
-      provider: 'v8',
-      include: ['src/**'],
-      reporter: ['text-summary', 'json', 'json-summary'],
-      thresholds: { lines: 95, branches: 95, functions: 95, statements: 95 },
-    },
+    coverage,
     projects: [
       {
         extends: true,
         test: {
           name: 'browser',
           include: ['test/**/*.browser.test.tsx'],
-          browser: {
-            enabled: true,
-            headless: true,
-            provider: playwright(),
-            instances: [{ browser: 'chromium' }],
-          },
+          browser: chromium,
         },
       },
     ],

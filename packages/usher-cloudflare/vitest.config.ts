@@ -1,13 +1,9 @@
 import { defineConfig } from 'vitest/config'
+import { coverage } from '../../vitest.shared.ts'
 
 export default defineConfig({
   test: {
-    coverage: {
-      provider: 'v8',
-      include: ['src/**'],
-      reporter: ['text-summary', 'json', 'json-summary'],
-      thresholds: { lines: 95, branches: 95, functions: 95, statements: 95 },
-    },
+    coverage,
     name: 'unit',
     environment: 'node',
     include: ['test/*.test.ts'],
