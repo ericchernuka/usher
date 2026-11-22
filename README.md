@@ -365,7 +365,7 @@ Each `Root` keeps a `status` and an `alert` region of its own beside the notice,
 
 ## Testing update UI
 
-`createTestTab()` is a tab with virtual time. Pass it as the second argument to `createAppUpdates`, from core or from `/client`:
+`createTestTab()` is a tab with virtual time. Pass it as the second argument to `createAppUpdates`. With the plugin's `/client` entry, which needs Vite and so a runner built on it, such as Vitest:
 
 ```tsx
 import { createTestTab } from '@rndsqr/usher-core/testing'
@@ -385,7 +385,25 @@ await tab.advance(12 * HOUR)
 // the app now shows its prompt
 ```
 
-`deploy` sets the build facts every version check gets, and `advance` moves time forward, running the checks and timers that fall due. Before the first `deploy` the tab is offline. The tab needs nothing from the test runner but real timers to wait on, so it runs in Vitest, in a browser, and in Jest with a simulated DOM; leave `setTimeout` unfaked while it advances. The tab's clock starts at the real time and then moves only when advanced. A tab is outdated from the build time of the newer build, so give a deployed build the time `tab.now()` to start the count there, and keep the running build's commit time so the deploy is not taken for a rollback.
+`deploy` sets the build facts every version check gets, and `advance` moves time forward, running the checks and timers that fall due. Before the first `deploy` the tab is offline. The tab needs nothing from the test runner but real timers to wait on, so leave `setTimeout` unfaked while it advances.
+
+In a runner without Vite, such as Jest, `/client` cannot be imported, because the plugin supplies its build facts. Use core's `createAppUpdates` there and give it the running build yourself:
+
+````ts
+import { createAppUpdates } from '@rndsqr/usher-core'
+import { createTestTab } from '@rndsqr/usher-core/testing'
+
+const tab = createTestTab()
+const built = new Date(tab.now()).toISOString()
+const running = { version: 'one', commitTime: built, buildTime: built }
+
+const appUpdates = createAppUpdates(
+  { running, versionUrl: '/version.json' },
+  tab,
+)
+
+tab.deploy({ ...running, version: 'two' })
+``` The tab's clock starts at the real time and then moves only when advanced. A tab is outdated from the build time of the newer build, so give a deployed build the time `tab.now()` to start the count there, and keep the running build's commit time so the deploy is not taken for a rollback.
 
 ## Skew protection
 
@@ -398,7 +416,7 @@ usher({ adapter: cloudflarePages() }) // { r2Binding? }
 usher({
   adapter: cloudflareWorkers({ workerFile: 'dist-worker/index.mjs' }),
 }) // { r2Binding?, workerFile? }
-```
+````
 
 | Adapter               | Writes                                                                                      | You configure                                                                           |
 | --------------------- | ------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |

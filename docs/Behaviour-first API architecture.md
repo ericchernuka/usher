@@ -154,7 +154,7 @@ When the first real need arrives, build it inside core, then export the contract
 - The build plugin, the adapter contract ([ADR 0002](adr/0002-adapters-return-data.md)) and the bundler subpath ([ADR 0008](adr/0008-bundler-is-a-subpath.md)).
 - `createAssetFallback`. Splitting it into a current deployment and a chunk archive would be a seam with one adapter, and [ADR 0006](adr/0006-inline-function-source-text.md) needs it to be one self-contained function.
 - Simulated deploys. The four modes reach every build fact a signal can read.
-- The environment stays private ([ADR 0004](adr/0004-environment-is-internal.md)). The test tab exposes `deploy` and `advance` and not the seam.
+- The environment stays private ([ADR 0004](adr/0004-environment-is-internal.md)). The test tab exposes `now`, `deploy` and `advance` and not the seam.
 
 ## Costs
 
@@ -169,7 +169,7 @@ When the first real need arrives, build it inside core, then export the contract
 | ---------------------------------- | ----------------------------------------------------------------------------------------------------- |
 | 0001 One `outdated` reason         | Stands. Each signal owns its reasons.                                                                 |
 | 0003 No selector in the React hook | Stands. Each readable is narrow, so there is nothing to select from. The package has no module state. |
-| 0004 Environment is internal       | Stands. `/testing` promises two driver methods and not the seam.                                      |
+| 0004 Environment is internal       | Stands. `/testing` promises `now`, `deploy` and `advance` and not the seam.                           |
 | 0005 Escalate from outdated since  | Stands. Outdated since moved from the store into escalation.                                          |
 | 0007 Forced-update cutoff          | Stands, inside the sticky urgency signal.                                                             |
 | 0010 Classes with `#private`       | Stands for the update state, the notice and the surface connection.                                   |

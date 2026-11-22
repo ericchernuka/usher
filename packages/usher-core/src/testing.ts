@@ -27,13 +27,13 @@ export function createTestTab(): TestTab {
         throw new TypeError('nothing is deployed')
       }
 
-      const body = served
+      const body = JSON.stringify(served)
 
       return {
         ok: true,
         status: 200,
         headers: { get: () => null },
-        json: async () => body,
+        json: async () => JSON.parse(body),
       }
     },
   })
