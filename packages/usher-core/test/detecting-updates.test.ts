@@ -41,13 +41,13 @@ describe('checking for a new build', () => {
       expect.any(String),
       expect.objectContaining({ cache: 'no-store' }),
     )
-    expect(store.getState().attention).toBe('none')
+    expect(store.state.get().attention).toBe('none')
   })
 
   test('given no check has landed yet, then the state is none:unknown', ({
     app,
   }) => {
-    expect(app.create().getState()).toEqual({
+    expect(app.create().state.get()).toEqual({
       attention: 'none',
       reason: 'unknown',
     })
@@ -63,7 +63,7 @@ describe('checking for a new build', () => {
     app.subscribe(store, listener)
     await tab.waitForResponse()
 
-    expect(store.getState()).toMatchObject({
+    expect(store.state.get()).toMatchObject({
       attention: 'passive',
       latest: { version: 'bbb' },
     })
@@ -82,7 +82,7 @@ describe('checking for a new build', () => {
     const url = new URL(requests[0]?.url ?? '')
     expect(url.searchParams.get('channel')).toBe('beta')
     expect(Number(url.searchParams.get('t'))).toBe(tab.now())
-    expect(store.getState().reason).toBe('caught-up')
+    expect(store.state.get().reason).toBe('caught-up')
   })
 
   test('given a relative version URL, then the check resolves it against the page', async ({
@@ -107,7 +107,7 @@ describe('checking for a new build', () => {
     app.subscribe(store)
     await tab.waitForResponse()
 
-    expect(store.getState()).toEqual({ attention: 'none', reason: 'unknown' })
+    expect(store.state.get()).toEqual({ attention: 'none', reason: 'unknown' })
   })
 
   test('given version.json carries fields the tab does not know, then the snapshot keeps only build facts', async ({
@@ -119,7 +119,7 @@ describe('checking for a new build', () => {
     app.subscribe(store)
     await tab.waitForResponse()
 
-    expect(store.getState()).toEqual({
+    expect(store.state.get()).toEqual({
       attention: 'passive',
       reason: 'outdated',
       latest: newer,
@@ -138,7 +138,7 @@ describe('checking for a new build', () => {
     server.use(serveError(503))
     await app.poll()
 
-    expect(store.getState()).toMatchObject({
+    expect(store.state.get()).toMatchObject({
       attention: 'passive',
       latest: { version: 'bbb' },
     })
@@ -146,7 +146,7 @@ describe('checking for a new build', () => {
     server.use(serveBuild({ ...newer, version: 'ccc' }))
     await app.poll()
 
-    expect(store.getState()).toMatchObject({ latest: { version: 'ccc' } })
+    expect(store.state.get()).toMatchObject({ latest: { version: 'ccc' } })
   })
 })
 
@@ -169,7 +169,7 @@ describe('slow and hung checks', () => {
       serveBuild(newer),
     )
     const store = app.create()
-    const first = store.subscribe(() => {})
+    const first = store.state.subscribe(() => {})
     await tab.flush()
     first()
     app.subscribe(store)
@@ -178,7 +178,7 @@ describe('slow and hung checks', () => {
     late.resolve()
     await tab.waitForResponse()
 
-    expect(store.getState()).toMatchObject({
+    expect(store.state.get()).toMatchObject({
       attention: 'passive',
       latest: { version: 'bbb' },
     })
@@ -198,9 +198,9 @@ describe('slow and hung checks', () => {
 
     await tab.runFor(30_000)
 
-    expect(store.getState().attention).toBe('none')
+    expect(store.state.get().attention).toBe('none')
     await app.poll()
-    expect(store.getState()).toMatchObject({
+    expect(store.state.get()).toMatchObject({
       attention: 'passive',
       latest: { version: 'bbb' },
     })
@@ -348,13 +348,13 @@ describe('build age and the server clock', () => {
     const store = app.create()
     app.subscribe(store)
     await tab.waitForResponse()
-    expect(store.getState().attention).toBe('prompt')
+    expect(store.state.get().attention).toBe('prompt')
 
     tab.setVisibility('hidden')
     tab.setSystemTime('2026-11-11T16:30:00Z')
     tab.setVisibility('visible')
 
-    expect(store.getState().attention).toBe('passive')
+    expect(store.state.get().attention).toBe('passive')
   })
 
   test("given the page's clock runs 30 h fast, then build age follows the server's Date header", async ({
@@ -367,7 +367,7 @@ describe('build age and the server clock', () => {
     app.subscribe(store)
     await tab.waitForResponse()
 
-    expect(store.getState()).toMatchObject({
+    expect(store.state.get()).toMatchObject({
       attention: 'passive',
       reason: 'outdated',
     })
@@ -381,12 +381,12 @@ describe('build age and the server clock', () => {
     const store = app.create()
     app.subscribe(store)
     await tab.waitForResponse()
-    expect(store.getState().attention).toBe('prompt')
+    expect(store.state.get().attention).toBe('prompt')
 
     server.use(serveBuild(newer, { date: null }))
     await tab.runFor(5 * MINUTE)
 
-    expect(store.getState().attention).toBe('prompt')
+    expect(store.state.get().attention).toBe('prompt')
   })
 })
 

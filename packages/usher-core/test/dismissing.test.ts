@@ -20,16 +20,16 @@ test('given the user dismissed the prompt level, then it stays quiet until the u
   const store = app.create()
   app.subscribe(store)
   await tab.waitForResponse()
-  expect(store.getState().attention).toBe('prompt')
+  expect(store.state.get().attention).toBe('prompt')
 
-  store.dismiss()
+  store.state.dismiss()
   await tab.runFor(10 * HOUR)
 
-  expect(store.getState().attention).toBe('passive')
+  expect(store.state.get().attention).toBe('passive')
 
   await tab.runFor(HOUR)
 
-  expect(store.getState().attention).toBe('urgent')
+  expect(store.state.get().attention).toBe('urgent')
 })
 
 test("given Date headers round down to the second, then a prompt dismissal can't end before urgent starts", async ({
@@ -40,11 +40,11 @@ test("given Date headers round down to the second, then a prompt dismissal can't
   const states: string[] = []
   const store = app.create()
   app.subscribe(store, () =>
-    states.push(`${store.getState().attention}:${store.getState().reason}`),
+    states.push(`${store.state.get().attention}:${store.state.get().reason}`),
   )
   await tab.waitForResponse()
   await tab.runFor(12 * HOUR)
-  expect(store.dismiss()).toBe(true)
+  expect(store.state.dismiss()).toBe(true)
   await tab.runFor(60_900)
   tab.focus()
   await tab.waitForResponse()
@@ -53,7 +53,7 @@ test("given Date headers round down to the second, then a prompt dismissal can't
   await tab.runFor(11 * HOUR)
 
   expect(states).not.toContain('prompt:outdated')
-  expect(store.getState()).toMatchObject({
+  expect(store.state.get()).toMatchObject({
     attention: 'urgent',
     reason: 'outdated',
   })
@@ -90,10 +90,10 @@ test.for([
     const store = app.create()
     app.subscribe(store)
     await tab.waitForResponse()
-    const before = store.getState()
+    const before = store.state.get()
     expect(before).toMatchObject({ attention: 'urgent', reason })
-    expect(store.dismiss()).toBe(false)
-    expect(store.getState()).toBe(before)
+    expect(store.state.dismiss()).toBe(false)
+    expect(store.state.get()).toBe(before)
     expect(tab.storage.getItem(DISMISSAL_KEY)).toBeNull()
   },
 )
@@ -107,11 +107,11 @@ test('given a default prompt snooze, then a forward jump of the wall clock does 
   const store = app.create()
   app.subscribe(store)
   await tab.waitForResponse()
-  expect(store.dismiss()).toBe(true)
+  expect(store.state.dismiss()).toBe(true)
   tab.setSystemTime(tab.now() + 24 * HOUR)
   server.use(serveNetworkError())
   await tab.runFor(10 * MINUTE)
-  expect(store.getState().reason).toBe('dismissed')
+  expect(store.state.get().reason).toBe('dismissed')
 })
 
 test('given a custom prompt snooze, then its expiry wakes without another poll', async ({
@@ -128,9 +128,9 @@ test('given a custom prompt snooze, then its expiry wakes without another poll',
 
   app.subscribe(store)
   await tab.waitForResponse()
-  expect(store.dismiss()).toBe(true)
+  expect(store.state.dismiss()).toBe(true)
   await tab.runFor(61_000)
-  expect(store.getState().attention).toBe('prompt')
+  expect(store.state.get().attention).toBe('prompt')
 })
 
 test('given a listener dismisses as soon as it hears of the prompt, then the snooze still ends on time', async ({
@@ -148,7 +148,7 @@ test('given a listener dismisses as soon as it hears of the prompt, then the sno
   let dismissals = 0
 
   app.subscribe(store, () => {
-    if (store.dismiss()) {
+    if (store.state.dismiss()) {
       dismissals += 1
     }
   })
@@ -168,11 +168,11 @@ test('given the urgent level is off, then a prompt dismissal never expires', asy
   const store = app.create({ urgentAfter: false, pollInterval: HOUR })
   app.subscribe(store)
   await tab.waitForResponse()
-  expect(store.dismiss()).toBe(true)
+  expect(store.state.dismiss()).toBe(true)
 
   await tab.runFor(48 * HOUR)
 
-  expect(store.getState()).toMatchObject({
+  expect(store.state.get()).toMatchObject({
     attention: 'passive',
     reason: 'dismissed',
   })
@@ -180,7 +180,7 @@ test('given the urgent level is off, then a prompt dismissal never expires', asy
 
 test('given no prompt, then dismiss has no effect', ({ app, tab }) => {
   const store = app.create()
-  expect(store.dismiss()).toBe(false)
+  expect(store.state.dismiss()).toBe(false)
   expect(tab.storage.getItem(DISMISSAL_KEY)).toBeNull()
 })
 
@@ -195,11 +195,11 @@ test('given a hidden prompt passes the urgent deadline, then dismissal writes no
   await tab.waitForResponse()
   tab.setVisibility('hidden')
   await tab.runFor(12 * HOUR)
-  const before = store.getState()
+  const before = store.state.get()
   expect(before.attention).toBe('prompt')
-  expect(store.dismiss()).toBe(false)
-  expect(store.getState()).toBe(before)
+  expect(store.state.dismiss()).toBe(false)
+  expect(store.state.get()).toBe(before)
   expect(tab.storage.getItem(DISMISSAL_KEY)).toBeNull()
   tab.setVisibility('visible')
-  expect(store.getState().attention).toBe('urgent')
+  expect(store.state.get().attention).toBe('urgent')
 })

@@ -32,11 +32,11 @@ it('exports the store factory and the running build', () => {
 
 it('uses the embedded build and version URL without configuration', async () => {
   const updates = createAppUpdates()
-  const stop = updates.subscribe(() => {})
+  const stop = updates.state.subscribe(() => {})
 
   try {
     await vi.waitFor(() =>
-      expect(updates.getState()).toEqual({
+      expect(updates.state.get()).toEqual({
         attention: 'none',
         reason: 'caught-up',
         latest: runningBuild,
@@ -53,10 +53,10 @@ it('uses the embedded build and version URL without configuration', async () => 
 
 it('forwards the configured polling interval to the core store', async () => {
   const updates = createAppUpdates({ pollInterval: 10 * SECOND })
-  const stop = updates.subscribe(() => {})
+  const stop = updates.state.subscribe(() => {})
 
   try {
-    await vi.waitFor(() => expect(updates.getState().reason).toBe('caught-up'))
+    await vi.waitFor(() => expect(updates.state.get().reason).toBe('caught-up'))
     expect(fetch).toHaveBeenCalledTimes(1)
     await vi.advanceTimersByTimeAsync(10 * SECOND)
     expect(fetch).toHaveBeenCalledTimes(2)

@@ -1,5 +1,8 @@
 import * as valibot from 'valibot'
-import type { Environment, StorageChange } from './environment'
+import type { StorageChange } from './environment'
+import { resolvePromptDismissal, type PromptDismissalOptions } from './options'
+import { createListeners, type Readable } from './readable'
+import { insideTab, type Tab } from './tab'
 
 const StoredDismissal = valibot.pipe(
   valibot.string(),
@@ -22,19 +25,17 @@ const later = (first: number | undefined, second: number | undefined) =>
       ? first
       : Math.max(first, second)
 
-/**
- * The server time of the latest prompt dismissal, shared by every tab of the app
- * through storage. The latest dismissal wins. When storage is blocked, the
- * dismissal still holds in this tab.
- *
- * The stored record is `{ "dismissedAt": <server time in ms> }` under
- * `<storageKey>:prompt-dismissal`. Other tabs and older releases read it, so
- * treat the format as a contract.
- */
+export interface PromptDismissal extends Readable<number | undefined> {
+  record: (at: number) => void
+  readonly promptSnooze: number | undefined
+}
+
 export function createPromptDismissal(
-  storageKey: string,
-  env: Pick<Environment, 'storage' | 'onStorageChange'>,
-) {
+  tab: Tab,
+  options: PromptDismissalOptions = {},
+): PromptDismissal {
+  const { storageKey, promptSnooze } = resolvePromptDismissal(options)
+  const { env } = insideTab(tab)
   const key = `${storageKey}:prompt-dismissal`
   let dismissedAt: number | undefined
   let unsynced = false
@@ -47,7 +48,7 @@ export function createPromptDismissal(
     } catch {}
   }
 
-  function onStorage(change: StorageChange, onChange: () => void) {
+  function onStorage(change: StorageChange) {
     if (change.key !== null && change.key !== key) {
       return
     }
@@ -57,23 +58,25 @@ export function createPromptDismissal(
         ? undefined
         : later(dismissedAt, parse(change.newValue))
 
-    onChange()
+    listeners.notify()
   }
 
-  return {
-    get: (): number | undefined => dismissedAt,
-
-    start(onChange: () => void) {
+  const listeners = createListeners({
+    start() {
       hydrate()
-      stopListening = env.onStorageChange(change => onStorage(change, onChange))
+      stopListening = env.onStorageChange(onStorage)
     },
-
     stop() {
       stopListening?.()
       stopListening = undefined
     },
+  })
 
-    record(at: number) {
+  return {
+    promptSnooze,
+    get: () => dismissedAt,
+    subscribe: listeners.subscribe,
+    record(at) {
       dismissedAt = at
 
       try {

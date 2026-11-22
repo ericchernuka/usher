@@ -1,6 +1,7 @@
 import * as valibot from 'valibot'
 import { parseBuildFacts } from './build-facts'
-import type { AppUpdatesOptions } from './types'
+import type { BuildFacts } from './build-facts'
+import type { CheckProblem } from './types'
 
 const SECOND = 1_000
 const MINUTE = 60 * SECOND
@@ -47,58 +48,57 @@ function callback(name: string) {
 const versionUrlMessage = (issue: valibot.BaseIssue<unknown>) =>
   `versionUrl must be the URL of version.json, got ${String(issue.input)}`
 
-const Options = valibot.pipe(
-  valibot.object({
-    running: valibot.pipe(
-      valibot.unknown(),
-      valibot.rawTransform(({ dataset, addIssue, NEVER }) => {
-        const parsed = parseBuildFacts(dataset.value)
+function output<Schema extends valibot.GenericSchema>(
+  parsed: valibot.SafeParseResult<Schema>,
+): valibot.InferOutput<Schema> {
+  if (!parsed.success) {
+    throw new Error(`[usher] ${parsed.issues[0].message}`)
+  }
 
-        if (parsed.success) {
-          return parsed.output
-        }
+  return parsed.output
+}
 
-        addIssue({
-          message: `running must be the running build's build facts: ${valibot.summarize(parsed.issues)}`,
-        })
+export interface VersionCheckOptions {
+  versionUrl: string
+  pollInterval?: number
+  onCheckProblem?: (problem: CheckProblem) => void | Promise<void>
+}
 
-        return NEVER
-      }),
+const VersionCheck = valibot.object({
+  versionUrl: valibot.pipe(
+    valibot.string(versionUrlMessage),
+    valibot.check(
+      value => URL.canParse(value, 'https://app.invalid'),
+      versionUrlMessage,
     ),
+  ),
+  pollInterval: valibot.optional(
+    valibot.pipe(
+      duration('pollInterval'),
+      valibot.minValue(
+        MIN_POLL_INTERVAL,
+        `pollInterval must be at least ${MIN_POLL_INTERVAL} ms (10 seconds)`,
+      ),
+    ),
+    DEFAULT_POLL_INTERVAL,
+  ),
+  onCheckProblem: callback('onCheckProblem'),
+})
+
+export const resolveVersionCheck = (options: VersionCheckOptions) =>
+  output(valibot.safeParse(VersionCheck, options, { abortEarly: true }))
+
+export interface EscalationOptions {
+  promptAfter?: number | false
+  urgentAfter?: number | false
+}
+
+const Escalation = valibot.pipe(
+  valibot.object({
     promptAfter: level('promptAfter', DEFAULT_PROMPT_AFTER),
     urgentAfter: level('urgentAfter', DEFAULT_URGENT_AFTER),
-    promptSnooze: valibot.optional(
-      valibot.pipe(
-        duration('promptSnooze'),
-        valibot.gtValue(0, 'promptSnooze must be positive'),
-      ),
-    ),
-    versionUrl: valibot.pipe(
-      valibot.string(versionUrlMessage),
-      valibot.check(
-        value => URL.canParse(value, 'https://app.invalid'),
-        versionUrlMessage,
-      ),
-    ),
-    pollInterval: valibot.optional(
-      valibot.pipe(
-        duration('pollInterval'),
-        valibot.minValue(
-          MIN_POLL_INTERVAL,
-          `pollInterval must be at least ${MIN_POLL_INTERVAL} ms (10 seconds)`,
-        ),
-      ),
-      DEFAULT_POLL_INTERVAL,
-    ),
-    storageKey: valibot.optional(
-      valibot.string('storageKey must be a string'),
-      'usher',
-    ),
-    reload: callback('reload'),
-    onCheckProblem: callback('onCheckProblem'),
   }),
-  valibot.partialCheck(
-    [['promptAfter'], ['urgentAfter']],
+  valibot.check(
     ({ promptAfter, urgentAfter }) =>
       promptAfter === undefined ||
       urgentAfter === undefined ||
@@ -106,33 +106,57 @@ const Options = valibot.pipe(
     issue =>
       `urgentAfter must be later than promptAfter, got urgentAfter ${String(issue.input.urgentAfter)} ms and promptAfter ${String(issue.input.promptAfter)} ms`,
   ),
-  valibot.partialCheck(
-    [['promptAfter'], ['promptSnooze']],
-    ({ promptAfter, promptSnooze }) =>
-      promptSnooze === undefined || promptAfter !== undefined,
-    'promptSnooze has no effect when promptAfter is false',
-  ),
 )
 
-/**
- * Options with every default applied and every rule checked. `reload` and
- * `onCheckProblem` are checked here, but the store reads them from the options
- * it was given, where they keep their types.
- */
-export type ResolvedOptions = valibot.InferOutput<typeof Options>
+export const resolveEscalation = (options: EscalationOptions) =>
+  output(valibot.safeParse(Escalation, options, { abortEarly: true }))
 
-export type Thresholds = Pick<
-  ResolvedOptions,
-  'promptAfter' | 'urgentAfter' | 'promptSnooze'
->
-
-/** Throws an error that names the option when one is invalid. */
-export function resolveOptions(options: AppUpdatesOptions): ResolvedOptions {
-  const parsed = valibot.safeParse(Options, options, { abortEarly: true })
-
-  if (!parsed.success) {
-    throw new Error(`[usher] ${parsed.issues[0].message}`)
-  }
-
-  return parsed.output
+export interface PromptDismissalOptions {
+  promptSnooze?: number
+  storageKey?: string
 }
+
+const PromptDismissal = valibot.object({
+  promptSnooze: valibot.optional(
+    valibot.pipe(
+      duration('promptSnooze'),
+      valibot.gtValue(0, 'promptSnooze must be positive'),
+    ),
+  ),
+  storageKey: valibot.optional(
+    valibot.string('storageKey must be a string'),
+    'usher',
+  ),
+})
+
+export const resolvePromptDismissal = (options: PromptDismissalOptions) =>
+  output(valibot.safeParse(PromptDismissal, options, { abortEarly: true }))
+
+export interface RefreshOptions {
+  reload?: () => void | boolean | Promise<void | boolean>
+}
+
+const Refresh = valibot.object({ reload: callback('reload') })
+
+export const resolveRefresh = (options: RefreshOptions) =>
+  output(valibot.safeParse(Refresh, options, { abortEarly: true }))
+
+const Running = valibot.pipe(
+  valibot.unknown(),
+  valibot.rawTransform(({ dataset, addIssue, NEVER }) => {
+    const parsed = parseBuildFacts(dataset.value)
+
+    if (parsed.success) {
+      return parsed.output
+    }
+
+    addIssue({
+      message: `running must be the running build's build facts: ${valibot.summarize(parsed.issues)}`,
+    })
+
+    return NEVER
+  }),
+)
+
+export const resolveRunning = (running: BuildFacts) =>
+  output(valibot.safeParse(Running, running, { abortEarly: true }))

@@ -1,16 +1,15 @@
-import type { AppUpdatesOptions } from './types'
+import { resolveRefresh, type RefreshOptions } from './options'
+import { createListeners, type Readable } from './readable'
+import { insideTab, type Tab } from './tab'
 
-/** Return true to block the refresh. Must be synchronous. */
 export type RefreshBlocker = () => boolean
 
-/**
- * What became of a refresh.
- *
- * - `reloading`: `reload` ran, and the document is being replaced.
- * - `blocked`: a refresh blocker stopped it before `reload` ran.
- * - `declined`: `reload` returned `false` or threw.
- */
 export type RefreshOutcome = 'reloading' | 'blocked' | 'declined'
+
+export interface Refresh extends Readable<boolean> {
+  run: () => Promise<RefreshOutcome>
+  addBlocker: (blocker: RefreshBlocker) => () => void
+}
 
 function createBlockers() {
   const blockers = new Set<{ blocker: RefreshBlocker }>()
@@ -40,11 +39,16 @@ function createBlockers() {
   }
 }
 
-export function createRefresh(
-  reload: NonNullable<AppUpdatesOptions['reload']>,
-  onChange: () => void,
-) {
+export function createRefresh(tab: Tab, options: RefreshOptions = {}): Refresh {
+  resolveRefresh(options)
+
+  const { env } = insideTab(tab)
+
+  const reload: NonNullable<RefreshOptions['reload']> =
+    options.reload ?? (() => env.reload())
+
   const blockers = createBlockers()
+  const listeners = createListeners()
   let inFlight: Promise<RefreshOutcome> | undefined
 
   async function perform(): Promise<RefreshOutcome> {
@@ -57,7 +61,7 @@ export function createRefresh(
     }
   }
 
-  function request(): Promise<RefreshOutcome> {
+  function run(): Promise<RefreshOutcome> {
     if (inFlight) {
       return inFlight
     }
@@ -66,28 +70,26 @@ export function createRefresh(
       return Promise.resolve('blocked')
     }
 
-    // The executor runs at once, so `settle` is set before it is called.
     let settle!: (outcome: Promise<RefreshOutcome>) => void
 
     const attempt = new Promise<RefreshOutcome>(resolve => {
       settle = resolve
     }).finally(() => {
       inFlight = undefined
-      onChange()
+      listeners.notify()
     })
 
-    // Recorded before `reload` runs, so a reload that asks for a refresh joins
-    // this attempt instead of starting another.
     inFlight = attempt
-    onChange()
+    listeners.notify()
     settle(perform())
 
     return attempt
   }
 
   return {
-    request,
-    isRefreshing: () => inFlight !== undefined,
+    get: () => inFlight !== undefined,
+    subscribe: listeners.subscribe,
+    run,
     addBlocker: blockers.add,
   }
 }

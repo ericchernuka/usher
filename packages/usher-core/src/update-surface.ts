@@ -1,52 +1,19 @@
-import type { AppUpdates, RefreshOutcome } from './app-updates'
-import type { Attention, UpdateState } from './types'
+import type { Readable } from './readable'
+import {
+  createUpdateNotice,
+  type Noticeable,
+  type UpdateNotice,
+  type UpdateNoticeOptions,
+  type UpdateNoticeParts,
+} from './update-notice'
+import type { UpdateState } from './types'
 
-const rank: Record<Attention, number> = {
-  none: 0,
-  passive: 1,
-  prompt: 2,
-  urgent: 3,
-}
-
-/**
- * What an update surface is asked to show: the update state plus the two things
- * a user can do with it. A new notice is made for every change of attention or reason.
- */
-export type UpdateNotice = Exclude<UpdateState, { attention: 'none' }> & {
-  /** The user wants the update. Same as the store's `refresh()`. */
-  refresh(): Promise<RefreshOutcome>
-  /**
-   * The user closed the surface. Safe to wire to any onClose, including one your
-   * library also fires on programmatic closes or twice: a notice that is no
-   * longer the one shown ignores it.
-   *
-   * - prompt: dismisses the prompt for every tab, then `hide()` is called.
-   * - passive: `hide()` is called, and the surface stays hidden until attention or reason changes.
-   * - urgent: `show()` is called again with a new notice, because urgent attention
-   *   cannot be closed. Render urgent notices without a close control.
-   */
-  close(): void
-}
-
-/** The app's presentation of attention: a toast, banner or snackbar driven by `connectUpdateSurface`. */
-export interface UpdateSurface {
-  /** Lowest attention that shows the surface. Default "prompt". */
-  minAttention?: Exclude<Attention, 'none'>
-  /**
-   * Create or replace your UI. Called once per change of attention or reason, with a
-   * new notice each time. If your `show()` throws, usher logs the error, calls `hide()`
-   * in case your UI partly opened, and retries on the next state change.
-   */
-  show(notice: UpdateNotice): void
-  /**
-   * Remove your UI. Called when the surface should go away, including after the user
-   * closes it. Also called after your `show()` throws, when your UI may not be open,
-   * so make it safe to call when nothing is showing.
-   */
+export interface UpdateSurface<
+  State extends Noticeable = UpdateState,
+> extends UpdateNoticeOptions {
+  show(notice: UpdateNotice<State>): void
   hide(): void
 }
-
-const keyOf = (state: UpdateState) => `${state.attention}:${state.reason}`
 
 function safely(label: string, fn: () => void) {
   try {
@@ -62,57 +29,37 @@ function safely(label: string, fn: () => void) {
 
 const MAX_PASSES = 5
 
-class SurfaceConnection {
-  readonly #updates: AppUpdates
-  readonly #minAttention: Exclude<Attention, 'none'>
-  readonly #show: (notice: UpdateNotice) => void
+class SurfaceConnection<State extends Noticeable> {
+  readonly #notice: Readable<UpdateNotice<State> | undefined>
+  readonly #show: (notice: UpdateNotice<State>) => void
   readonly #hide: () => void
+  #shown: UpdateNotice<State> | undefined
+  #syncing = false
+  #again = false
 
-  constructor(updates: AppUpdates, surface: UpdateSurface) {
-    this.#updates = updates
-    this.#minAttention = surface.minAttention ?? 'prompt'
-    this.#show = notice => surface.show(notice)
+  constructor(
+    notice: Readable<UpdateNotice<State> | undefined>,
+    surface: UpdateSurface<State>,
+  ) {
+    this.#notice = notice
+    this.#show = shown => surface.show(shown)
     this.#hide = () => surface.hide()
   }
 
-  #shown: UpdateNotice | undefined
-
-  #closed: string | undefined
-
-  #syncing = false
-
-  #again = false
-
-  /** The state this surface should show, if any. */
-  #wanted = () => {
-    const state = this.#updates.getState()
-
-    return state.attention !== 'none' &&
-      rank[state.attention] >= rank[this.#minAttention]
-      ? state
-      : undefined
-  }
-
   #reconcile = () => {
-    const wanted = this.#wanted()
-    const key = wanted && keyOf(wanted)
+    const wanted = this.#notice.get()
 
-    if (key !== this.#closed) {
-      this.#closed = undefined
-    }
-
-    if (!wanted || this.#closed) {
+    if (!wanted) {
       return this.#remove()
     }
 
-    if (this.#shown && keyOf(this.#shown) === key) {
+    if (this.#shown === wanted) {
       return
     }
 
-    const notice = this.#makeNotice(wanted)
-    this.#shown = notice
+    this.#shown = wanted
 
-    if (!safely('show', () => this.#show(notice))) {
+    if (!safely('show', () => this.#show(wanted))) {
       this.#shown = undefined
       safely('hide', this.#hide)
     }
@@ -125,35 +72,8 @@ class SurfaceConnection {
     }
   }
 
-  #close = (notice: UpdateNotice) => {
-    if (notice.attention === 'passive') {
-      this.#closed = keyOf(notice)
-    } else if (notice.attention === 'urgent') {
-      this.#shown = undefined
-    } else if (this.#updates.dismiss()) {
-      this.#closed = keyOf(this.#updates.getState())
-    }
-  }
-
-  #makeNotice = (
-    state: Exclude<UpdateState, { attention: 'none' }>,
-  ): UpdateNotice => {
-    const notice: UpdateNotice = Object.freeze<UpdateNotice>({
-      ...state,
-      refresh: () => this.#updates.refresh(),
-      close: () => {
-        if (this.#shown === notice) {
-          this.#sync(() => this.#close(notice))
-        }
-      },
-    })
-
-    return notice
-  }
-
-  #sync = (change?: () => void) => {
+  #sync = () => {
     if (this.#syncing) {
-      change?.()
       this.#again = true
 
       return
@@ -162,7 +82,6 @@ class SurfaceConnection {
     this.#syncing = true
 
     try {
-      change?.()
       let passes = 0
 
       do {
@@ -183,28 +102,22 @@ class SurfaceConnection {
   }
 
   connect = () => {
-    const unsubscribe = this.#updates.subscribe(() => this.#sync())
+    const unsubscribe = this.#notice.subscribe(this.#sync)
     this.#sync()
 
     return () => {
       unsubscribe()
-      this.#closed = undefined
       this.#remove()
     }
   }
 }
 
-/**
- * Drive any notification UI (toast library, snackbar, banner store) from the update
- * store. The surface maps show/hide to its library; the connection does the rest:
- * it applies the attention threshold, calls `show` once per change, tells a user's
- * close apart from its own hide, and keeps the store polling while connected.
- *
- * Returns `disconnect()`, which hides the surface and unsubscribes.
- */
-export function connectUpdateSurface(
-  updates: AppUpdates,
-  surface: UpdateSurface,
+export function connectUpdateSurface<State extends Noticeable>(
+  updates: UpdateNoticeParts<State>,
+  surface: UpdateSurface<State>,
 ): () => void {
-  return new SurfaceConnection(updates, surface).connect()
+  return new SurfaceConnection(
+    createUpdateNotice(updates, surface),
+    surface,
+  ).connect()
 }

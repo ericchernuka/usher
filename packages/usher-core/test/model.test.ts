@@ -12,9 +12,9 @@ interface Run {
 }
 
 function dismiss(harness: World, run: Run) {
-  const before = harness.store.getState()
+  const before = harness.store.state.get()
   const stored = harness.tab.storage.getItem(DISMISSAL_KEY)
-  const dismissed = harness.store.dismiss()
+  const dismissed = harness.store.state.dismiss()
 
   if (before.attention !== 'prompt') {
     expect(dismissed).toBe(false)
@@ -22,13 +22,13 @@ function dismiss(harness: World, run: Run) {
 
   if (dismissed) {
     expect(before.attention).toBe('prompt')
-    expect(harness.store.getState().attention).toBe('passive')
+    expect(harness.store.state.get().attention).toBe('passive')
     run.promptQuietUntil =
       harness.world.config === 'promptSnooze'
         ? harness.serverNow() + HOUR
         : Infinity
   } else {
-    expect(harness.store.getState()).toBe(before)
+    expect(harness.store.state.get()).toBe(before)
     expect(harness.tab.storage.getItem(DISMISSAL_KEY)).toBe(stored)
   }
 }
@@ -55,12 +55,12 @@ async function tabAction(
 
       return
     case 'refresh':
-      await harness.store.refresh()
+      await harness.store.refresh.run()
 
       return
     case 'resubscribe':
       await harness.tab.advance(step.gap)
-      run.stop = harness.store.subscribe(() => {})
+      run.stop = harness.store.state.subscribe(() => {})
 
       return
     case 'clockJump':
@@ -100,7 +100,7 @@ function stickyUrgencyInvariant(
   run: Run,
   accepted: BuildFacts[],
 ) {
-  const state = harness.store.getState()
+  const state = harness.store.state.get()
   run.stickyUrgency ||= accepted.some(
     build =>
       Date.parse(build.commitTime) < Date.parse(running.commitTime) ||
@@ -115,7 +115,7 @@ function stickyUrgencyInvariant(
 }
 
 function invariants(harness: World, run: Run) {
-  const state = harness.store.getState()
+  const state = harness.store.state.get()
 
   const accepted = harness.delivered
     .splice(0)
@@ -147,7 +147,7 @@ async function runScenario(scenario: Scenario) {
   const harness = createWorld(scenario)
 
   const run: Run = {
-    stop: harness.store.subscribe(() => {}),
+    stop: harness.store.state.subscribe(() => {}),
     stickyUrgency: false,
     promptQuietUntil: -Infinity,
   }

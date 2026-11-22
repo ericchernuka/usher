@@ -1,4 +1,12 @@
 import type { BuildFacts } from './build-facts'
+import type {
+  EscalationOptions,
+  PromptDismissalOptions,
+  RefreshOptions,
+  VersionCheckOptions,
+} from './options'
+import type { Refresh } from './refresh'
+import type { Updates } from './update-state'
 
 /**
  * How loudly the app should signal an update. Each surface picks its own threshold:
@@ -36,7 +44,7 @@ export type UpdateReason = UpdateState['reason']
 
 /**
  * An answer to a version check that is not build facts. `versionUrl` is the
- * store's own `versionUrl` option.
+ * version check's own `versionUrl` option.
  *
  * - `http-error`: the response was not OK.
  * - `not-json`: the body could not be read as JSON, as when a host answers with
@@ -49,42 +57,16 @@ export type CheckProblem =
   | { kind: 'not-json'; versionUrl: string; contentType: string | null }
   | { kind: 'not-build-facts'; versionUrl: string; issues: string }
 
-export interface AppUpdatesOptions {
-  /** Build facts of the running build. */
+export interface AppUpdatesOptions
+  extends
+    VersionCheckOptions,
+    EscalationOptions,
+    PromptDismissalOptions,
+    RefreshOptions {
   running: BuildFacts
-  /** URL of the serving deployment's version.json. */
-  versionUrl: string
-  /**
-   * How long, in milliseconds, a tab may stay outdated before it reaches prompt attention.
-   * `false` turns the level off. Default 12 hours.
-   */
-  promptAfter?: number | false
-  /**
-   * How long, in milliseconds, a tab may stay outdated before it reaches urgent attention.
-   * `false` turns the level off. Must be later than `promptAfter`. Default 24 hours.
-   * Rollbacks and forced updates are urgent at once, whatever this says.
-   */
-  urgentAfter?: number | false
-  /**
-   * How long, in milliseconds, a prompt dismissal quiets prompt attention.
-   * Default: until urgent attention starts. It never quiets urgent attention.
-   */
-  promptSnooze?: number
-  /** How often, in milliseconds, a visible tab checks for a new build. Default 5 minutes, minimum 10 seconds. */
-  pollInterval?: number
-  /**
-   * The page load a refresh performs, once refresh blockers allow it.
-   * Return or resolve `false` when you know the reload did not happen; `refresh()`
-   * then resolves `declined`. Default `location.reload()`.
-   */
-  reload?: () => void | boolean | Promise<void | boolean>
-  /**
-   * Called when a version check gets an answer that is not build facts, so the
-   * app can report a deployment whose tabs cannot detect updates. It runs once
-   * per outage, and may be async: a throw or a rejection is logged. Network
-   * errors and timeouts do not call it.
-   */
-  onCheckProblem?: (problem: CheckProblem) => void | Promise<void>
-  /** Storage key prefix; set one per app if apps share an origin. Default "usher". */
-  storageKey?: string
+}
+
+export interface AppUpdates {
+  state: Updates<UpdateState>
+  refresh: Refresh
 }

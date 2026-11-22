@@ -1,9 +1,13 @@
 import { test as base, vi } from 'vitest'
-import { AppUpdatesStore, type AppUpdates } from '../src/app-updates'
+import { createAppUpdates, type AppUpdates } from '../src/index'
+import { createTabIn } from '../src/tab'
 import type { BuildFacts } from '../src/build-facts'
 import type { AppUpdatesOptions } from '../src/types'
 import { runningBuild } from './build-info.stub'
-import { createFakeEnvironment, type FakeEnvironment } from './fake-environment'
+import {
+  createFakeEnvironment,
+  type FakeEnvironment,
+} from '../src/fake-environment'
 import { serverClock, VERSION_URL } from './mocks/handlers'
 import { recordRequests } from './requests'
 
@@ -36,9 +40,9 @@ export function createStore(
   tab: FakeEnvironment,
   options: StoreOptions = {},
 ): AppUpdates {
-  return new AppUpdatesStore(
+  return createAppUpdates(
     { running, versionUrl: VERSION_URL, ...options },
-    tab.env,
+    createTabIn(tab.env),
   )
 }
 
@@ -68,7 +72,7 @@ export const test = base
       create: (options: StoreOptions = {}): AppUpdates =>
         createStore(tab, options),
       subscribe: (store: AppUpdates, listener: () => void = () => {}) =>
-        track(store.subscribe(listener)),
+        track(store.state.subscribe(listener)),
       track,
       async poll() {
         await tab.runFor(MINUTE)

@@ -6,7 +6,14 @@ import {
   createAppUpdates as createCoreUpdates,
   type RefreshBlocker,
 } from '@rndsqr/usher-core'
-import { useRefreshBlocker, useRefreshing, useUpdateState } from '../src/index'
+import {
+  UpdateNotice,
+  useUpdateNotice,
+  useRefreshBlocker,
+  useRefreshing,
+  useUpdateState,
+} from '../src/index'
+import { createTestTab } from '@rndsqr/usher-core/testing'
 import { captureNavigations } from '../../usher-core/test/navigation'
 import { runningBuild, versionUrl } from './build-info.stub'
 
@@ -55,14 +62,14 @@ describe('useUpdateState', () => {
     const updates = createAppUpdates()
 
     function NavButton() {
-      const { attention } = useUpdateState(updates)
+      const { attention } = useUpdateState(updates.state)
 
       return attention === 'none' ? null : (
         <button
           type="button"
           aria-label="Dismiss update"
           data-attention={attention}
-          onClick={updates.dismiss}
+          onClick={updates.state.dismiss}
         />
       )
     }
@@ -89,11 +96,11 @@ describe('useUpdateState deferral', () => {
 
     function Probe() {
       const urgent = useSyncExternalStore(
-        updates.subscribe,
-        () => updates.getState().attention,
+        updates.state.subscribe,
+        () => updates.state.get().attention,
       )
 
-      const deferred = useUpdateState(updates).attention
+      const deferred = useUpdateState(updates.state).attention
       seen.push([urgent, deferred])
 
       return null
@@ -113,20 +120,20 @@ describe('useRefreshBlocker', () => {
     const updates = createAppUpdates()
 
     function Form({ dirty }: { dirty: boolean }) {
-      useRefreshBlocker(updates, dirty)
+      useRefreshBlocker(updates.refresh, dirty)
 
       return null
     }
 
     const view = await render(<Form dirty />)
-    expect(await updates.refresh()).toBe('blocked')
+    expect(await updates.refresh.run()).toBe('blocked')
     expect(navigations).toEqual([])
     await view.rerender(<Form dirty={false} />)
-    expect(await updates.refresh()).toBe('reloading')
+    expect(await updates.refresh.run()).toBe('reloading')
     expect(navigations).toHaveLength(1)
     await view.rerender(<Form dirty />)
     await view.unmount()
-    expect(await updates.refresh()).toBe('reloading')
+    expect(await updates.refresh.run()).toBe('reloading')
     expect(navigations).toHaveLength(2)
   })
 })
@@ -139,18 +146,18 @@ describe('useRefreshBlocker with a function', () => {
     const blocker = vi.fn<RefreshBlocker>(() => blocking)
 
     function Form() {
-      useRefreshBlocker(updates, blocker)
+      useRefreshBlocker(updates.refresh, blocker)
 
       return null
     }
 
     const view = await render(<Form />)
-    expect(await updates.refresh()).toBe('blocked')
+    expect(await updates.refresh.run()).toBe('blocked')
     expect(navigations).toEqual([])
     expect(blocker).toHaveBeenCalledWith()
 
     blocking = false
-    expect(await updates.refresh()).toBe('reloading')
+    expect(await updates.refresh.run()).toBe('reloading')
     expect(navigations).toHaveLength(1)
     await view.unmount()
   })
@@ -158,10 +165,10 @@ describe('useRefreshBlocker with a function', () => {
   it('given an inline function, then re-rendering keeps one registration that calls the latest function', async () => {
     const navigations = captureNavigations()
     const updates = createAppUpdates()
-    const add = vi.spyOn(updates, 'addRefreshBlocker')
+    const add = vi.spyOn(updates.refresh, 'addBlocker')
 
     function Form({ dirty }: { dirty: boolean }) {
-      useRefreshBlocker(updates, () => dirty)
+      useRefreshBlocker(updates.refresh, () => dirty)
 
       return null
     }
@@ -170,11 +177,11 @@ describe('useRefreshBlocker with a function', () => {
     const registrations = add.mock.calls.length
     await view.rerender(<Form dirty />)
     expect(add).toHaveBeenCalledTimes(registrations)
-    expect(await updates.refresh()).toBe('blocked')
+    expect(await updates.refresh.run()).toBe('blocked')
 
     await view.rerender(<Form dirty={false} />)
     expect(add).toHaveBeenCalledTimes(registrations)
-    expect(await updates.refresh()).toBe('reloading')
+    expect(await updates.refresh.run()).toBe('reloading')
     expect(navigations).toHaveLength(1)
     await view.unmount()
   })
@@ -191,13 +198,13 @@ describe('useRefreshing', () => {
     })
 
     function RefreshButton() {
-      const refreshing = useRefreshing(updates)
+      const refreshing = useRefreshing(updates.refresh)
 
       return (
         <button
           type="button"
           disabled={refreshing}
-          onClick={() => void updates.refresh()}
+          onClick={() => void updates.refresh.run()}
         >
           Refresh
         </button>
@@ -214,5 +221,112 @@ describe('useRefreshing', () => {
     reloaded.resolve(false)
     await expect.element(button).toBeEnabled()
     await view.unmount()
+  })
+})
+
+describe('UpdateNotice', () => {
+  const HOUR = 60 * 60 * 1000
+
+  async function outdated(hours: number, served = older) {
+    const tab = createTestTab()
+
+    tab.deploy({
+      ...served,
+      version: 'new',
+      commitTime: '2026-11-12T00:00:00Z',
+      buildTime: new Date(tab.now()).toISOString(),
+    })
+    const reloaded = Promise.withResolvers<boolean>()
+
+    const updates = createCoreUpdates(
+      { running: runningBuild, versionUrl, reload: () => reloaded.promise },
+      tab,
+    )
+
+    const view = await render(
+      <UpdateNotice.Root updates={updates} minAttention="passive">
+        {notice => (
+          <>
+            <p>{notice.reason}</p>
+            <UpdateNotice.Refresh>Refresh</UpdateNotice.Refresh>
+            <UpdateNotice.Close aria-label="Close" />
+          </>
+        )}
+      </UpdateNotice.Root>,
+    )
+
+    await tab.advance(hours * HOUR)
+
+    return { tab, updates, view, reloaded }
+  }
+
+  it('renders nothing until the tab is outdated, then a quiet notice that closes for this tab only', async () => {
+    const { updates, view } = await outdated(1)
+    const notice = view.getByText('outdated')
+    await expect.element(notice).toBeVisible()
+    expect(view.container.querySelector('[role]:not(button)')).toBeNull()
+
+    await view.getByRole('button', { name: 'Close' }).click()
+    await expect.element(notice).not.toBeInTheDocument()
+    expect(updates.state.get().reason).toBe('outdated')
+    await view.unmount()
+  })
+
+  it('announces a prompt politely, and closing it dismisses the prompt', async () => {
+    const { updates, view } = await outdated(13)
+    const notice = view.getByRole('status')
+    await expect.element(notice).toHaveAttribute('data-attention', 'prompt')
+
+    await view.getByRole('button', { name: 'Close' }).click()
+    await expect.element(notice).not.toBeInTheDocument()
+    expect(updates.state.get().reason).toBe('dismissed')
+    await view.unmount()
+  })
+
+  it('announces urgent attention as an alert with no close control, and disables refresh while the reload runs', async () => {
+    const { view, reloaded } = await outdated(25)
+    await expect
+      .element(view.getByRole('alert'))
+      .toHaveAttribute('data-reason', 'outdated')
+    expect(view.getByRole('button', { name: 'Close' }).query()).toBeNull()
+
+    const refresh = view.getByRole('button', { name: 'Refresh' })
+    await refresh.click()
+    await expect.element(refresh).toBeDisabled()
+    await expect.element(refresh).toHaveAttribute('data-refreshing')
+
+    reloaded.resolve(false)
+    await expect.element(refresh).toBeEnabled()
+    await view.unmount()
+  })
+
+  it('given a component that renders its own banner, then the hook gives it the notice at prompt attention and above', async () => {
+    const tab = createTestTab()
+    tab.deploy({ ...older, buildTime: new Date(tab.now()).toISOString() })
+
+    const updates = createCoreUpdates(
+      { running: runningBuild, versionUrl },
+      tab,
+    )
+
+    function Banner() {
+      const notice = useUpdateNotice(updates)
+
+      return notice ? <p role="alert">{notice.reason}</p> : null
+    }
+
+    const view = await render(<Banner />)
+    await tab.advance(0)
+
+    await expect.element(view.getByRole('alert')).toHaveTextContent('rollback')
+    await view.unmount()
+  })
+
+  it('given a part outside the root, then rendering fails naming the part', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    await expect(render(<UpdateNotice.Close />)).rejects.toThrow(
+      /<UpdateNotice.Close> must be inside <UpdateNotice.Root>/,
+    )
   })
 })

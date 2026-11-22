@@ -26,7 +26,7 @@ describe('surfaces that misbehave', () => {
     await tab.waitForResponse()
 
     expect(log).toEqual(['show-start:prompt', 'show-end', 'hide'])
-    expect(store.getState().attention).toBe('passive')
+    expect(store.state.get().attention).toBe('passive')
   })
 
   test('given show() throws at first, then connecting does not throw and the surface appears once the library is ready', async ({

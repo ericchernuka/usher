@@ -2,7 +2,7 @@ import { useUpdateState } from '@rndsqr/react-usher'
 import { appUpdates } from './updates'
 
 function App() {
-  const { attention } = useUpdateState(appUpdates)
+  const { attention } = useUpdateState(appUpdates.state)
 
   return (
     <main>

@@ -142,10 +142,14 @@ export default defineConfig({
     },
     {
       files: [
-        'packages/usher-core/test/fake-environment.ts',
+        'packages/usher-core/src/fake-environment.ts',
         'packages/usher-core/test/model.test.ts',
       ],
       rules: { 'no-await-in-loop': 'off' },
+    },
+    {
+      files: ['packages/usher-core/src/fake-environment.ts'],
+      rules: { 'max-lines-per-function': 'off' },
     },
     {
       files: ['packages/*/src/**'],

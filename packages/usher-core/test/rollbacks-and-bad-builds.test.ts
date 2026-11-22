@@ -12,7 +12,7 @@ describe('a rollback', () => {
     app.subscribe(store)
     await tab.waitForResponse()
 
-    expect(store.getState()).toMatchObject({
+    expect(store.state.get()).toMatchObject({
       attention: 'urgent',
       reason: 'rollback',
       latest: { version: 'old' },
@@ -31,7 +31,7 @@ describe('a rollback', () => {
     server.use(serveBuild(newer))
     await app.poll()
 
-    expect(store.getState()).toMatchObject({
+    expect(store.state.get()).toMatchObject({
       attention: 'urgent',
       reason: 'rollback',
       latest: { version: 'bbb' },
@@ -55,7 +55,7 @@ describe('a forced update', () => {
     app.subscribe(store)
     await tab.waitForResponse()
 
-    expect(store.getState()).toMatchObject({
+    expect(store.state.get()).toMatchObject({
       attention: 'urgent',
       reason: 'forced',
     })
@@ -77,7 +77,7 @@ describe('a forced update', () => {
     app.subscribe(store)
     await tab.waitForResponse()
 
-    expect(store.getState()).toMatchObject({
+    expect(store.state.get()).toMatchObject({
       attention: 'passive',
       reason: 'outdated',
     })
@@ -97,7 +97,7 @@ describe('a forced update', () => {
     app.subscribe(store)
     await tab.waitForResponse()
 
-    expect(store.getState()).toMatchObject({
+    expect(store.state.get()).toMatchObject({
       attention: 'passive',
       reason: 'outdated',
     })
