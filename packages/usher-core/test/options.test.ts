@@ -61,6 +61,16 @@ describe('validating options', () => {
       message: /versionUrl must be the URL of version\.json, got https:/,
     },
     {
+      name: 'a reload that is not a function',
+      options: JSON.parse('{"reload":"hard"}'),
+      message: /reload must be a function, got hard/,
+    },
+    {
+      name: 'an onCheckProblem that is not a function',
+      options: JSON.parse('{"onCheckProblem":true}'),
+      message: /onCheckProblem must be a function, got true/,
+    },
+    {
       name: 'a zero promptSnooze',
       options: { promptSnooze: 0 },
       message: /promptSnooze must be positive/,
