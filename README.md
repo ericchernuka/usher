@@ -334,7 +334,7 @@ import { UpdateNotice } from '@rndsqr/react-usher'
 </UpdateNotice.Root>
 ```
 
-`Root` renders its element only while there is a notice, with `data-attention` and `data-reason` for styling. Beside it, `Root` keeps two visually hidden live regions mounted, a `status` and an `alert`, and copies the notice's text into the one that matches `announce`, leaving out the text of buttons. A screen reader hears a prompt politely and an urgent notice assertively, once each. The regions stay mounted because a live region that is inserted together with its text is not reliably announced. `Refresh` is disabled, with `data-refreshing`, while a refresh is in flight. `Close` renders nothing at urgent. The parts ship no wording and no styles beyond hiding those two regions. They never move focus and never close on a timer. Any prop you pass to a part overrides its default.
+`Root` renders its element only while there is a notice, with `data-attention` and `data-reason` for styling. Beside it, `Root` keeps two visually hidden live regions mounted, a `status` and an `alert`, and copies the notice's text into the one that matches `announce`, leaving out the text of buttons. A screen reader hears a prompt politely and an urgent notice assertively, once each. The regions stay mounted because a live region that is inserted together with its text is not reliably announced. For the same reason the text is set a tenth of a second after the region is emptied. `Refresh` is disabled, with `data-refreshing`, while a refresh is in flight. `Close` renders nothing at urgent. The parts ship no wording and no styles beyond hiding those two regions. They never move focus and never close on a timer. Any prop you pass to a part overrides its default.
 
 ## Behaviours
 

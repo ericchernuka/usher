@@ -47,10 +47,15 @@ async function notice(served: typeof newer, minAttention?: 'passive') {
   return { tab, view }
 }
 
-const announcements = async () =>
-  (await virtual.spokenPhraseLog()).filter(phrase =>
+const settled = () => new Promise(resolve => setTimeout(resolve, 250))
+
+async function announcements() {
+  await settled()
+
+  return (await virtual.spokenPhraseLog()).filter(phrase =>
     /^(polite|assertive): \S/.test(phrase),
   )
+}
 
 describe('what a screen reader hears', () => {
   it('given a passive notice, then nothing is announced', async () => {
@@ -77,7 +82,11 @@ describe('what a screen reader hears', () => {
 
   it('given a prompt escalates to urgent, then the notice is announced again, assertively', async () => {
     const { tab, view } = await notice(newer)
-    await tab.advance(25 * HOUR)
+    await tab.advance(13 * HOUR)
+    await expect
+      .element(view.getByRole('status'))
+      .toHaveTextContent('Update available: prompt')
+    await tab.advance(12 * HOUR)
 
     await expect
       .element(view.getByRole('alert'))
@@ -102,9 +111,25 @@ describe('what a screen reader hears', () => {
     await view.unmount()
   })
 
+  it('given a tab passes through prompt to urgent before anything is said, then only the urgent notice is announced', async () => {
+    const { tab, view } = await notice(newer)
+    await tab.advance(25 * HOUR)
+
+    await expect
+      .element(view.getByRole('alert'))
+      .toHaveTextContent('Update available: urgent')
+    expect(await announcements()).toEqual([
+      'assertive: Update available: urgent',
+    ])
+    await view.unmount()
+  })
+
   it('given a prompt is closed, then the announcement is cleared and nothing more is said', async () => {
     const { tab, view } = await notice(newer)
     await tab.advance(13 * HOUR)
+    await expect
+      .element(view.getByRole('status'))
+      .toHaveTextContent('Update available: prompt')
     await view.getByRole('button', { name: 'Close' }).click()
 
     await expect.element(view.getByRole('status')).toHaveTextContent('')
