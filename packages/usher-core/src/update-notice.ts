@@ -135,7 +135,12 @@ class Notices implements NoticeStore {
       }
     })
 
+    const before = this.#shown
     this.#reconcile()
+
+    if (this.#shown !== before) {
+      this.#listeners.notify()
+    }
   }
 
   #stop = () => {

@@ -164,6 +164,24 @@ test('given a returning reader closes the prompt it is given as it subscribes, t
   stop()
 })
 
+test('given the state already asks for a prompt, when a notice gets its first reader, then that reader is told', async () => {
+  const tab = createTestTab()
+  tab.deploy({ ...newer, buildTime: new Date(tab.now()).toISOString() })
+  const updates = createAppUpdates({ running, versionUrl }, tab)
+  const stopState = updates.state.subscribe(() => {})
+  await tab.advance(13 * HOUR)
+  const notice = createUpdateNotice(updates)
+  const told = vi.fn<() => void>()
+
+  expect(notice.get()).toBeUndefined()
+  const stop = notice.subscribe(told)
+
+  expect(told).toHaveBeenCalledTimes(1)
+  expect(notice.get()).toMatchObject({ attention: 'prompt' })
+  stop()
+  stopState()
+})
+
 test('given a reader that closes every notice it is given, when attention is urgent, then the notice stays and the reader is not called again', async () => {
   const tab = createTestTab()
   tab.deploy({ ...older, buildTime: new Date(tab.now()).toISOString() })

@@ -19,14 +19,20 @@ const claims = new Map<
 const regions = new Map<'polite' | 'assertive', Region>()
 let scheduled = false
 
+const host = () =>
+  Array.from(document.querySelectorAll('dialog:modal')).at(-1) ?? document.body
+
 function regionFor(priority: 'polite' | 'assertive'): Region {
   const found = regions.get(priority)
+  const where = host()
 
-  if (found?.element.isConnected) {
+  if (found) {
+    if (found.element.parentElement !== where) {
+      where.append(found.element)
+    }
+
     return found
   }
-
-  found?.pending.forEach(timer => clearTimeout(timer))
 
   const element = document.createElement('div')
   element.setAttribute('role', priority === 'polite' ? 'status' : 'alert')
@@ -35,7 +41,7 @@ function regionFor(priority: 'polite' | 'assertive'): Region {
   element.setAttribute('aria-relevant', 'additions text')
   element.dataset['usherAnnouncer'] = priority
   element.style.cssText = UNSEEN
-  document.body.append(element)
+  where.append(element)
 
   const made: Region = { element, shown: new Map(), pending: new Map() }
   regions.set(priority, made)

@@ -314,7 +314,7 @@ Give urgent notices no timeout. A toast library that closes one on its own timer
 
 `disconnect()` hides the surface and removes its subscription. A surface that throws is isolated and retried on the next state change.
 
-A notice's `latest` is the build that was latest when the notice was made, and a notice is only replaced when attention or reason changes; read the update state for the current one. Every notice also carries `closable`, which is `false` at urgent, and `announce`, which says how a screen reader should hear it: `off` at passive, `polite` at prompt, `assertive` at urgent. Pass `announce` to a toast library that owns its live region.
+A notice's `latest` is the build that was latest when the notice was made. A notice is replaced when attention or reason changes, and when an urgent one is shown again; read the update state for the current build. Every notice also carries `closable`, which is `false` at urgent, and `announce`, which says how a screen reader should hear it: `off` at passive, `polite` at prompt, `assertive` at urgent. Pass `announce` to a toast library that owns its live region.
 
 ### A notice in React
 
@@ -359,7 +359,7 @@ An action has to settle. React keeps overlapping transitions in the same root pe
 
 `Root` announces the notice with the wording its `announcement` prop returns. The prop is required, and an empty string announces nothing.
 
-The package keeps one `status` and one `alert` region in the document, visually hidden, and adds the wording to the one that matches `announce`, so a screen reader hears a prompt politely and an urgent notice assertively. Wording is announced when the notice appears and again when the wording changes. The same wording at the same politeness is announced once, however many `Root`s give it, and it leaves the region when the last of them does. The regions are in the document that runs the app, so a notice rendered into another document, such as an iframe, is announced in the app's own. The wording is the app's to give because only the app knows which of its text is the message: reading it back out of the markup means guessing what is hidden, decorative or a control.
+The package keeps one `status` and one `alert` region in the document, visually hidden, and adds the wording to the one that matches `announce`, so a screen reader hears a prompt politely and an urgent notice assertively. Wording is announced when the notice appears and again when the wording changes. The same wording at the same politeness is announced once, however many `Root`s give it, and it leaves the region when the last of them does. The regions are in the document that runs the app, so a notice rendered into another document, such as an iframe, is announced in the app's own. While a modal `<dialog>` is open they move inside it, because the rest of the page is inert to a screen reader until it closes. The wording is the app's to give because only the app knows which of its text is the message: reading it back out of the markup means guessing what is hidden, decorative or a control.
 
 ## Testing update UI
 
