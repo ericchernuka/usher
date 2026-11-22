@@ -14,6 +14,14 @@ import type { Refresh } from './refresh'
  */
 export type Attention = 'none' | 'passive' | 'prompt' | 'urgent'
 
+/** Attention from quietest to loudest, for comparing two levels */
+export const attentionRank = {
+  none: 0,
+  passive: 1,
+  prompt: 2,
+  urgent: 3,
+} as const satisfies Record<Attention, number>
+
 /**
  * One update state. `reason` always belongs to `attention`, and `latest` is present
  * once a check has landed, so `state.latest?.version` reads it without narrowing.

@@ -4,7 +4,7 @@ import type { PromptDismissal } from './prompt-dismissal'
 import { createListeners, type Readable } from './readable'
 import type { Asked, Moment, Signal } from './signals'
 import { insideTab, type Tab } from './tab'
-import type { UpdateState, Updates } from './types'
+import { attentionRank, type UpdateState, type Updates } from './types'
 import { createVisibleTimer } from './visible-timer'
 
 export interface UpdateStateParts {
@@ -18,8 +18,6 @@ interface Verdict {
   state: UpdateState
   nextAt: number
 }
-
-const rank = { none: 0, passive: 1, prompt: 2, urgent: 3 }
 
 function sameState(next: UpdateState, current: UpdateState) {
   return (
@@ -103,7 +101,9 @@ class UpdateStateStore implements Updates {
 
     const state = asks.reduce<UpdateState>(
       (loudest, { state: next }) =>
-        rank[next.attention] > rank[loudest.attention] ? next : loudest,
+        attentionRank[next.attention] > attentionRank[loudest.attention]
+          ? next
+          : loudest,
       { attention: 'none', reason: 'caught-up', latest },
     )
 

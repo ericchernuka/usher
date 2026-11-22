@@ -1,6 +1,11 @@
 import type { RefreshOutcome } from './refresh'
 import { createListeners, type Readable } from './readable'
-import type { AppUpdates, Attention, UpdateState } from './types'
+import {
+  attentionRank,
+  type AppUpdates,
+  type Attention,
+  type UpdateState,
+} from './types'
 
 type Noticeable = Exclude<UpdateState, { attention: 'none' }>
 
@@ -29,8 +34,6 @@ export interface UpdateNoticeOptions {
   minAttention?: Exclude<Attention, 'none'> | undefined
 }
 
-const rank = { none: 0, passive: 1, prompt: 2, urgent: 3 }
-
 const announce = {
   none: 'off',
   passive: 'off',
@@ -45,7 +48,8 @@ function reaches(
   minAttention: Attention,
 ): state is Noticeable {
   return (
-    state.attention !== 'none' && rank[state.attention] >= rank[minAttention]
+    state.attention !== 'none' &&
+    attentionRank[state.attention] >= attentionRank[minAttention]
   )
 }
 
