@@ -9,7 +9,6 @@ import {
   useSyncExternalStore,
   useTransition,
   type ComponentProps,
-  type CSSProperties,
   type ReactNode,
 } from 'react'
 import {
@@ -97,11 +96,11 @@ function useShown(part: string): Shown {
 
 const SETTLE_MS = 100
 
-const unseen: CSSProperties = {
+const unseen = {
   position: 'fixed',
-  width: 1,
-  height: 1,
-  margin: -1,
+  width: '1px',
+  height: '1px',
+  margin: '-1px',
   overflow: 'hidden',
   clipPath: 'inset(50%)',
   whiteSpace: 'nowrap',
@@ -115,6 +114,14 @@ interface AnnouncerProps {
 function Announcer({ priority, wording }: AnnouncerProps) {
   const polite = useRef<HTMLOutputElement>(null)
   const assertive = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    for (const region of [polite.current, assertive.current]) {
+      if (region) {
+        Object.assign(region.style, unseen)
+      }
+    }
+  }, [])
 
   useEffect(() => {
     const region = { off: undefined, polite, assertive }[priority ?? 'off']
@@ -134,8 +141,8 @@ function Announcer({ priority, wording }: AnnouncerProps) {
 
   return (
     <>
-      <output ref={polite} aria-live="polite" style={unseen} />
-      <div ref={assertive} role="alert" aria-live="assertive" style={unseen} />
+      <output ref={polite} aria-live="polite" />
+      <div ref={assertive} role="alert" aria-live="assertive" />
     </>
   )
 }
@@ -157,7 +164,8 @@ interface RootProps
 function Root(props: RootProps) {
   const { updates, minAttention, announcement, children, ...rest } = props
   const notice = useUpdateNotice(updates, { minAttention })
-  const silent = rest.hidden === true || rest['aria-hidden'] === true
+  const hiding = rest['aria-hidden']
+  const silent = rest.hidden === true || hiding === true || hiding === 'true'
 
   return (
     <>

@@ -4,8 +4,11 @@ import { createTabIn, type Tab } from './tab'
 
 /**
  * Tab with virtual time for testing update UI, offline until the first deploy,
- * whose clock starts at the real time and then moves only when advanced
+ * whose clock starts at the real time, on a whole second, and then moves
+ * only when advanced
  */
+const SECOND = 1_000
+
 export interface TestTab extends Tab {
   /** Build facts every later version check gets */
   deploy(build: BuildFacts): void
@@ -33,7 +36,7 @@ export function createTestTab(): TestTab {
     },
   })
 
-  fake.setSystemTime(Date.now())
+  fake.setSystemTime(Math.floor(Date.now() / SECOND) * SECOND)
 
   return Object.assign(createTabIn(fake.env), {
     deploy(build: BuildFacts) {

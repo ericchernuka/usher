@@ -6,6 +6,7 @@ import {
 } from '@rndsqr/usher-core'
 import { createTestTab } from '@rndsqr/usher-core/testing'
 import { useState } from 'react'
+import { renderToString } from 'react-dom/server'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { render } from 'vitest-browser-react'
 import { UpdateNotice } from '../src/index'
@@ -259,13 +260,20 @@ describe('what a screen reader hears', () => {
     await view.unmount()
   })
 
-  it('given no wording, or a root hidden from the page, then nothing is announced', async () => {
+  it('given no wording, or a root hidden from the page or from assistive technology, then nothing is announced', async () => {
     const { tab, updates } = served(older)
 
     const view = await render(
       <>
         <Banner updates={updates} announcement={() => ''} />
         <UpdateNotice.Root hidden updates={updates} announcement={wordingFor}>
+          {() => null}
+        </UpdateNotice.Root>
+        <UpdateNotice.Root
+          aria-hidden="true"
+          updates={updates}
+          announcement={wordingFor}
+        >
           {() => null}
         </UpdateNotice.Root>
       </>,
@@ -297,6 +305,24 @@ describe('what a screen reader hears', () => {
     expect(dialog?.contains(view.getByRole('status').element())).toBe(true)
     expect(await announcements()).toEqual(['polite: Update available: prompt'])
     dialog?.close()
+    await view.unmount()
+  })
+
+  it('given the notice is rendered on a server, then its live regions carry no inline style, and are hidden once mounted', async () => {
+    const { updates } = served(newer)
+    const markup = renderToString(<Banner updates={updates} />)
+
+    expect(markup).toContain('role="alert"')
+    expect(markup).not.toContain('style=')
+
+    const view = await render(<Banner updates={updates} />)
+
+    await expect
+      .poll(() => getComputedStyle(view.getByRole('alert').element()).position)
+      .toBe('fixed')
+    expect(getComputedStyle(view.getByRole('status').element()).width).toBe(
+      '1px',
+    )
     await view.unmount()
   })
 })
