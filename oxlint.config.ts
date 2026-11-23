@@ -152,11 +152,14 @@ export default defineConfig({
       rules: { 'max-lines-per-function': 'off' },
     },
     {
-      files: ['examples/**/usher.d.ts'],
+      files: ['packages/usher-plugin/src/client.ts'],
       rules: { 'no-var': 'off' },
     },
     {
-      files: ['examples/**/usher.d.ts', 'examples/**/DeployControls.tsx'],
+      files: [
+        'packages/usher-plugin/src/client.ts',
+        'examples/**/DeployControls.tsx',
+      ],
       rules: {
         'no-underscore-dangle': ['error', { allow: ['__USHER_DEVTOOLS__'] }],
       },
