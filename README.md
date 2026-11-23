@@ -511,7 +511,7 @@ await __USHER_DEVTOOLS__.deploy({ mode: 'rollback' })
 await __USHER_DEVTOOLS__.deploy({ mode: 'reset' })
 ```
 
-The example apps under `examples/react/` put the same four modes on buttons, next to the update state, an update notice and a draft that blocks a refresh. Run `pnpm build` once so the packages they import exist, then run one with `pnpm --filter usher-example-react-cloudflare-pages dev`.
+Importing `@rndsqr/usher-plugin/client` also declares the global, typed and possibly `undefined`, so app code can check for it before calling it. The example apps under `examples/react/` put the same four modes on buttons, next to the update state, an update notice and a draft that blocks a refresh. Run `pnpm build` once so the packages they import exist, then run one with `pnpm --filter usher-example-react-cloudflare-pages dev`.
 
 The dev server then serves different build facts from the version URL. The tab still runs the real build, so:
 
