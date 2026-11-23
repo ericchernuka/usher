@@ -90,7 +90,7 @@ Sticky urgency is one signal and not two, because it keeps one reason: the one l
 
 ### Notice and surface
 
-`SurfaceConnection` was split in two. The notice decides what should be shown: the attention threshold, one notice per change of attention or reason, a passive close that holds until the pair changes, a prompt close that dismisses for every tab, and a stale notice whose `close()` does nothing. The connection keeps what exists because imperative libraries misbehave: showing an urgent notice again after the library removed it, the limit of five passes, and isolating a surface that throws.
+`SurfaceConnection` was split in two. The notice decides what should be shown: the attention threshold, one notice per change of attention or reason, a passive close that holds until the pair changes, a prompt close that dismisses for every tab, and a stale notice whose `close()` does nothing. The connection keeps what exists because imperative libraries misbehave: showing an urgent notice again after the library removed it, the limit of five passes, and isolating a surface that throws. When the surface loses a notice, the notice makes a new one rather than showing the old one again, so that it carries the build served now ([ADR 0013](adr/0013-a-lost-notice-is-made-again-not-reused.md)).
 
 The React parts read the same notice, so a declarative banner and an imperative toast follow the same rules.
 
@@ -175,3 +175,4 @@ When the first real need arrives, build it inside core, then export the contract
 | 0010 Classes with `#private`       | Stands for the update state, the notice and the surface connection.                                   |
 | 0011 Refreshing is store state     | Superseded in part by ADR 0012. Check problems stay a callback.                                       |
 | 0002, 0006, 0008, 0009             | Untouched.                                                                                            |
+| 0013 A lost notice is made again   | Keeps the notice's two connection-only operations, and keeps them off `createUpdateNotice`.           |
