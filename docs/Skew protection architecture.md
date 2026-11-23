@@ -127,7 +127,7 @@ The library retains escalation, shared prompt dismissal, sticky urgency, explici
 
 ## Verification
 
-Behaviour and model tests run against a fake environment with virtual time. They cover lifecycle, network failure, cancellation, clock changes, storage failures, shared dismissal, rollback persistence, and explicit refresh. Chromium tests cover the browser environment, the Vite client helper, React hooks, and both sample update surfaces.
+Behaviour and model tests run against a fake environment with virtual time. They cover lifecycle, network failure, cancellation, clock changes, storage failures, shared dismissal, rollback persistence, and explicit refresh. The tests fake the serving deployment in four ways, and each one is kept on purpose. MSW gives the behaviour tests real `Request` and `Response` objects. The model test's own server adds skew, latency and a flapping deployment that only it needs. `createTestTab()` serves exactly what `/testing` promises. The React tests run against the real browser tab, which the fake environment cannot replace. Folding them into one would put one test's needs into the shipped `/testing` module. Chromium tests cover the browser environment, the Vite client helper, React hooks, and both sample update surfaces.
 
 Vite tests build real output and check version metadata, emitted and private adapter files, warnings, and the build failure for a private file inside the client output. Workerd tests run the generated Pages and Workers handlers, and a hand-written worker that composes the handler, with static asset bindings and an R2 bucket. Local proof covers current chunks, R2 fallback, HEAD responses, missing chunks, and SPA routes.
 
