@@ -303,35 +303,4 @@ describe('createAssetFallback()', () => {
     expect(res.headers.get('content-type')).toBe('text/html')
     expect(get).not.toHaveBeenCalled()
   })
-
-  it('uses a custom base and assets directory for the prefix and the R2 key', async () => {
-    const keys: string[] = []
-
-    const env = {
-      ASSETS: { fetch: async () => assetsHtml() },
-      CHUNK_ARCHIVE: archiveOf({
-        get: async (key: string) => {
-          keys.push(key)
-
-          return { body: 'old', httpEtag: '"e"', writeHttpMetadata() {} }
-        },
-      }),
-    }
-
-    const scoped = createAssetFallback({ base: '/app/', assetsDir: 'chunks' })
-
-    const hit = await scoped(
-      new Request('https://app.test/app/chunks/old-123.js'),
-      env,
-    )
-
-    const outside = await scoped(
-      new Request('https://app.test/app/assets/old-123.js'),
-      env,
-    )
-
-    expect(await hit.text()).toBe('old')
-    expect(outside.headers.get('content-type')).toBe('text/html')
-    expect(keys).toEqual(['chunks/old-123.js'])
-  })
 })

@@ -129,7 +129,7 @@ describe('subscribing', () => {
 })
 
 describe('snapshots', () => {
-  test('given a poll that changes nothing, then getState() returns the same snapshot and listeners are not called', async ({
+  test('given a poll that changes nothing, then the state stays the same object and listeners are not called', async ({
     app,
     tab,
     requests,

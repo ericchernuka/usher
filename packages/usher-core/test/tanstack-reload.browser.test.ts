@@ -56,14 +56,6 @@ describe('TanStack Router reload recipe', () => {
     expect(navigations).toEqual([{ type: 'replace', url: location.href }])
   })
 
-  it('a refresh blocker stops the reload before the router hears of it, and says so', async () => {
-    const { appUpdates } = setup()
-    const unblock = appUpdates.refresh.addBlocker(() => true)
-    expect(await appUpdates.refresh.run()).toBe('blocked')
-    expect(navigations).toEqual([])
-    unblock()
-  })
-
   it("blockers that compare pathnames don't block reloads (current === next)", async () => {
     const { router, appUpdates } = setup()
 

@@ -265,7 +265,7 @@ describe('UpdateNotice', () => {
     return { tab, updates, view, reloaded }
   }
 
-  it('renders nothing until the tab is outdated, then a quiet notice that closes for this tab only', async () => {
+  it('given a passive notice, then it is quiet and closes for this tab only', async () => {
     const { updates, view } = await outdated(1)
     const notice = view.getByText('outdated')
     await expect.element(notice).toBeVisible()
@@ -311,7 +311,7 @@ describe('UpdateNotice', () => {
     await view.unmount()
   })
 
-  it('given a component that renders its own banner, then the hook gives it the notice at prompt attention and above', async () => {
+  it('given a component that renders its own banner, then the hook gives it the notice', async () => {
     const tab = createTestTab()
     tab.deploy({ ...older, buildTime: new Date(tab.now()).toISOString() })
 
