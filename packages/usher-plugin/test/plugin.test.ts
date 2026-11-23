@@ -352,6 +352,5 @@ describe('given no git and no environment', () => {
       buildTime: '2026-11-11T16:00:00.000Z',
     })
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('no commit time'))
-    vi.unstubAllEnvs()
   })
 })

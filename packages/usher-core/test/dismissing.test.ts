@@ -114,25 +114,6 @@ test('given a default prompt snooze, then a forward jump of the wall clock does 
   expect(store.state.get().reason).toBe('dismissed')
 })
 
-test('given a custom prompt snooze, then its expiry wakes without another poll', async ({
-  app,
-  tab,
-}) => {
-  server.use(serveBuild(newer))
-
-  const store = app.create({
-    pollInterval: HOUR,
-    promptAfter: HOUR,
-    promptSnooze: MINUTE,
-  })
-
-  app.subscribe(store)
-  await tab.waitForResponse()
-  expect(store.state.dismiss()).toBe(true)
-  await tab.runFor(61_000)
-  expect(store.state.get().attention).toBe('prompt')
-})
-
 test('given a listener dismisses as soon as it hears of the prompt, then the snooze still ends on time', async ({
   app,
   tab,

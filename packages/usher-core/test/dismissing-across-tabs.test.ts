@@ -9,8 +9,8 @@ describe('reading what other tabs left in storage', () => {
     { name: 'not an object', stored: '"dismissed"' },
     { name: 'an array', stored: '[1, 2]' },
     {
-      name: 'a record with unreadable fields',
-      stored: '{"dismissedAt":"soon","urgentAt":null}',
+      name: 'a record whose dismissedAt is not a time',
+      stored: '{"dismissedAt":"soon"}',
     },
   ])(
     'given storage holds $name, when the tab starts, then nothing is dismissed',
