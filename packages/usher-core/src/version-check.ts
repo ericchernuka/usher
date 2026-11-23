@@ -10,18 +10,22 @@ import { createVisibleTimer } from './visible-timer'
 const MIN_FOCUS_CHECK_GAP_MS = 60_000
 const FETCH_TIMEOUT_MS = 30_000
 
-interface LatestBuildOptions {
+interface VersionCheckSettings {
   versionUrl: string
   pollInterval: number
   env: Environment
   clock: { observe(serverTime: number): void }
-  onProblem: (problem: CheckProblem) => void
+  onCheckProblem: VersionCheckOptions['onCheckProblem']
 }
 
 interface Watching {
-  onChange: () => void
   stopListening: Array<() => void>
   inFlight?: AbortController | undefined
+}
+
+interface Answer {
+  res: VersionResponse
+  facts: BuildFacts | CheckProblem
 }
 
 async function readFacts(
@@ -57,20 +61,39 @@ async function readFacts(
       }
 }
 
-class LatestBuild {
-  readonly #options: LatestBuildOptions
+function returned(problem: CheckProblem) {
+  if (problem.kind === 'http-error') {
+    return `HTTP ${problem.status}`
+  }
+
+  if (problem.kind === 'not-json') {
+    return `a body that is not JSON (${problem.contentType ?? 'no content type'})`
+  }
+
+  return `JSON that is not build facts (${problem.issues})`
+}
+
+class VersionCheck implements Readable<BuildFacts | undefined> {
+  readonly #settings: VersionCheckSettings
   readonly #poll: ReturnType<typeof createVisibleTimer>
+  readonly #listeners = createListeners({
+    start: () => this.#start(),
+    stop: () => this.#stop(),
+  })
+
   #latest: BuildFacts | undefined
   #lastCheck: { monotonic: number; wall: number } | undefined
   #reported = false
   #watching: Watching | undefined
 
-  constructor(options: LatestBuildOptions) {
-    this.#options = options
-    this.#poll = createVisibleTimer(options.env, () => void this.#check())
+  constructor(settings: VersionCheckSettings) {
+    this.#settings = settings
+    this.#poll = createVisibleTimer(settings.env, () => void this.#check())
   }
 
   get = () => this.#latest
+
+  subscribe = (listener: () => void) => this.#listeners.subscribe(listener)
 
   /**
    * Time since the last check started. Some browsers stop the monotonic clock
@@ -78,7 +101,7 @@ class LatestBuild {
    * time has passed wins, and a wrong guess costs one extra request.
    */
   #sinceCheck = () => {
-    const { env } = this.#options
+    const { env } = this.#settings
 
     return this.#lastCheck
       ? Math.max(
@@ -89,7 +112,7 @@ class LatestBuild {
   }
 
   #checkUrl = () => {
-    const { env, versionUrl } = this.#options
+    const { env, versionUrl } = this.#settings
     const url = new URL(versionUrl, env.baseUrl())
     url.searchParams.set('t', String(env.wallNow()))
 
@@ -97,7 +120,7 @@ class LatestBuild {
   }
 
   #schedulePoll = () => {
-    this.#poll.arm(() => this.#options.pollInterval - this.#sinceCheck())
+    this.#poll.arm(() => this.#settings.pollInterval - this.#sinceCheck())
   }
 
   #recheck = () => {
@@ -107,7 +130,7 @@ class LatestBuild {
   }
 
   #check = async () => {
-    const { env } = this.#options
+    const { env } = this.#settings
 
     if (!this.#watching || !env.isVisible()) {
       return
@@ -118,6 +141,17 @@ class LatestBuild {
     this.#watching.inFlight = controller
     this.#lastCheck = { monotonic: env.monotonicNow(), wall: env.wallNow() }
     this.#schedulePoll()
+
+    const answer = await this.#request(controller)
+
+    if (answer && !controller.signal.aborted) {
+      this.#accept(answer)
+    }
+  }
+
+  /** The answer to one request, or nothing when none arrived in time */
+  #request = async (controller: AbortController) => {
+    const { env, versionUrl } = this.#settings
 
     const cancelTimeout = env.startTimer(
       () => controller.abort(new DOMException('timed out', 'TimeoutError')),
@@ -130,12 +164,9 @@ class LatestBuild {
         signal: controller.signal,
       })
 
-      const facts = await readFacts(res, this.#options.versionUrl)
-
-      if (!controller.signal.aborted) {
-        this.#accept(res, facts)
-      }
+      return { res, facts: await readFacts(res, versionUrl) }
     } catch {
+      return undefined
     } finally {
       cancelTimeout()
 
@@ -145,7 +176,7 @@ class LatestBuild {
     }
   }
 
-  #accept = (res: VersionResponse, facts: BuildFacts | CheckProblem) => {
+  #accept = ({ res, facts }: Answer) => {
     if ('kind' in facts) {
       return this.#reportOnce(facts)
     }
@@ -153,26 +184,40 @@ class LatestBuild {
     const serverTime = Date.parse(res.headers.get('date') ?? '')
 
     if (!Number.isNaN(serverTime)) {
-      this.#options.clock.observe(serverTime)
+      this.#settings.clock.observe(serverTime)
     }
 
     this.#reported = false
     this.#latest = facts
-    this.#watching?.onChange()
+    this.#listeners.notify()
   }
 
   #reportOnce = (problem: CheckProblem) => {
-    if (!this.#reported) {
-      this.#reported = true
-      this.#options.onProblem(problem)
+    if (this.#reported) {
+      return
+    }
+
+    this.#reported = true
+
+    console.warn(
+      `[usher] ${problem.versionUrl} should return build facts as JSON, but returned ${returned(problem)}. Updates cannot be detected until it does.`,
+    )
+
+    void this.#tellApp(problem)
+  }
+
+  #tellApp = async (problem: CheckProblem) => {
+    try {
+      await this.#settings.onCheckProblem?.(problem)
+    } catch (error) {
+      console.error('[usher] onCheckProblem threw', error)
     }
   }
 
-  start = (onChange: () => void) => {
-    const { env } = this.#options
+  #start = () => {
+    const { env } = this.#settings
 
     this.#watching = {
-      onChange,
       stopListening: [
         env.onVisibilityChange(this.#recheck),
         env.onFocus(this.#recheck),
@@ -183,7 +228,7 @@ class LatestBuild {
     this.#recheck()
   }
 
-  stop = () => {
+  #stop = () => {
     if (!this.#watching) {
       return
     }
@@ -201,51 +246,16 @@ class LatestBuild {
   }
 }
 
-function returned(problem: CheckProblem) {
-  if (problem.kind === 'http-error') {
-    return `HTTP ${problem.status}`
-  }
-
-  if (problem.kind === 'not-json') {
-    return `a body that is not JSON (${problem.contentType ?? 'no content type'})`
-  }
-
-  return `JSON that is not build facts (${problem.issues})`
-}
-
-async function reportCheckProblem(
-  problem: CheckProblem,
-  tellApp: VersionCheckOptions['onCheckProblem'],
-) {
-  console.warn(
-    `[usher] ${problem.versionUrl} should return build facts as JSON, but returned ${returned(problem)}. Updates cannot be detected until it does.`,
-  )
-
-  try {
-    await tellApp?.(problem)
-  } catch (error) {
-    console.error('[usher] onCheckProblem threw', error)
-  }
-}
-
 export function createVersionCheck(
   tab: Tab,
   options: VersionCheckOptions,
 ): Readable<BuildFacts | undefined> {
   const { versionUrl, pollInterval } = resolveVersionCheck(options)
 
-  const latest = new LatestBuild({
+  return new VersionCheck({
     ...insideTab(tab),
     versionUrl,
     pollInterval,
-    onProblem: problem =>
-      void reportCheckProblem(problem, options.onCheckProblem),
+    onCheckProblem: options.onCheckProblem,
   })
-
-  const listeners = createListeners({
-    start: () => latest.start(listeners.notify),
-    stop: latest.stop,
-  })
-
-  return { get: latest.get, subscribe: listeners.subscribe }
 }
