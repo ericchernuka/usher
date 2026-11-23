@@ -76,12 +76,12 @@ Each fact has one owner. A behaviour holds timers, listeners and requests only w
 
 ### Signals and the update state
 
-A signal is a reason to ask for a refresh. It observes the running and latest builds, remembers what it needs, and when asked returns a claim: an attention and a reason. Beside the claim it can say when its answer may change, and from what time a dismissal applies to it.
+A signal is a reason to ask for a refresh. It has one method: asked at a moment, it reads the running and latest builds, remembers what it needs, and returns a claim: an attention and a reason. Beside the claim it can say when its answer may change, and from what time a dismissal applies to it.
 
 The update state evaluates in one pass:
 
 1. No latest build: `none` / `unknown`.
-2. Each signal observes the builds and is asked for its claim. No claims: `none` / `caught-up`.
+2. Each signal is asked for its claim at this moment. No claims: `none` / `caught-up`.
 3. A claim that says it is dismissable, with a dismissal at or after that time and inside the prompt snooze if one is set, becomes `passive` / `dismissed`.
 4. The loudest claim is published. On a tie the earlier signal in the list wins.
 5. One timer is set for the earliest time a claim may change or a snooze ends.
