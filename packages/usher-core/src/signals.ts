@@ -21,8 +21,12 @@ export interface Moment extends Builds {
   now: number
 }
 
+/**
+ * A reason to refresh. `ask` runs at every evaluation, sometimes more than
+ * once for the same builds, and updates what the signal remembers before
+ * it claims
+ */
 export interface Signal {
-  observe: (builds: Builds) => void
   ask: (moment: Moment) => Asked | undefined
 }
 
@@ -34,16 +38,16 @@ export function escalation(options: EscalationOptions): Signal {
   let outdatedSince: number | undefined
 
   return {
-    observe(builds) {
-      outdatedSince = isSuperseded(builds)
-        ? (outdatedSince ?? supersededAt(builds))
+    ask(moment) {
+      outdatedSince = isSuperseded(moment)
+        ? (outdatedSince ?? supersededAt(moment))
         : undefined
-    },
-    ask({ now }) {
+
       if (outdatedSince === undefined) {
         return undefined
       }
 
+      const { now } = moment
       const promptStart = after(outdatedSince, promptAfter)
       const urgentStart = after(outdatedSince, urgentAfter)
 
@@ -71,13 +75,14 @@ export function stickyUrgency(): Signal {
   let reason: 'rollback' | 'forced' | undefined
 
   return {
-    observe(builds) {
-      if (isForcedUpdate(builds)) {
+    ask(moment) {
+      if (isForcedUpdate(moment)) {
         reason = 'forced'
-      } else if (isRollback(builds)) {
+      } else if (isRollback(moment)) {
         reason = 'rollback'
       }
+
+      return reason && { claim: { attention: 'urgent', reason } }
     },
-    ask: () => reason && { claim: { attention: 'urgent', reason } },
   }
 }

@@ -56,7 +56,6 @@ class UpdateStateStore implements Updates {
 
   #asks = (moment: Moment, dismissedAt: number | undefined) =>
     this.#signals.flatMap(signal => {
-      signal.observe(moment)
       const asked = signal.ask(moment)
 
       if (!asked) {
