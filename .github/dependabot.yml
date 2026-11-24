@@ -1,6 +1,5 @@
-# Keeps the SHA-pinned workflow actions up to date. The cooldown matches the
-# three-day minimumReleaseAge in pnpm-workspace.yaml, so a compromised action
-# release has time to be caught before it lands here.
+# Keeps the SHA-pinned workflow actions up to date. The cooldown gives a
+# compromised action release a week to be caught before it is proposed here.
 version: 2
 updates:
   - package-ecosystem: github-actions
@@ -8,7 +7,7 @@ updates:
     schedule:
       interval: weekly
     cooldown:
-      default-days: 3
+      default-days: 7
     groups:
       actions:
         patterns: ['*']
