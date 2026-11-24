@@ -1,6 +1,6 @@
 {
   "name": "@ericchernuka/usher-cloudflare",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "license": "MIT",
   "description": "Cloudflare Pages and Workers skew protection for Usher: build adapters and the asset fallback handler.",
   "type": "module",
