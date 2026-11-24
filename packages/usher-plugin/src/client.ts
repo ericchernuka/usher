@@ -5,7 +5,7 @@ import {
   type AppUpdatesOptions,
   type BuildFacts,
   type Tab,
-} from '@rndsqr/usher-core'
+} from '@ericchernuka/usher-core'
 import type { DeployMode } from './simulated-deploy'
 
 declare global {

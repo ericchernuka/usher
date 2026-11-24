@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   createAppUpdates as createCoreUpdates,
   type RefreshBlocker,
-} from '@rndsqr/usher-core'
+} from '@ericchernuka/usher-core'
 import {
   UpdateNotice,
   useUpdateNotice,
@@ -14,7 +14,7 @@ import {
   useRefreshing,
   useUpdateState,
 } from '../src/index'
-import { createTestTab } from '@rndsqr/usher-core/testing'
+import { createTestTab } from '@ericchernuka/usher-core/testing'
 import { captureNavigations } from '../../usher-core/test/navigation'
 import { runningBuild, versionUrl } from './build-info.stub'
 

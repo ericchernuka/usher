@@ -1,5 +1,5 @@
 ---
-'@rndsqr/usher-core': minor
+'@ericchernuka/usher-core': minor
 ---
 
 A version check request that fails outright now warns once, the same way a 404 does. Before, a Content-Security-Policy whose `connect-src` did not allow the version URL blocked every check with nothing in the console, and tabs never detected a new deploy.

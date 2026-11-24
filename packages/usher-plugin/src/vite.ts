@@ -1,5 +1,5 @@
 import type { Plugin, ResolvedConfig, Rollup } from 'vite'
-import type { BuildFacts } from '@rndsqr/usher-core'
+import type { BuildFacts } from '@ericchernuka/usher-core'
 import type { SkewProtectionAdapter } from './adapter'
 import {
   planAdapterFiles,
@@ -26,7 +26,7 @@ export interface UsherPluginOptions {
   forceUpdateBuiltBefore?: string
   /**
    * Serve chunks from older builds after a deploy, e.g. `cloudflarePages()` from
-   * `@rndsqr/usher-cloudflare`. Off by default.
+   * `@ericchernuka/usher-cloudflare`. Off by default.
    */
   adapter?: SkewProtectionAdapter
   /**

@@ -21,7 +21,7 @@ import {
   type UpdateNotice as Notice,
   type UpdateNoticeOptions,
   type UpdateState,
-} from '@rndsqr/usher-core'
+} from '@ericchernuka/usher-core'
 
 function useReadable<Value>(readable: Readable<Value>): Value {
   return useSyncExternalStore(readable.subscribe, readable.get, readable.get)

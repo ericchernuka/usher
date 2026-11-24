@@ -40,8 +40,8 @@ Around the handle:
 
 - `connectUpdateSurface(appUpdates, surface)` drives an imperative toast or banner. Its signature did not change.
 - `createUpdateNotice(appUpdates, { minAttention })` is the notice a surface should show, as a `Readable`. It carries the state, `refresh()`, `close()`, `closable` and `announce`.
-- `@rndsqr/react-usher` needs React 19.2. It has a hook per behaviour (`useUpdateState(appUpdates.state)`, `useRefreshing(appUpdates.refresh)`, `useRefreshBlocker(appUpdates.refresh, isDirty)`), `useUpdateNotice`, and the headless `UpdateNotice.Root`, `.Refresh` and `.Close` parts.
-- `@rndsqr/usher-core/testing` exports `createTestTab()`, a tab with virtual time. It is passed as the second argument to `createAppUpdates`, and it has `now()`, `deploy(build)` and `advance(ms)`.
+- `@ericchernuka/react-usher` needs React 19.2. It has a hook per behaviour (`useUpdateState(appUpdates.state)`, `useRefreshing(appUpdates.refresh)`, `useRefreshBlocker(appUpdates.refresh, isDirty)`), `useUpdateNotice`, and the headless `UpdateNotice.Root`, `.Refresh` and `.Close` parts.
+- `@ericchernuka/usher-core/testing` exports `createTestTab()`, a tab with virtual time. It is passed as the second argument to `createAppUpdates`, and it has `now()`, `deploy(build)` and `advance(ms)`.
 
 Options, defaults and validation messages are unchanged.
 

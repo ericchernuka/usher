@@ -1,4 +1,4 @@
-import type { BuildFacts } from '@rndsqr/usher-core'
+import type { BuildFacts } from '@ericchernuka/usher-core'
 
 export const DEPLOY_MODES = ['advance', 'force', 'rollback', 'reset'] as const
 

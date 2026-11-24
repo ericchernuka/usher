@@ -1,6 +1,6 @@
 import { execSync } from 'node:child_process'
 import * as valibot from 'valibot'
-import type { BuildFacts } from '@rndsqr/usher-core'
+import type { BuildFacts } from '@ericchernuka/usher-core'
 
 /** Explicit values that win over the environment and Git. */
 export interface BuildFactsSources {

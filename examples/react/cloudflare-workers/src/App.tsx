@@ -1,5 +1,5 @@
-import { useRefreshing, useUpdateState } from '@rndsqr/react-usher'
-import { runningBuild } from '@rndsqr/usher-plugin/client'
+import { useRefreshing, useUpdateState } from '@ericchernuka/react-usher'
+import { runningBuild } from '@ericchernuka/usher-plugin/client'
 import { DeployControls } from './DeployControls'
 import { Draft } from './Draft'
 import { UpdateBanner } from './UpdateBanner'

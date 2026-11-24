@@ -10,14 +10,14 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@rndsqr/react-usher": "workspace:*",
+    "@ericchernuka/react-usher": "workspace:*",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
-    "@rndsqr/usher-plugin": "workspace:*",
-    "@rndsqr/usher-core": "workspace:*"
+    "@ericchernuka/usher-plugin": "workspace:*",
+    "@ericchernuka/usher-core": "workspace:*"
   },
   "devDependencies": {
-    "@rndsqr/usher-cloudflare": "workspace:*",
+    "@ericchernuka/usher-cloudflare": "workspace:*",
     "@types/node": "^26.6.6",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",

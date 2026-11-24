@@ -4,35 +4,35 @@ Usher keeps open tabs on a current build with as little disruption as possible. 
 
 The [glossary](GLOSSARY.md) defines the domain terms. The [architecture document](docs/Skew%20protection%20architecture.md) covers package ownership, internal modules, request handling and deployment.
 
-| Import                            | What it gives you                                                                                    | Needs      |
-| --------------------------------- | ---------------------------------------------------------------------------------------------------- | ---------- |
-| `@rndsqr/usher-plugin/vite`       | `usher()`: writes `version.json`, embeds the build facts, runs a skew-protection adapter             | Vite       |
-| `@rndsqr/usher-plugin/adapter`    | `SkewProtectionAdapter` and its types, for writing an adapter for another host                       | Nothing    |
-| `@rndsqr/usher-plugin/client`     | `createAppUpdates()` with the build facts filled in, and `runningBuild`                              | The plugin |
-| `@rndsqr/react-usher`             | `useUpdateState`, `useRefreshing`, `useRefreshBlocker`, `useUpdateNotice`, `UpdateNotice`            | React 19.2 |
-| `@rndsqr/usher-cloudflare`        | `cloudflarePages()`, `cloudflareWorkers()`: adapters that serve old chunks from R2                   | Cloudflare |
-| `@rndsqr/usher-cloudflare/worker` | `createAssetFallback()`: the same handler, for apps that own their Worker                            | Cloudflare |
-| `@rndsqr/usher-core`              | `createAppUpdates(options)`, `connectUpdateSurface()` and `createUpdateNotice()`, with no build tool | Nothing    |
-| `@rndsqr/usher-core/testing`      | `createTestTab()`: a tab with virtual time, for testing update UI                                    | Nothing    |
+| Import                                  | What it gives you                                                                                    | Needs      |
+| --------------------------------------- | ---------------------------------------------------------------------------------------------------- | ---------- |
+| `@ericchernuka/usher-plugin/vite`       | `usher()`: writes `version.json`, embeds the build facts, runs a skew-protection adapter             | Vite       |
+| `@ericchernuka/usher-plugin/adapter`    | `SkewProtectionAdapter` and its types, for writing an adapter for another host                       | Nothing    |
+| `@ericchernuka/usher-plugin/client`     | `createAppUpdates()` with the build facts filled in, and `runningBuild`                              | The plugin |
+| `@ericchernuka/react-usher`             | `useUpdateState`, `useRefreshing`, `useRefreshBlocker`, `useUpdateNotice`, `UpdateNotice`            | React 19.2 |
+| `@ericchernuka/usher-cloudflare`        | `cloudflarePages()`, `cloudflareWorkers()`: adapters that serve old chunks from R2                   | Cloudflare |
+| `@ericchernuka/usher-cloudflare/worker` | `createAssetFallback()`: the same handler, for apps that own their Worker                            | Cloudflare |
+| `@ericchernuka/usher-core`              | `createAppUpdates(options)`, `connectUpdateSurface()` and `createUpdateNotice()`, with no build tool | Nothing    |
+| `@ericchernuka/usher-core/testing`      | `createTestTab()`: a tab with virtual time, for testing update UI                                    | Nothing    |
 
 ## Setup
 
 Install the plugin and core, plus the packages for React and Cloudflare if the app uses them:
 
 ```sh
-pnpm add @rndsqr/usher-core
-pnpm add -D @rndsqr/usher-plugin
-pnpm add @rndsqr/react-usher        # React hooks
-pnpm add -D @rndsqr/usher-cloudflare # skew protection on Pages or Workers
+pnpm add @ericchernuka/usher-core
+pnpm add -D @ericchernuka/usher-plugin
+pnpm add @ericchernuka/react-usher        # React hooks
+pnpm add -D @ericchernuka/usher-cloudflare # skew protection on Pages or Workers
 ```
 
-`@rndsqr/usher-core` is a peer dependency of the plugin and the React package, so the app installs it once and every package shares that copy. The app also imports `connectUpdateSurface` and the types from it.
+`@ericchernuka/usher-core` is a peer dependency of the plugin and the React package, so the app installs it once and every package shares that copy. The app also imports `connectUpdateSurface` and the types from it.
 
 ```ts
 // vite.config.ts
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
-import { usher } from '@rndsqr/usher-plugin/vite'
+import { usher } from '@ericchernuka/usher-plugin/vite'
 
 export default defineConfig({ plugins: [react(), usher()] })
 ```
@@ -63,7 +63,7 @@ Create the app's updates once at module scope. Creating them has no side effects
 
 ```ts
 // updates.ts
-import { createAppUpdates } from '@rndsqr/usher-plugin/client'
+import { createAppUpdates } from '@ericchernuka/usher-plugin/client'
 
 export const appUpdates = createAppUpdates()
 ```
@@ -73,7 +73,7 @@ import {
   useRefreshBlocker,
   useRefreshing,
   useUpdateState,
-} from '@rndsqr/react-usher'
+} from '@ericchernuka/react-usher'
 import { appUpdates } from './updates'
 
 function UpdateButton() {
@@ -106,7 +106,7 @@ Each hook takes the behaviour it reads. `useUpdateState` returns the whole state
 To tag error reports or RUM events with the running build, import its facts:
 
 ```ts
-import { runningBuild } from '@rndsqr/usher-plugin/client'
+import { runningBuild } from '@ericchernuka/usher-plugin/client'
 
 reportError(error, { version: runningBuild.version })
 ```
@@ -114,7 +114,7 @@ reportError(error, { version: runningBuild.version })
 With another build tool, pass the running build and the version URL to core yourself:
 
 ```ts
-import { createAppUpdates } from '@rndsqr/usher-core'
+import { createAppUpdates } from '@ericchernuka/usher-core'
 
 export const appUpdates = createAppUpdates({
   running: {
@@ -172,7 +172,7 @@ Create one per `storageKey` in a document. Two that share a key in the same docu
 Durations are milliseconds, so they can be computed:
 
 ```ts
-import { createAppUpdates } from '@rndsqr/usher-plugin/client'
+import { createAppUpdates } from '@ericchernuka/usher-plugin/client'
 
 const HOUR = 60 * 60 * 1000
 
@@ -245,7 +245,7 @@ if (
 To send the reload through a router, replace `reload`:
 
 ```ts
-import { createAppUpdates } from '@rndsqr/usher-plugin/client'
+import { createAppUpdates } from '@ericchernuka/usher-plugin/client'
 
 export const appUpdates = createAppUpdates({
   reload: () =>
@@ -264,7 +264,10 @@ This recipe is tested against TanStack Router, whose own blockers then apply to 
 `connectUpdateSurface` drives an imperative toast or banner library:
 
 ```ts
-import { connectUpdateSurface, type UpdateNotice } from '@rndsqr/usher-core'
+import {
+  connectUpdateSurface,
+  type UpdateNotice,
+} from '@ericchernuka/usher-core'
 
 const TOAST_ID = 'app-update'
 
@@ -322,7 +325,7 @@ A notice's `latest` is the build that was latest when the notice was made. A not
 A component that renders its own markup reads the same notice, with the same close rules, from `useUpdateNotice(appUpdates, { minAttention })`. The headless parts cover the common case:
 
 ```tsx
-import { UpdateNotice } from '@rndsqr/react-usher'
+import { UpdateNotice } from '@ericchernuka/react-usher'
 
 ;<UpdateNotice.Root
   updates={appUpdates}
@@ -369,8 +372,8 @@ Each `Root` keeps a `status` and an `alert` region of its own beside the notice,
 `createTestTab()` is a tab with virtual time. Pass it as the second argument to `createAppUpdates`:
 
 ```tsx
-import { createAppUpdates } from '@rndsqr/usher-core'
-import { createTestTab } from '@rndsqr/usher-core/testing'
+import { createAppUpdates } from '@ericchernuka/usher-core'
+import { createTestTab } from '@ericchernuka/usher-core/testing'
 
 const tab = createTestTab()
 const built = new Date(tab.now()).toISOString()
@@ -396,18 +399,21 @@ This recipe uses core, so it runs in any test runner. To test through the plugin
 
 ```ts
 // vitest.config.ts
-import { usher } from '@rndsqr/usher-plugin/vite'
+import { usher } from '@ericchernuka/usher-plugin/vite'
 import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
   plugins: [usher()],
-  ssr: { noExternal: ['@rndsqr/usher-plugin'] },
+  ssr: { noExternal: ['@ericchernuka/usher-plugin'] },
 })
 ```
 
 ```tsx
-import { createTestTab } from '@rndsqr/usher-core/testing'
-import { createAppUpdates, runningBuild } from '@rndsqr/usher-plugin/client'
+import { createTestTab } from '@ericchernuka/usher-core/testing'
+import {
+  createAppUpdates,
+  runningBuild,
+} from '@ericchernuka/usher-plugin/client'
 
 const tab = createTestTab()
 const appUpdates = createAppUpdates({}, tab)
@@ -427,7 +433,10 @@ await tab.advance(12 * 60 * 60_000)
 Skew protection is optional. Pass an adapter from a provider package, and the plugin writes the files that host needs:
 
 ```ts
-import { cloudflarePages, cloudflareWorkers } from '@rndsqr/usher-cloudflare'
+import {
+  cloudflarePages,
+  cloudflareWorkers,
+} from '@ericchernuka/usher-cloudflare'
 
 usher({ adapter: cloudflarePages() }) // { r2Binding? }
 usher({ adapter: cloudflareWorkers() }) // { r2Binding?, workerFile? }
@@ -466,7 +475,7 @@ If the app owns its Worker or Pages Functions, pass no adapter to the plugin and
 import {
   createAssetFallback,
   type AssetFallbackEnv,
-} from '@rndsqr/usher-cloudflare/worker'
+} from '@ericchernuka/usher-cloudflare/worker'
 
 const assets = createAssetFallback() // { base?, assetsDir?, r2Binding? }
 
@@ -512,7 +521,7 @@ await __USHER_DEVTOOLS__.deploy({ mode: 'rollback' })
 await __USHER_DEVTOOLS__.deploy({ mode: 'reset' })
 ```
 
-Importing `@rndsqr/usher-plugin/client` also declares the global, typed and possibly `undefined`, so app code can check for it before calling it. The example apps under `examples/react/` put the same four modes on buttons, next to the update state, an update notice and a draft that blocks a refresh. Run `pnpm build` once so the packages they import exist, then run one with `pnpm --filter usher-example-react-cloudflare-pages dev`.
+Importing `@ericchernuka/usher-plugin/client` also declares the global, typed and possibly `undefined`, so app code can check for it before calling it. The example apps under `examples/react/` put the same four modes on buttons, next to the update state, an update notice and a draft that blocks a refresh. Run `pnpm build` once so the packages they import exist, then run one with `pnpm --filter usher-example-react-cloudflare-pages dev`.
 
 The dev server then serves different build facts from the version URL. The tab still runs the real build, so:
 
@@ -542,4 +551,6 @@ A pnpm workspace run by Turbo. `packages/*` are the libraries, built with tsdown
 
 ### Releases
 
-Versions are managed with [Changesets](.changeset/README.md). Run `pnpm changeset` in any pull request that changes a published package. `pnpm version-packages` applies the pending changesets, and `pnpm release` builds and publishes. The four packages share one version.
+Versions are managed with [Changesets](.changeset/README.md). Run `pnpm changeset` in any pull request that changes a published package. The four packages share one version.
+
+The [release workflow](.github/workflows/release.yml) does the rest. When changesets land on `main`, it opens a "Version Packages" pull request that bumps versions and writes changelogs. Merging that pull request publishes to npm through trusted publishing and creates GitHub releases. Locally, `pnpm version-packages` and `pnpm release` run the same two steps.

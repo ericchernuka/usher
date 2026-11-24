@@ -34,7 +34,7 @@ export function insideTab(tab: Tab): Inside {
 
   if (!inside) {
     throw new Error(
-      '[usher] this tab was not made by this copy of @rndsqr/usher-core. Create it with createTestTab() from @rndsqr/usher-core/testing, and check that only one version of @rndsqr/usher-core is installed.',
+      '[usher] this tab was not made by this copy of @ericchernuka/usher-core. Create it with createTestTab() from @ericchernuka/usher-core/testing, and check that only one version of @ericchernuka/usher-core is installed.',
     )
   }
 

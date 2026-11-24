@@ -18,7 +18,7 @@ The public interface is the part with a use today:
 
 - `createAppUpdates()` returns `{ state, refresh }`, the two behaviours an app reads and acts on.
 - `createUpdateNotice()` and `connectUpdateSurface()`, for declarative and imperative surfaces.
-- `@rndsqr/usher-core/testing` exports a tab with virtual time.
+- `@ericchernuka/usher-core/testing` exports a tab with virtual time.
 
 `createTab`, `createVersionCheck`, `createPromptDismissal`, `createUpdateState`, `createRefresh` and the signals are internal. There is one composition, so the state type is the written `UpdateState` union and nothing is inferred from the signals.
 

@@ -4,10 +4,10 @@
   "commit": false,
   "fixed": [
     [
-      "@rndsqr/usher-core",
-      "@rndsqr/react-usher",
-      "@rndsqr/usher-plugin",
-      "@rndsqr/usher-cloudflare"
+      "@ericchernuka/usher-core",
+      "@ericchernuka/react-usher",
+      "@ericchernuka/usher-plugin",
+      "@ericchernuka/usher-cloudflare"
     ]
   ],
   "linked": [],

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useRefreshBlocker } from '@rndsqr/react-usher'
+import { useRefreshBlocker } from '@ericchernuka/react-usher'
 import { appUpdates } from './updates'
 
 export function Draft() {

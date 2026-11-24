@@ -3,8 +3,8 @@ import {
   createAppUpdates,
   type AppUpdates,
   type UpdateNotice as Notice,
-} from '@rndsqr/usher-core'
-import { createTestTab } from '@rndsqr/usher-core/testing'
+} from '@ericchernuka/usher-core'
+import { createTestTab } from '@ericchernuka/usher-core/testing'
 import { useState } from 'react'
 import { renderToString } from 'react-dom/server'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
