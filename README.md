@@ -551,4 +551,6 @@ A pnpm workspace run by Turbo. `packages/*` are the libraries, built with tsdown
 
 ### Releases
 
-Versions are managed with [Changesets](.changeset/README.md). Run `pnpm changeset` in any pull request that changes a published package. `pnpm version-packages` applies the pending changesets, and `pnpm release` builds and publishes. The four packages share one version.
+Versions are managed with [Changesets](.changeset/README.md). Run `pnpm changeset` in any pull request that changes a published package. The four packages share one version.
+
+The [release workflow](.github/workflows/release.yml) does the rest. When changesets land on `main`, it opens a "Version Packages" pull request that bumps versions and writes changelogs. Merging that pull request publishes to npm through trusted publishing and creates GitHub releases. Locally, `pnpm version-packages` and `pnpm release` run the same two steps.
