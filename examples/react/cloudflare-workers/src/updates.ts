@@ -1,4 +1,4 @@
-import { createAppUpdates } from '@rndsqr/usher-plugin/client'
+import { createAppUpdates } from '@ericchernuka/usher-plugin/client'
 
 export const appUpdates = createAppUpdates({
   pollInterval: 10_000,

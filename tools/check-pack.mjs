@@ -87,9 +87,9 @@ const appFiles = {
     },
     include: ['src', 'vite.config.ts'],
   }),
-  'vite.config.ts': `import { cloudflarePages } from '@rndsqr/usher-cloudflare'
-import type { SkewProtectionAdapter } from '@rndsqr/usher-plugin/adapter'
-import { usher } from '@rndsqr/usher-plugin/vite'
+  'vite.config.ts': `import { cloudflarePages } from '@ericchernuka/usher-cloudflare'
+import type { SkewProtectionAdapter } from '@ericchernuka/usher-plugin/adapter'
+import { usher } from '@ericchernuka/usher-plugin/vite'
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 
@@ -101,9 +101,9 @@ export default defineConfig({
 `,
   'index.html':
     '<!doctype html><div id="root"></div><script type="module" src="/src/main.tsx"></script>',
-  'src/main.tsx': `import { connectUpdateSurface, type UpdateState } from '@rndsqr/usher-core'
-import { useRefreshBlocker, useUpdateState } from '@rndsqr/react-usher'
-import { createAppUpdates, runningBuild } from '@rndsqr/usher-plugin/client'
+  'src/main.tsx': `import { connectUpdateSurface, type UpdateState } from '@ericchernuka/usher-core'
+import { useRefreshBlocker, useUpdateState } from '@ericchernuka/react-usher'
+import { createAppUpdates, runningBuild } from '@ericchernuka/usher-plugin/client'
 import { createRoot } from 'react-dom/client'
 
 const appUpdates = createAppUpdates({ pollInterval: 60_000 })
@@ -119,7 +119,7 @@ function App() {
 
 createRoot(document.getElementById('root')!).render(<App />)
 `,
-  'src/worker.ts': `import { createAssetFallback, type AssetFallbackEnv } from '@rndsqr/usher-cloudflare/worker'
+  'src/worker.ts': `import { createAssetFallback, type AssetFallbackEnv } from '@ericchernuka/usher-cloudflare/worker'
 
 const assets = createAssetFallback({ r2Binding: 'CHUNKS' })
 

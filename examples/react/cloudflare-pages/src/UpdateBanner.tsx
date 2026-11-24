@@ -1,6 +1,6 @@
 import { startTransition, useState } from 'react'
-import { UpdateNotice } from '@rndsqr/react-usher'
-import type { UpdateNotice as Notice } from '@rndsqr/usher-core'
+import { UpdateNotice } from '@ericchernuka/react-usher'
+import type { UpdateNotice as Notice } from '@ericchernuka/usher-core'
 import { appUpdates } from './updates'
 
 function copyFor({ attention, reason }: Notice) {

@@ -1,5 +1,5 @@
 {
-  "name": "@rndsqr/react-usher",
+  "name": "@ericchernuka/react-usher",
   "version": "0.1.0",
   "description": "React hooks for Usher update state and refresh blockers.",
   "type": "module",
@@ -19,13 +19,13 @@
     "coverage": "vitest run --coverage --project browser && vitest run --project webkit"
   },
   "peerDependencies": {
-    "@rndsqr/usher-core": "workspace:^",
+    "@ericchernuka/usher-core": "workspace:^",
     "react": "^19.2.0"
   },
   "devDependencies": {
     "@guidepup/virtual-screen-reader": "^0.33.0",
-    "@rndsqr/usher-core": "workspace:*",
-    "@rndsqr/usher-plugin": "workspace:*",
+    "@ericchernuka/usher-core": "workspace:*",
+    "@ericchernuka/usher-plugin": "workspace:*",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitest/browser-playwright": "^5.1.0",

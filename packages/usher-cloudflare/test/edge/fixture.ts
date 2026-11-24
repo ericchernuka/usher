@@ -1,7 +1,7 @@
 import { mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { build } from 'vite'
-import { usher } from '@rndsqr/usher-plugin/vite'
+import { usher } from '@ericchernuka/usher-plugin/vite'
 import { cloudflarePages, cloudflareWorkers } from '../../src/index.ts'
 
 const targets = {

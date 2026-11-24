@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { describe, expect, expectTypeOf, it, vi } from 'vitest'
-import type { ClientBuild } from '@rndsqr/usher-plugin/adapter'
+import type { ClientBuild } from '@ericchernuka/usher-plugin/adapter'
 import { cloudflarePages, cloudflareWorkers } from '../src/index'
 import {
   createAssetFallback,

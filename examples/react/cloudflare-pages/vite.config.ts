@@ -1,5 +1,5 @@
-import { usher } from '@rndsqr/usher-plugin/vite'
-import { cloudflarePages } from '@rndsqr/usher-cloudflare'
+import { usher } from '@ericchernuka/usher-plugin/vite'
+import { cloudflarePages } from '@ericchernuka/usher-cloudflare'
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 

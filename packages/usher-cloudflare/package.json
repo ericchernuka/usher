@@ -1,5 +1,5 @@
 {
-  "name": "@rndsqr/usher-cloudflare",
+  "name": "@ericchernuka/usher-cloudflare",
   "version": "0.1.0",
   "description": "Cloudflare Pages and Workers skew protection for Usher: build adapters and the asset fallback handler.",
   "type": "module",
@@ -21,10 +21,10 @@
     "coverage": "vitest run --coverage"
   },
   "peerDependencies": {
-    "@rndsqr/usher-plugin": "workspace:^"
+    "@ericchernuka/usher-plugin": "workspace:^"
   },
   "peerDependenciesMeta": {
-    "@rndsqr/usher-plugin": {
+    "@ericchernuka/usher-plugin": {
       "optional": true
     }
   },
@@ -37,6 +37,6 @@
     "typescript": "^7.0.2",
     "vite": "^8.3.6",
     "vitest": "^5.1.0",
-    "@rndsqr/usher-plugin": "workspace:*"
+    "@ericchernuka/usher-plugin": "workspace:*"
   }
 }

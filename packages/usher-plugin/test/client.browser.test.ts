@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import * as client from '../src/client'
 import { createAppUpdates, runningBuild as embeddedBuild } from '../src/client'
-import { createTestTab } from '@rndsqr/usher-core/testing'
+import { createTestTab } from '@ericchernuka/usher-core/testing'
 import { runningBuild } from './build-info.stub'
 
 const SECOND = 1_000

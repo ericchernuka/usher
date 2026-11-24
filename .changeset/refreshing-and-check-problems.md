@@ -1,6 +1,6 @@
 ---
-'@rndsqr/usher-core': minor
-'@rndsqr/react-usher': minor
+'@ericchernuka/usher-core': minor
+'@ericchernuka/react-usher': minor
 ---
 
 The app's updates now say when a refresh is in flight. `appUpdates.refresh.get()` is `true` from the moment `reload` is called until it settles, its subscribers are told when it changes, and `useRefreshing(appUpdates.refresh)` reads it in React, so a refresh button can be disabled while a router reload runs.

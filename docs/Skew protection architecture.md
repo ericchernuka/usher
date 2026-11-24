@@ -6,12 +6,12 @@ The repository contains the libraries, two example apps, and local browser and w
 
 ## Package ownership
 
-| Package                    | Responsibility                                                                                                                                                                                                                                                                                                  |
-| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `@rndsqr/usher-core`       | The build-tool-independent behaviours: version check, signals, prompt dismissal, update state, refresh and update notice. `createAppUpdates` is a preset built from them, and `/testing` exports a tab with virtual time.                                                                                       |
-| `@rndsqr/usher-plugin`     | The build plugin at `/vite`, the skew-protection adapter contract at `/adapter`, which names no bundler, and the browser entry at `/client`, which creates the core preset with the embedded build facts and version URL. Only Vite is implemented; the bundler is a subpath so another can be added beside it. |
-| `@rndsqr/react-usher`      | Hooks that each read one behaviour, and headless update notice parts.                                                                                                                                                                                                                                           |
-| `@rndsqr/usher-cloudflare` | Build adapters for Pages and Workers, plus the asset fallback handler at `/worker`.                                                                                                                                                                                                                             |
+| Package                          | Responsibility                                                                                                                                                                                                                                                                                                  |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@ericchernuka/usher-core`       | The build-tool-independent behaviours: version check, signals, prompt dismissal, update state, refresh and update notice. `createAppUpdates` is a preset built from them, and `/testing` exports a tab with virtual time.                                                                                       |
+| `@ericchernuka/usher-plugin`     | The build plugin at `/vite`, the skew-protection adapter contract at `/adapter`, which names no bundler, and the browser entry at `/client`, which creates the core preset with the embedded build facts and version URL. Only Vite is implemented; the bundler is a subpath so another can be added beside it. |
+| `@ericchernuka/react-usher`      | Hooks that each read one behaviour, and headless update notice parts.                                                                                                                                                                                                                                           |
+| `@ericchernuka/usher-cloudflare` | Build adapters for Pages and Workers, plus the asset fallback handler at `/worker`.                                                                                                                                                                                                                             |
 
 Core does not import a build tool. The plugin's client entry imports core. React uses the behaviours' `Readable` interface. Cloudflare implements the adapter contract from the plugin package's `/adapter` entry and uses only its types, so an app that imports just the asset fallback handler does not need the plugin installed. The example apps assemble these pieces.
 
@@ -19,7 +19,7 @@ Decisions that someone may want to reopen are recorded in [docs/adr](adr/).
 
 ## Build output
 
-The `usher()` plugin writes `version.json` and embeds the same build facts in the bundle, where `@rndsqr/usher-plugin/client` reads them. The facts include a source version, commit time, build time, and an optional forced-update cutoff. A source version can occur in more than one build.
+The `usher()` plugin writes `version.json` and embeds the same build facts in the bundle, where `@ericchernuka/usher-plugin/client` reads them. The facts include a source version, commit time, build time, and an optional forced-update cutoff. A source version can occur in more than one build.
 
 The version defaults to environment values and then Git. Commit time defaults to an explicit option, `APP_COMMIT_TIME`, and then Git. If no commit time is available, the plugin warns and uses build time, which prevents reliable detection of an old-commit redeploy. Malformed configured timestamps fail the build.
 
@@ -30,8 +30,11 @@ The plugin serves the version file during development and emits it only for clie
 Apps configure an adapter rather than copy the handler:
 
 ```ts
-import { usher } from '@rndsqr/usher-plugin/vite'
-import { cloudflarePages, cloudflareWorkers } from '@rndsqr/usher-cloudflare'
+import { usher } from '@ericchernuka/usher-plugin/vite'
+import {
+  cloudflarePages,
+  cloudflareWorkers,
+} from '@ericchernuka/usher-cloudflare'
 
 usher({ adapter: cloudflarePages() })
 usher({ adapter: cloudflareWorkers() })
@@ -58,7 +61,7 @@ The sample apps demonstrate the Vite configuration and update UI. Deployment con
 
 HEAD requests use R2 metadata without opening an object body. The handler releases an unused current-deployment response before returning a fallback. The handler's `env` type requires the R2 binding under its configured name. If a deployed Worker still lacks it, the handler warns, naming the binding to add, and returns a 404 for a missing asset rather than an HTML success response.
 
-The handler is `createAssetFallback()` in `@rndsqr/usher-cloudflare/worker`, one type-checked module with no imports. Generated workers inline its source text and add a default export, so there is one copy of the handler and the generated file deploys without bundling. An app that already has a Worker imports the same function and calls it for requests it does not answer itself; that app owns its routing configuration.
+The handler is `createAssetFallback()` in `@ericchernuka/usher-cloudflare/worker`, one type-checked module with no imports. Generated workers inline its source text and add a default export, so there is one copy of the handler and the generated file deploys without bundling. An app that already has a Worker imports the same function and calls it for requests it does not answer itself; that app owns its routing configuration.
 
 ## Update state
 

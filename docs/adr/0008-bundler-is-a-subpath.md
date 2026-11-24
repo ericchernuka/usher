@@ -8,7 +8,7 @@ Most of the package does not depend on a bundler. Resolving build facts, the `vi
 
 ## Decision
 
-The build-tool package is `@rndsqr/usher-plugin`, and the bundler is a subpath: `@rndsqr/usher-plugin/vite`. The package has no root export. The browser entry is `/client`, and the adapter contract is `/adapter`, which names no bundler types.
+The build-tool package is `@ericchernuka/usher-plugin`, and the bundler is a subpath: `@ericchernuka/usher-plugin/vite`. The package has no root export. The browser entry is `/client`, and the adapter contract is `/adapter`, which names no bundler types.
 
 There is no unplugin layer and no internal bundler interface. A second bundler would be a sibling entry that reuses the neutral modules.
 

@@ -2,7 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { text } from 'node:stream/consumers'
 import * as valibot from 'valibot'
 import type { Connect } from 'vite'
-import type { BuildFacts } from '@rndsqr/usher-core'
+import type { BuildFacts } from '@ericchernuka/usher-core'
 import {
   createDeploySimulation,
   DEPLOY_MODES,

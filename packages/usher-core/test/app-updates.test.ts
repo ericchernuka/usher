@@ -295,6 +295,6 @@ test('given a tab from another copy of the library, then creating the app fails 
   const foreign: Tab = JSON.parse('{}')
 
   expect(() => createAppUpdates({ running, versionUrl }, foreign)).toThrow(
-    /not made by this copy of @rndsqr\/usher-core.*only one version/,
+    /not made by this copy of @ericchernuka\/usher-core.*only one version/,
   )
 })

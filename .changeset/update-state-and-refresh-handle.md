@@ -1,7 +1,7 @@
 ---
-'@rndsqr/usher-core': minor
-'@rndsqr/react-usher': minor
-'@rndsqr/usher-plugin': minor
+'@ericchernuka/usher-core': minor
+'@ericchernuka/react-usher': minor
+'@ericchernuka/usher-plugin': minor
 ---
 
 `createAppUpdates()` now returns the update state and the refresh as two objects, each with its own subscription. This is a breaking change to the object it returns.
@@ -28,8 +28,8 @@ New in core: `createUpdateNotice(appUpdates, { minAttention })` gives a declarat
 
 New in React: `useUpdateNotice(appUpdates, { minAttention })` and the headless `UpdateNotice.Root`, `UpdateNotice.Refresh` and `UpdateNotice.Close` parts. `Root` takes an `announcement` prop and announces that wording, politely for a prompt and assertively for urgent attention, through live regions it keeps beside the notice. `Refresh` takes an `action` that receives the refresh to call and runs in a transition.
 
-`@rndsqr/react-usher` now needs React 19.2. It uses `useEffectEvent`, `use` and transitions that take async functions.
+`@ericchernuka/react-usher` now needs React 19.2. It uses `useEffectEvent`, `use` and transitions that take async functions.
 
-New entry `@rndsqr/usher-core/testing`: `createTestTab()` is a tab with virtual time. Pass it as the second argument to `createAppUpdates`, from core or from `@rndsqr/usher-plugin/client`, then call `tab.deploy(build)` and `await tab.advance(ms)`.
+New entry `@ericchernuka/usher-core/testing`: `createTestTab()` is a tab with virtual time. Pass it as the second argument to `createAppUpdates`, from core or from `@ericchernuka/usher-plugin/client`, then call `tab.deploy(build)` and `await tab.advance(ms)`.
 
-`@rndsqr/usher-core` is now a peer dependency of `@rndsqr/usher-plugin` and `@rndsqr/react-usher`. Install it in the app, as the README already said to, so there is one copy.
+`@ericchernuka/usher-core` is now a peer dependency of `@ericchernuka/usher-plugin` and `@ericchernuka/react-usher`. Install it in the app, as the README already said to, so there is one copy.
