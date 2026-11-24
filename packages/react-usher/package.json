@@ -1,6 +1,6 @@
 {
   "name": "@ericchernuka/react-usher",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "license": "MIT",
   "description": "React hooks for Usher update state and refresh blockers.",
   "type": "module",
