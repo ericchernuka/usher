@@ -58,6 +58,11 @@ function checkContents({ manifest, tarball }) {
 
   assert.deepEqual(unexpected, [], `${manifest.name} ships unexpected files`)
   assert(files.includes('package/LICENSE'), `${manifest.name} ships no LICENSE`)
+  assert.equal(
+    manifest.repository?.url,
+    'git+https://github.com/ericchernuka/usher.git',
+    `${manifest.name} needs repository.url for npm provenance`,
+  )
 
   for (const [entry, target] of Object.entries(manifest.exports)) {
     const path = `package/${target.replace(/^\.\//, '')}`

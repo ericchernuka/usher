@@ -2,6 +2,11 @@
   "name": "@ericchernuka/react-usher",
   "version": "0.2.0",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ericchernuka/usher.git",
+    "directory": "packages/react-usher"
+  },
   "description": "React hooks for Usher update state and refresh blockers.",
   "type": "module",
   "sideEffects": false,

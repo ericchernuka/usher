@@ -2,6 +2,11 @@
   "name": "@ericchernuka/usher-plugin",
   "version": "0.2.0",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ericchernuka/usher.git",
+    "directory": "packages/usher-plugin"
+  },
   "description": "Build plugin and browser entry for Usher: build facts, version.json, and skew-protection adapters. Vite is supported.",
   "type": "module",
   "sideEffects": false,

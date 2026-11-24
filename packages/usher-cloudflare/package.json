@@ -2,6 +2,11 @@
   "name": "@ericchernuka/usher-cloudflare",
   "version": "0.2.0",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ericchernuka/usher.git",
+    "directory": "packages/usher-cloudflare"
+  },
   "description": "Cloudflare Pages and Workers skew protection for Usher: build adapters and the asset fallback handler.",
   "type": "module",
   "sideEffects": false,
