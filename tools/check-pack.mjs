@@ -51,10 +51,13 @@ function checkContents({ manifest, tarball }) {
 
   const unexpected = files.filter(
     file =>
-      file !== 'package/package.json' && !file.startsWith('package/dist/'),
+      file !== 'package/package.json' &&
+      file !== 'package/LICENSE' &&
+      !file.startsWith('package/dist/'),
   )
 
   assert.deepEqual(unexpected, [], `${manifest.name} ships unexpected files`)
+  assert(files.includes('package/LICENSE'), `${manifest.name} ships no LICENSE`)
 
   for (const [entry, target] of Object.entries(manifest.exports)) {
     const path = `package/${target.replace(/^\.\//, '')}`
@@ -240,7 +243,9 @@ try {
   run('pnpm', ['exec', 'turbo', 'run', 'build', '--filter=./packages/*'], repo)
   const packed = packages.map(pack)
   packed.forEach(checkContents)
-  say('tarballs contain only dist and package.json, and every export exists')
+  say(
+    'tarballs contain only dist, package.json, and LICENSE, and every export exists',
+  )
 
   writeApp(packed)
   run('pnpm', ['install', '--prefer-offline'], app)

@@ -1,6 +1,7 @@
 {
   "name": "@ericchernuka/usher-plugin",
   "version": "0.1.0",
+  "license": "MIT",
   "description": "Build plugin and browser entry for Usher: build facts, version.json, and skew-protection adapters. Vite is supported.",
   "type": "module",
   "sideEffects": false,
