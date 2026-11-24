@@ -13,6 +13,8 @@ const targets = {
   },
 }
 
+export type EdgeFixture = Awaited<ReturnType<typeof buildEdgeFixture>>
+
 export async function buildEdgeFixture(target: keyof typeof targets) {
   const { adapter, worker } = targets[target]
   const root = resolve(import.meta.dirname, `../../.edge-fixture/${target}`)
