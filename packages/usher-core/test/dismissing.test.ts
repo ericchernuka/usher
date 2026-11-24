@@ -1,5 +1,5 @@
 import { server } from './mocks/node'
-import { serveBuild, serveNetworkError } from './mocks/overrides'
+import { serveBuild } from './mocks/overrides'
 import {
   HOUR,
   MINUTE,
@@ -109,7 +109,7 @@ test('given a default prompt snooze, then a forward jump of the wall clock does 
   await tab.waitForResponse()
   expect(store.state.dismiss()).toBe(true)
   tab.setSystemTime(tab.now() + 24 * HOUR)
-  server.use(serveNetworkError())
+  tab.setOnline(false)
   await tab.runFor(10 * MINUTE)
   expect(store.state.get().reason).toBe('dismissed')
 })

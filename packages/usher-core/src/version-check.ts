@@ -23,15 +23,14 @@ interface Watching {
   inFlight?: AbortController | undefined
 }
 
-interface Answer {
-  res: VersionResponse
-  facts: BuildFacts | CheckProblem
-}
+type Outcome = { res: VersionResponse; facts: BuildFacts } | CheckProblem
 
-async function readFacts(
+type AnsweredProblem = Exclude<CheckProblem, { kind: 'request-failed' }>
+
+async function readAnswer(
   res: VersionResponse,
   versionUrl: string,
-): Promise<BuildFacts | CheckProblem> {
+): Promise<Outcome> {
   if (!res.ok) {
     return { kind: 'http-error', versionUrl, status: res.status }
   }
@@ -53,7 +52,7 @@ async function readFacts(
   const parsed = parseBuildFacts(body)
 
   return parsed.success
-    ? parsed.output
+    ? { res, facts: parsed.output }
     : {
         kind: 'not-build-facts',
         versionUrl,
@@ -61,7 +60,7 @@ async function readFacts(
       }
 }
 
-function returned(problem: CheckProblem) {
+function returned(problem: AnsweredProblem) {
   if (problem.kind === 'http-error') {
     return `HTTP ${problem.status}`
   }
@@ -71,6 +70,14 @@ function returned(problem: CheckProblem) {
   }
 
   return `JSON that is not build facts (${problem.issues})`
+}
+
+function warning(problem: CheckProblem) {
+  if (problem.kind === 'request-failed') {
+    return `[usher] The request to ${problem.versionUrl} failed while the browser was online. Check that the URL is reachable and that the page's Content-Security-Policy connect-src allows it. Updates cannot be detected until the request succeeds.`
+  }
+
+  return `[usher] ${problem.versionUrl} should return build facts as JSON, but returned ${returned(problem)}. Updates cannot be detected until it does.`
 }
 
 class VersionCheck implements Readable<BuildFacts | undefined> {
@@ -142,16 +149,16 @@ class VersionCheck implements Readable<BuildFacts | undefined> {
     this.#lastCheck = { monotonic: env.monotonicNow(), wall: env.wallNow() }
     this.#schedulePoll()
 
-    const answer = await this.#request(controller)
+    const outcome = await this.#request(controller)
 
-    if (answer && !controller.signal.aborted) {
-      this.#accept(answer)
+    if (outcome && !controller.signal.aborted) {
+      this.#accept(outcome)
     }
   }
 
-  /** The answer to one request, or nothing when none arrived in time */
+  /** The outcome of one request, or nothing when the network let it down */
   #request = async (controller: AbortController) => {
-    const { env, versionUrl } = this.#settings
+    const { env } = this.#settings
 
     const cancelTimeout = env.startTimer(
       () => controller.abort(new DOMException('timed out', 'TimeoutError')),
@@ -159,14 +166,7 @@ class VersionCheck implements Readable<BuildFacts | undefined> {
     )
 
     try {
-      const res = await env.fetch(this.#checkUrl(), {
-        cache: 'no-store',
-        signal: controller.signal,
-      })
-
-      return { res, facts: await readFacts(res, versionUrl) }
-    } catch {
-      return undefined
+      return await this.#ask(controller.signal)
     } finally {
       cancelTimeout()
 
@@ -176,10 +176,34 @@ class VersionCheck implements Readable<BuildFacts | undefined> {
     }
   }
 
-  #accept = ({ res, facts }: Answer) => {
-    if ('kind' in facts) {
-      return this.#reportOnce(facts)
+  #ask = async (signal: AbortSignal): Promise<Outcome | undefined> => {
+    const { env, versionUrl } = this.#settings
+    const onlineAtStart = env.isOnline()
+    let res: VersionResponse
+
+    try {
+      res = await env.fetch(this.#checkUrl(), { cache: 'no-store', signal })
+    } catch {
+      // Offline and hidden tabs fail requests routinely, so only a request
+      // refused while online and visible is a check problem
+      return onlineAtStart && env.isOnline() && env.isVisible()
+        ? { kind: 'request-failed', versionUrl }
+        : undefined
     }
+
+    try {
+      return await readAnswer(res, versionUrl)
+    } catch {
+      return undefined
+    }
+  }
+
+  #accept = (outcome: Outcome) => {
+    if ('kind' in outcome) {
+      return this.#reportOnce(outcome)
+    }
+
+    const { res, facts } = outcome
 
     const serverTime = Date.parse(res.headers.get('date') ?? '')
 
@@ -199,9 +223,7 @@ class VersionCheck implements Readable<BuildFacts | undefined> {
 
     this.#reported = true
 
-    console.warn(
-      `[usher] ${problem.versionUrl} should return build facts as JSON, but returned ${returned(problem)}. Updates cannot be detected until it does.`,
-    )
+    console.warn(warning(problem))
 
     void this.#tellApp(problem)
   }

@@ -51,9 +51,12 @@ export type UpdateState =
 export type UpdateReason = UpdateState['reason']
 
 /**
- * An answer to a version check that is not build facts. `versionUrl` is the
- * version check's own `versionUrl` option.
+ * A version check that cannot get build facts for a reason the deployment can
+ * fix. `versionUrl` is the version check's own `versionUrl` option.
  *
+ * - `request-failed`: the browser was online but the request failed before any
+ *   response arrived, as when the page's Content-Security-Policy `connect-src`
+ *   does not allow the version URL.
  * - `http-error`: the response was not OK.
  * - `not-json`: the body could not be read as JSON, as when a host answers with
  *   its HTML fallback. `contentType` is the response's header, if it had one.
@@ -61,6 +64,7 @@ export type UpdateReason = UpdateState['reason']
  *   wrong, in words for a person.
  */
 export type CheckProblem =
+  | { kind: 'request-failed'; versionUrl: string }
   | { kind: 'http-error'; versionUrl: string; status: number }
   | { kind: 'not-json'; versionUrl: string; contentType: string | null }
   | { kind: 'not-build-facts'; versionUrl: string; issues: string }

@@ -67,9 +67,9 @@ export interface VersionCheckOptions {
    */
   pollInterval?: number
   /**
-   * Handler for a version check answer that is not build facts, called
-   * once per outage so the app can report a deployment whose tabs cannot
-   * detect updates, and never for network errors or timeouts
+   * Handler for a version check that cannot get build facts, called once
+   * per outage so the app can report a deployment whose tabs cannot detect
+   * updates, and never while the browser is offline or for timeouts
    */
   onCheckProblem?: (problem: CheckProblem) => void | Promise<void>
 }
