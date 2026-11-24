@@ -50,6 +50,7 @@ describe('asset fallback worker', () => {
   it("returns a real 404, not the SPA's index.html, for an unknown chunk", async () => {
     const res = await get('/assets/never-shipped.js')
     expect(res.status).toBe(404)
+    expect(res.headers.get('cache-control')).toBe('no-store')
   })
 
   it('leaves app routes to the SPA fallback', async () => {

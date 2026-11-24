@@ -57,9 +57,9 @@ The sample apps demonstrate the Vite configuration and update UI. Deployment con
 2. Pass requests outside the asset prefix, and non-GET and non-HEAD requests, through unchanged.
 3. Return the current asset if the response is neither a 404 nor HTML. HTML is treated as a miss because SPA fallback can return an index page for a missing chunk.
 4. Look up the old asset in R2, using the request path relative to the configured base.
-5. Return the stored asset with its HTTP metadata, ETag, and immutable cache header. Return a real 404 when no copy exists.
+5. Return the stored asset with its HTTP metadata, ETag, and immutable cache header. Return a real 404 with `Cache-Control: no-store` when no copy exists, so a browser does not keep the miss after the chunk reaches the archive.
 
-HEAD requests use R2 metadata without opening an object body. The handler releases an unused current-deployment response before returning a fallback. The handler's `env` type requires the R2 binding under its configured name. If a deployed Worker still lacks it, the handler warns, naming the binding to add, and returns a 404 for a missing asset rather than an HTML success response.
+HEAD requests use R2 metadata without opening an object body. The handler releases an unused current-deployment response before returning a fallback. The handler's `env` type requires the R2 binding under its configured name. If a deployed Worker still lacks it, the handler warns, naming the binding to add, and returns the same uncacheable 404 for a missing asset rather than an HTML success response.
 
 The handler is `createAssetFallback()` in `@ericchernuka/usher-cloudflare/worker`, one type-checked module with no imports. Generated workers inline its source text and add a default export, so there is one copy of the handler and the generated file deploys without bundling. An app that already has a Worker imports the same function and calls it for requests it does not answer itself; that app owns its routing configuration.
 

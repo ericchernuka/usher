@@ -47,8 +47,9 @@ export type AssetFallback<Binding extends string> = (
  *
  * Requests outside `<base><assetsDir>/` and requests that are not GET or HEAD
  * get the current deployment's answer unchanged. A chunk in neither place is a
- * real 404, never the SPA's HTML fallback. Archive keys are paths relative to
- * `base`, matching `aws s3 sync dist/assets s3://<bucket>/assets`.
+ * real 404, never the SPA's HTML fallback, and browsers must not store it.
+ * Archive keys are paths relative to `base`, matching
+ * `aws s3 sync dist/assets s3://<bucket>/assets`.
  */
 export function createAssetFallback<Binding extends string = 'CHUNK_ARCHIVE'>(
   options?: AssetFallbackOptions<Binding>,
@@ -59,6 +60,19 @@ export function createAssetFallback<Binding extends string>(
   const base = options.base ?? '/'
   const prefix = `${base}${options.assetsDir ?? 'assets'}/`
   const binding = options.r2Binding ?? 'CHUNK_ARCHIVE'
+
+  // Prevent browsers from replaying a chunk 404 after the chunk reaches the
+  // archive, because chunk URLs are content-hashed and Cloudflare caches a 404
+  // without Cache-Control for the zone's Browser Cache TTL
+  //
+  // Keep notFound inside createAssetFallback because the generated worker
+  // inlines only createAssetFallback.toString() (ADR 0006)
+  // oxlint-disable-next-line unicorn/consistent-function-scoping
+  const notFound = () =>
+    new Response('Not found', {
+      status: 404,
+      headers: { 'Cache-Control': 'no-store' },
+    })
 
   const isChunkRead = (request: Request) =>
     (request.method === 'GET' || request.method === 'HEAD') &&
@@ -73,7 +87,7 @@ export function createAssetFallback<Binding extends string>(
         : await archive.get(key)
 
     if (!chunk) {
-      return new Response('Not found', { status: 404 })
+      return notFound()
     }
 
     const headers = new Headers()
@@ -105,13 +119,7 @@ export function createAssetFallback<Binding extends string>(
       )
     }
 
-    if (!archive && current.status === 404) {
-      return current
-    }
-
-    const response = archive
-      ? await fromArchive(request, archive)
-      : new Response('Not found', { status: 404 })
+    const response = archive ? await fromArchive(request, archive) : notFound()
 
     await current.body?.cancel()
 
