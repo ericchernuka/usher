@@ -251,6 +251,23 @@ describe('createAssetFallback()', () => {
     expect(await res.text()).toBe('')
     expect(get).not.toHaveBeenCalled()
   })
+
+  it('answers a HEAD miss with an uncacheable 404 and no body', async () => {
+    const env = {
+      ASSETS: { fetch: async () => new Response(null, { status: 404 }) },
+      CHUNK_ARCHIVE: archiveOf({}),
+    }
+
+    const res = await fallback(
+      new Request('https://app.test/assets/never.js', { method: 'HEAD' }),
+      env,
+    )
+
+    expect(res.status).toBe(404)
+    expect(res.headers.get('cache-control')).toBe('no-store')
+    expect(res.body).toBeNull()
+  })
+
   it('serves an asset without a content type as the current build', async () => {
     const get = vi.fn<ChunkArchive['get']>(async () => null)
 

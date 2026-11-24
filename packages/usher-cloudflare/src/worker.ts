@@ -107,7 +107,7 @@ export function createAssetFallback<Binding extends string>(
     // archive, because chunk URLs are content-hashed and Cloudflare applies the
     // zone's Browser Cache TTL to a 404 that has no Cache-Control
     if (!chunk) {
-      return new Response('Not found', {
+      return new Response(request.method === 'HEAD' ? null : 'Not found', {
         status: 404,
         headers: { 'Cache-Control': 'no-store' },
       })
