@@ -1,0 +1,13 @@
+# Keeps the SHA-pinned workflow actions up to date. The cooldown gives a
+# compromised action release a week to be caught before it is proposed here.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      actions:
+        patterns: ['*']
