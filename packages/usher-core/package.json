@@ -2,6 +2,11 @@
   "name": "@ericchernuka/usher-core",
   "version": "0.2.0",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ericchernuka/usher.git",
+    "directory": "packages/usher-core"
+  },
   "description": "Keep open tabs on the current build with version polling, update state, and update surfaces.",
   "type": "module",
   "sideEffects": false,
