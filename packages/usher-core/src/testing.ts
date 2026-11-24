@@ -23,10 +23,6 @@ export function createTestTab(): TestTab {
 
   const fake = createFakeEnvironment({
     fetch: async () => {
-      if (!served) {
-        throw new TypeError('nothing is deployed')
-      }
-
       const body = JSON.stringify(served)
 
       return {
@@ -39,10 +35,12 @@ export function createTestTab(): TestTab {
   })
 
   fake.setSystemTime(Date.now())
+  fake.setOnline(false)
 
   return Object.assign(createTabIn(fake.env), {
     deploy(build: BuildFacts) {
       served = build
+      fake.setOnline(true)
     },
     advance(ms: number) {
       if (!Number.isFinite(ms) || ms < 0) {

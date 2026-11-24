@@ -7,7 +7,6 @@ import {
   serveBuild,
   serveError,
   serveHang,
-  serveCutOff,
   serveNetworkError,
   serveRaw,
 } from './mocks/overrides'
@@ -500,15 +499,87 @@ describe('a version file that is missing or misrouted', () => {
     },
   )
 
-  test('given the network is down, then the tab does not warn', async ({
+  test('given the browser is offline, then the tab does not warn or tell the app', async ({
     app,
     tab,
   }) => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    server.use(serveNetworkError())
-    app.subscribe(app.create())
+    const onCheckProblem = vi.fn<(problem: CheckProblem) => void>()
+    tab.setOnline(false)
+    app.subscribe(app.create({ onCheckProblem }))
     await tab.waitForResponse()
     await app.poll()
+
+    expect(warn).not.toHaveBeenCalled()
+    expect(onCheckProblem).not.toHaveBeenCalled()
+  })
+
+  test('given the browser is online but refuses the request, as a Content-Security-Policy that does not allow the version URL does, then the tab warns and tells the app, once across several checks', async ({
+    app,
+    tab,
+  }) => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const onCheckProblem = vi.fn<(problem: CheckProblem) => void>()
+    server.use(serveNetworkError())
+    app.subscribe(app.create({ onCheckProblem }))
+    await tab.waitForResponse()
+    await app.poll()
+    await app.poll()
+
+    expect(warn).toHaveBeenCalledTimes(1)
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringMatching(
+        /https:\/\/app\.test\/version\.json failed .*Content-Security-Policy connect-src/,
+      ),
+    )
+    expect(onCheckProblem).toHaveBeenCalledTimes(1)
+    expect(onCheckProblem).toHaveBeenCalledWith({
+      kind: 'request-failed',
+      versionUrl: VERSION_URL,
+    })
+  })
+
+  test('given a check fails while offline and the browser comes back online before it settles, then the tab does not warn', async ({
+    app,
+    tab,
+  }) => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    tab.setOnline(false)
+    app.subscribe(app.create())
+    tab.setOnline(true)
+    await tab.waitForResponse()
+
+    expect(warn).not.toHaveBeenCalled()
+  })
+
+  test('given a refused request settles after the tab is hidden, then the tab does not warn', async ({
+    app,
+    tab,
+  }) => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    server.use(
+      http.get(VERSION_URL, () => {
+        tab.setVisibilitySilently('hidden')
+
+        return HttpResponse.error()
+      }),
+    )
+    app.subscribe(app.create())
+    await tab.waitForResponse()
+
+    expect(warn).not.toHaveBeenCalled()
+  })
+
+  test('given a check times out, then the tab does not warn', async ({
+    app,
+    tab,
+  }) => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    server.use(serveHang())
+    app.subscribe(app.create())
+    await tab.flush()
+    await tab.advance(30 * SECOND)
+    await tab.waitForResponse()
 
     expect(warn).not.toHaveBeenCalled()
   })
@@ -538,20 +609,26 @@ describe('a version file that is missing or misrouted', () => {
     stop()
   })
 
-  test('given the connection drops while the version file is arriving, then it counts as the network being down, not as a problem with the file', async ({
-    app,
-    tab,
-  }) => {
+  test('given the connection drops while the version file is arriving, then it counts as the network being down, not as a problem with the file', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const onCheckProblem = vi.fn<(problem: CheckProblem) => void>()
-    server.use(serveCutOff())
-    const store = app.create({ onCheckProblem })
-    app.subscribe(store)
+
+    const tab = createFakeEnvironment({
+      fetch: async () => ({
+        ok: true,
+        status: 200,
+        headers: { get: () => 'application/json' },
+        json: () => Promise.reject(new TypeError('terminated')),
+      }),
+    })
+
+    const store = createStore(tab, { onCheckProblem })
+    const stop = store.state.subscribe(() => {})
     await tab.waitForResponse()
-    await app.poll()
 
     expect(onCheckProblem).not.toHaveBeenCalled()
     expect(warn).not.toHaveBeenCalled()
     expect(store.state.get().reason).toBe('unknown')
+    stop()
   })
 })

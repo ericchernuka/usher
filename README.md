@@ -182,17 +182,17 @@ export const appUpdates = createAppUpdates({
 })
 ```
 
-| Option           | Default                            | Meaning                                                                                                                           |
-| ---------------- | ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| `running`        | Required by core; set by `/client` | Build facts of the running build.                                                                                                 |
-| `versionUrl`     | Required by core; set by `/client` | The serving deployment's `version.json` URL.                                                                                      |
-| `promptAfter`    | 12 hours                           | Time outdated at which a tab reaches prompt attention. `false` turns the level off.                                               |
-| `urgentAfter`    | 24 hours                           | Time outdated at which it reaches urgent attention. `false` turns the level off. Must be later than `promptAfter`.                |
-| `promptSnooze`   | Until urgent attention starts      | How long a prompt dismissal quiets prompt attention.                                                                              |
-| `pollInterval`   | 5 minutes                          | How often a visible tab checks, at least 10 seconds. Focus and visibility also trigger a check, at most once a minute.            |
-| `reload`         | `location.reload()`                | The document load a refresh performs. Return or resolve `false` when you know it did not happen.                                  |
-| `onCheckProblem` | None                               | Called when the version file answers with something that is not build facts. See [Version file problems](#version-file-problems). |
-| `storageKey`     | `usher`                            | Prefix for the keys Usher writes to localStorage, such as `usher:prompt-dismissal`. Set one per app when apps share an origin.    |
+| Option           | Default                            | Meaning                                                                                                                                      |
+| ---------------- | ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `running`        | Required by core; set by `/client` | Build facts of the running build.                                                                                                            |
+| `versionUrl`     | Required by core; set by `/client` | The serving deployment's `version.json` URL.                                                                                                 |
+| `promptAfter`    | 12 hours                           | Time outdated at which a tab reaches prompt attention. `false` turns the level off.                                                          |
+| `urgentAfter`    | 24 hours                           | Time outdated at which it reaches urgent attention. `false` turns the level off. Must be later than `promptAfter`.                           |
+| `promptSnooze`   | Until urgent attention starts      | How long a prompt dismissal quiets prompt attention.                                                                                         |
+| `pollInterval`   | 5 minutes                          | How often a visible tab checks, at least 10 seconds. Focus and visibility also trigger a check, at most once a minute.                       |
+| `reload`         | `location.reload()`                | The document load a refresh performs. Return or resolve `false` when you know it did not happen.                                             |
+| `onCheckProblem` | None                               | Called when a version check cannot get build facts for a reason the deployment can fix. See [Version file problems](#version-file-problems). |
+| `storageKey`     | `usher`                            | Prefix for the keys Usher writes to localStorage, such as `usher:prompt-dismissal`. Set one per app when apps share an origin.               |
 
 Invalid options throw at creation, with a message that names the option.
 
@@ -200,7 +200,7 @@ Usher never reloads on navigation, on a chunk error, or on its own timer. The as
 
 ### Version file problems
 
-A version check can get an answer that is not build facts: a 404, a host's HTML fallback, or JSON of the wrong shape. Until that is fixed, tabs on that deployment cannot detect updates, and nothing in the update state says so. The version check logs one console warning per outage. Pass `onCheckProblem` to report it as well:
+A version check can get an answer that is not build facts: a 404, a host's HTML fallback, or JSON of the wrong shape. The browser can also refuse the request outright, as it does when the page's Content-Security-Policy `connect-src` does not allow the version URL. Until that is fixed, tabs on that deployment cannot detect updates, and nothing in the update state says so. The version check logs one console warning per outage. Pass `onCheckProblem` to report it as well:
 
 ```ts
 export const appUpdates = createAppUpdates({
@@ -209,13 +209,14 @@ export const appUpdates = createAppUpdates({
 })
 ```
 
-| Kind              | Meaning                                                               | Also carries                    |
-| ----------------- | --------------------------------------------------------------------- | ------------------------------- |
-| `http-error`      | The response was not OK.                                              | `status`                        |
-| `not-json`        | The body was not JSON, as when a host answers with its HTML fallback. | `contentType`, `null` if absent |
-| `not-build-facts` | The JSON was the wrong shape.                                         | `issues`, in words for a person |
+| Kind              | Meaning                                                                                                  | Also carries                    |
+| ----------------- | -------------------------------------------------------------------------------------------------------- | ------------------------------- |
+| `request-failed`  | The browser was online, but the request failed before any response, as when CSP `connect-src` blocks it. | Nothing more                    |
+| `http-error`      | The response was not OK.                                                                                 | `status`                        |
+| `not-json`        | The body was not JSON, as when a host answers with its HTML fallback.                                    | `contentType`, `null` if absent |
+| `not-build-facts` | The JSON was the wrong shape.                                                                            | `issues`, in words for a person |
 
-Every problem also carries `versionUrl`. The handler runs once per outage, and again if the file recovers and breaks later. It may be async; a throw or a rejection is logged and does not stop later checks. Network errors, timeouts and a connection that drops while the file is arriving do not call it, because a tab being offline is normal.
+Every problem also carries `versionUrl`. The handler runs once per outage, and again if the file recovers and breaks later. It may be async; a throw or a rejection is logged and does not stop later checks. A request that fails while the browser is offline or the tab is hidden, a timeout, and a connection that drops while the file is arriving do not call it, because those are normal for a tab. A flaky connection that the browser still counts as online can report `request-failed`, so an app that only wants configuration mistakes can filter on `kind`.
 
 ### Refresh and unsaved work
 

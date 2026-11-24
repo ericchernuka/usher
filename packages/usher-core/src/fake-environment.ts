@@ -109,7 +109,7 @@ export interface FakeEnvironmentOptions {
 export function createFakeEnvironment(options: FakeEnvironmentOptions = {}) {
   let wall = Date.parse('2026-11-11T16:00:00Z')
   let monotonic = 0
-  let visible = true
+  const page = { visible: true, online: true }
   let reloads = 0
   let lastTimer = 0
   let storageBlocked = false
@@ -138,7 +138,10 @@ export function createFakeEnvironment(options: FakeEnvironmentOptions = {}) {
 
       return () => void timers.delete(id)
     },
-    fetch: responses.fetch,
+    fetch: (url, init) =>
+      page.online
+        ? responses.fetch(url, init)
+        : Promise.reject(new TypeError('Failed to fetch')),
     get storage() {
       if (storageBlocked) {
         throw new DOMException('Storage is blocked', 'SecurityError')
@@ -147,7 +150,8 @@ export function createFakeEnvironment(options: FakeEnvironmentOptions = {}) {
       return storage
     },
     baseUrl: () => 'https://app.test/now',
-    isVisible: () => visible,
+    isVisible: () => page.visible,
+    isOnline: () => page.online,
     onVisibilityChange: visibility.add,
     onFocus: focus.add,
     onStorageChange: storageChanges.add,
@@ -249,11 +253,14 @@ export function createFakeEnvironment(options: FakeEnvironmentOptions = {}) {
     },
     focus: () => focus.emit(),
     setVisibility(state: 'visible' | 'hidden') {
-      visible = state === 'visible'
+      page.visible = state === 'visible'
       visibility.emit()
     },
     setVisibilitySilently(state: 'visible' | 'hidden') {
-      visible = state === 'visible'
+      page.visible = state === 'visible'
+    },
+    setOnline(online: boolean) {
+      page.online = online
     },
     otherTabSets(key: string, value: string) {
       storage.setItem(key, value)

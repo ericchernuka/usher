@@ -1,6 +1,6 @@
 import type { Attention } from '../src/types'
 import { server } from './mocks/node'
-import { serveBuild, serveNetworkError } from './mocks/overrides'
+import { serveBuild } from './mocks/overrides'
 import {
   DAY,
   HOUR,
@@ -71,7 +71,7 @@ describe('escalating as the running build ages', () => {
 
     await tab.runFor(MINUTE)
     tab.setSystemTime(tab.now() - HOUR)
-    server.use(serveNetworkError())
+    tab.setOnline(false)
     tab.focus()
     await tab.waitForResponse()
     await tab.runFor(MINUTE)
@@ -92,7 +92,7 @@ describe('escalating as the running build ages', () => {
     await tab.waitForResponse()
     expect(store.state.get().attention).toBe('passive')
 
-    server.use(serveNetworkError())
+    tab.setOnline(false)
     await tab.runFor(11 * HOUR)
 
     expect(store.state.get()).toMatchObject({
@@ -120,7 +120,7 @@ test('given time passed while hidden, then visibility evaluates age even if the 
   tab.setVisibility('hidden')
   expect(tab.pendingTimers()).toBe(0)
   await tab.runFor(24 * HOUR)
-  server.use(serveNetworkError())
+  tab.setOnline(false)
   tab.setVisibility('visible')
   await tab.waitForResponse()
   expect(store.state.get().attention).toBe('urgent')
@@ -136,7 +136,7 @@ test('given time passed while unsubscribed, then subscribing evaluates age befor
   await tab.waitForResponse()
   stop()
   await tab.runFor(24 * HOUR)
-  server.use(serveNetworkError())
+  tab.setOnline(false)
   app.subscribe(store)
   expect(store.state.get().attention).toBe('urgent')
 })

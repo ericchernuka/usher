@@ -17,6 +17,8 @@ export interface Environment {
   /** The URL that relative URLs resolve against. */
   baseUrl(): string
   isVisible(): boolean
+  /** False when the browser knows it has no network. True does not promise a working connection. */
+  isOnline(): boolean
   onVisibilityChange(listener: () => void): () => void
   onFocus(listener: () => void): () => void
   /** Changes other tabs made to `storage`. A cleared storage reports a null key. */
@@ -56,6 +58,7 @@ export function createBrowserEnvironment(): Environment {
     },
     baseUrl: () => document.baseURI,
     isVisible: () => document.visibilityState === 'visible',
+    isOnline: () => navigator.onLine,
     onVisibilityChange(listener) {
       document.addEventListener('visibilitychange', listener)
 
