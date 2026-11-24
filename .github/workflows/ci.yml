@@ -16,11 +16,22 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      id-token: write # exchanged for a short-lived Vercel Remote Cache token
+    env:
+      # Only main writes to the shared cache. Pull requests read from it, so
+      # a branch can't plant cache entries that later runs would replay.
+      TURBO_REMOTE_CACHE_READ_ONLY: ${{ github.event_name == 'pull_request' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 0 # fallow reads git history for churn
+      # Skipped until the TURBO_TEAM variable is set, and for pull requests
+      # from forks, which can't get an OIDC token.
+      - if: vars.TURBO_TEAM != '' && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository)
+        uses: vercel/setup-turborepo-remote-cache-action@49d7b1b46ba4c9251e1977986bfe18336feabc8f # v1.1.0
+        with:
+          team: ${{ vars.TURBO_TEAM }}
       - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
