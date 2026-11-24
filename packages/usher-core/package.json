@@ -1,6 +1,7 @@
 {
   "name": "@ericchernuka/usher-core",
   "version": "0.1.0",
+  "license": "MIT",
   "description": "Keep open tabs on the current build with version polling, update state, and update surfaces.",
   "type": "module",
   "sideEffects": false,
