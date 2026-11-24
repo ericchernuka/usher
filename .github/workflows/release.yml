@@ -107,6 +107,9 @@ jobs:
         uses: changesets/action/publish@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
         with:
           pack-dir-artifact-id: ${{ needs.pack.outputs.pack-dir-artifact-id }}
+          # The next step makes the one release for this version. The
+          # per-package git tags are still pushed.
+          create-github-releases: false
       # The packages share one version, so make one GitHub release per version
       # instead of one per package. GitHub writes the notes from the pull
       # requests merged since the previous release.
