@@ -82,7 +82,11 @@ export function stickyUrgency(): Signal {
         reason = 'rollback'
       }
 
-      return reason && { claim: { attention: 'urgent', reason } }
+      if (reason === undefined) {
+        return undefined
+      }
+
+      return { claim: { attention: 'urgent', reason } }
     },
   }
 }
