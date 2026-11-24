@@ -47,8 +47,9 @@ export type AssetFallback<Binding extends string> = (
  *
  * Requests outside `<base><assetsDir>/` and requests that are not GET or HEAD
  * get the current deployment's answer unchanged. A chunk in neither place is a
- * real 404, never the SPA's HTML fallback. Archive keys are paths relative to
- * `base`, matching `aws s3 sync dist/assets s3://<bucket>/assets`.
+ * real 404, never the SPA's HTML fallback, and browsers must not store it.
+ * Archive keys are paths relative to `base`, matching
+ * `aws s3 sync dist/assets s3://<bucket>/assets`.
  */
 export function createAssetFallback<Binding extends string = 'CHUNK_ARCHIVE'>(
   options?: AssetFallbackOptions<Binding>,
@@ -64,30 +65,32 @@ export function createAssetFallback<Binding extends string>(
     (request.method === 'GET' || request.method === 'HEAD') &&
     new URL(request.url).pathname.startsWith(prefix)
 
-  const fromArchive = async (request: Request, archive: ChunkArchive) => {
-    const key = new URL(request.url).pathname.slice(base.length)
+  // Return null for a missing R2 binding as for a missing chunk, so every
+  // chunk miss reaches the one 404 in the handler
+  const findArchived = async (
+    request: Request,
+    env: AssetFallbackEnv<Binding | 'CHUNK_ARCHIVE'>,
+  ) => {
+    // The type requires the binding, but a deployed Worker can still lack it
+    const archive: ChunkArchive | undefined = env[binding]
 
-    const chunk =
-      request.method === 'HEAD'
-        ? await archive.head(key)
-        : await archive.get(key)
+    if (!archive) {
+      console.warn(
+        `[usher] R2 binding "${binding}" is missing, so skew protection is off. Add an R2 bucket binding named "${binding}" to this Worker or Pages project.`,
+      )
 
-    if (!chunk) {
-      return new Response('Not found', { status: 404 })
+      return null
     }
 
-    const headers = new Headers()
-    chunk.writeHttpMetadata(headers)
-    headers.set('ETag', chunk.httpEtag)
-    headers.set('Cache-Control', 'public, max-age=31536000, immutable')
+    const key = new URL(request.url).pathname.slice(base.length)
 
-    return new Response(chunk.body ?? null, { headers })
+    return request.method === 'HEAD' ? archive.head(key) : archive.get(key)
   }
 
   return async (request, env) => {
     const current = await env.ASSETS.fetch(request)
 
-    // Pages answers a missing file with index.html and a 200, so HTML is a miss.
+    // Pages answers a missing file with index.html and a 200, so HTML is a miss
     const isMiss =
       current.status === 404 ||
       current.headers.get('content-type')?.includes('text/html')
@@ -96,25 +99,25 @@ export function createAssetFallback<Binding extends string>(
       return current
     }
 
-    // The type requires the binding, but a deployed Worker can still lack it.
-    const archive: ChunkArchive | undefined = env[binding]
-
-    if (!archive) {
-      console.warn(
-        `[usher] R2 binding "${binding}" is missing, so skew protection is off. Add an R2 bucket binding named "${binding}" to this Worker or Pages project.`,
-      )
-    }
-
-    if (!archive && current.status === 404) {
-      return current
-    }
-
-    const response = archive
-      ? await fromArchive(request, archive)
-      : new Response('Not found', { status: 404 })
+    const chunk = await findArchived(request, env)
 
     await current.body?.cancel()
 
-    return response
+    // Prevent browsers from replaying this 404 after the chunk reaches the
+    // archive, because chunk URLs are content-hashed and Cloudflare applies the
+    // zone's Browser Cache TTL to a 404 that has no Cache-Control
+    if (!chunk) {
+      return new Response(request.method === 'HEAD' ? null : 'Not found', {
+        status: 404,
+        headers: { 'Cache-Control': 'no-store' },
+      })
+    }
+
+    const headers = new Headers()
+    chunk.writeHttpMetadata(headers)
+    headers.set('ETag', chunk.httpEtag)
+    headers.set('Cache-Control', 'public, max-age=31536000, immutable')
+
+    return new Response(chunk.body ?? null, { headers })
   }
 }

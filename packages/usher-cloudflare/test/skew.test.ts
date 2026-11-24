@@ -163,6 +163,7 @@ describe('createAssetFallback()', () => {
     const res = await fallback(new Request('https://app.test/assets/x.js'), env)
 
     expect(res.status).toBe(404)
+    expect(res.headers.get('cache-control')).toBe('no-store')
     expect(warn).toHaveBeenCalledWith(
       expect.stringMatching(
         /R2 binding "CHUNK_ARCHIVE" is missing.*Add an R2 bucket binding named "CHUNK_ARCHIVE"/,
@@ -209,17 +210,21 @@ describe('createAssetFallback()', () => {
     expect(res.headers.get('content-type')).toBe('text/html')
   })
 
-  it('keeps the original 404 when the binding is missing', async () => {
+  it("without its R2 binding replaces static assets' cacheable 404 with one browsers will not store", async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {})
 
     const env = withoutBinding({
-      fetch: async () => new Response('gone', { status: 404 }),
+      fetch: async () =>
+        new Response('gone', {
+          status: 404,
+          headers: { 'cache-control': 'public, max-age=14400' },
+        }),
     })
 
     const res = await fallback(new Request('https://app.test/assets/x.js'), env)
 
     expect(res.status).toBe(404)
-    expect(await res.text()).toBe('gone')
+    expect(res.headers.get('cache-control')).toBe('no-store')
   })
 
   it('answers HEAD from R2 metadata without opening the body', async () => {
@@ -246,6 +251,23 @@ describe('createAssetFallback()', () => {
     expect(await res.text()).toBe('')
     expect(get).not.toHaveBeenCalled()
   })
+
+  it('answers a HEAD miss with an uncacheable 404 and no body', async () => {
+    const env = {
+      ASSETS: { fetch: async () => new Response(null, { status: 404 }) },
+      CHUNK_ARCHIVE: archiveOf({}),
+    }
+
+    const res = await fallback(
+      new Request('https://app.test/assets/never.js', { method: 'HEAD' }),
+      env,
+    )
+
+    expect(res.status).toBe(404)
+    expect(res.headers.get('cache-control')).toBe('no-store')
+    expect(res.body).toBeNull()
+  })
+
   it('serves an asset without a content type as the current build', async () => {
     const get = vi.fn<ChunkArchive['get']>(async () => null)
 
@@ -288,6 +310,7 @@ describe('createAssetFallback()', () => {
     )
 
     expect(miss.status).toBe(404)
+    expect(miss.headers.get('cache-control')).toBe('no-store')
   })
 
   it('leaves a request outside the assets prefix to static assets, without asking R2', async () => {
