@@ -40,6 +40,11 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # Playwright's --with-deps runs apt-get update, which fails if any apt
+      # source is unreachable. The runner image adds Microsoft's repos
+      # (packages.microsoft.com) that this job never installs from, and a 403
+      # from them once failed main. Drop them so only Ubuntu's mirrors matter.
+      - run: grep -rl packages.microsoft.com /etc/apt/sources.list.d | xargs -r sudo rm -v
       - run: pnpm --filter @ericchernuka/react-usher exec playwright install --with-deps chromium webkit
       - run: pnpm check
 
