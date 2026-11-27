@@ -4,30 +4,28 @@ Usher keeps running single-page apps working across deployments and guides users
 
 It combines two independent pieces:
 
-1. **Calm, escalating update prompts** that work with any hosting provider, respect unsaved work, and escalate only when a running build falls far behind or hits a rollback or forced update.
-2. **Optional skew protection** that keeps previously shipped JS and CSS chunks reachable on hosts that replace static files on deploy, so older running builds never break and users are never reloaded by force.
+1. **Calm, escalating update prompts** that work with any host, respect unsaved work, and escalate only when a running build stays outdated past your limit or hits a rollback or forced update.
+2. **Optional skew protection** that keeps previously shipped JS and CSS chunks reachable on hosts that replace static files on deploy, so older running builds keep working and users are never reloaded by force.
 
-**Contents:** [Why Usher?](#why-usher) · [Quick start](#quick-start) · [Update state](#update-state) · [Showing update UI](#showing-update-ui) · [Refresh and unsaved work](#refresh-and-unsaved-work) · [Development](#trying-the-flows-in-development) · [Testing](#testing-update-ui) · [Skew protection](#skew-protection) · [Rollbacks & forced updates](#rollbacks-and-forced-updates) · [Monitoring](#monitoring-in-production) · [Without Vite](#using-usher-without-vite) · [Reference](#reference)
+**Contents:** [Quick start](#quick-start) · [Update state](#update-state) · [Showing update UI](#showing-update-ui) · [Refresh and unsaved work](#refresh-and-unsaved-work) · [Development](#trying-the-flows-in-development) · [Testing](#testing-update-ui) · [Skew protection](#skew-protection) · [Rollbacks & forced updates](#rollbacks-and-forced-updates) · [Monitoring](#monitoring-in-production) · [Reference](#reference)
 
 ## Why Usher?
 
-When you deploy a new build of a single-page app, users who already loaded the app keep running the previous build in memory. That happens with any client older than the latest deployment: a browser session opened minutes before a deploy, an installed PWA, an Electron window, or a mobile WebView.
+After a deploy, already-open clients (browser sessions, PWAs, Electron windows, mobile WebViews) still run the previous build in memory. When they lazy-load a route or modal, they request old content-hashed chunks. On hosts that overwrite the static directory on deploy, those requests return a `404` or an SPA fallback `index.html` with status `200`, breaking imports.
 
-As that running app navigates to a lazy-loaded route or modal, it requests code-split chunks using the old content hashes. On hosts that overwrite the static directory on every deploy, those requests miss and return a `404` or an SPA fallback `index.html` with a `200` status. The browser then fails the import. Many apps work around this by forcing a hard reload on navigation or chunk errors, which discards unsaved forms and interrupts the user.
+Instead of forcing hard reloads that discard unsaved forms, Usher:
 
-Usher takes a different approach:
-
-- **Keep older running builds working** through skew protection (either your host's built-in support or an Usher adapter).
-- **Ask users to refresh calmly** as their running build gets outdated, and block refreshes while they have unsaved work.
-- **Escalate when it matters**, jumping straight to an urgent, non-dismissible notice on rollbacks, forced updates, or once a running app has been outdated past your limit.
+- **Keeps older running builds working** through skew protection (your host's built-in support or an Usher adapter).
+- **Prompts calmly** as a running app becomes outdated, while blocking refreshes when the user has unsaved work.
+- **Escalates when needed**, moving straight to a non-dismissible urgent notice on rollbacks, forced updates, or after your time limit.
 
 Usher never reloads on navigation, on a chunk error, or on its own timer. The app refreshes only when your code calls `refresh.run()`.
 
 ## Quick start
 
-> **Requirements:** Vite 5+ for `@ericchernuka/usher-plugin`, and React 19.2+ for `@ericchernuka/react-usher`. For other bundlers, see [Using Usher without Vite](#using-usher-without-vite).
+> **Requirements:** Vite 5+ for `@ericchernuka/usher-plugin` and React 19.2+ for `@ericchernuka/react-usher`. For other bundlers, see [Using Usher without Vite](#using-usher-without-vite).
 
-Install the core package and the Vite plugin, plus React hooks or Cloudflare skew protection if your app uses them:
+Install the core package and Vite plugin, plus React helpers or Cloudflare skew protection if needed:
 
 ```sh
 pnpm add @ericchernuka/usher-core
@@ -40,7 +38,7 @@ pnpm add @ericchernuka/react-usher
 pnpm add -D @ericchernuka/usher-cloudflare
 ```
 
-> `@ericchernuka/usher-core` is a peer dependency of the plugin and the React package, so your app installs it once and every package shares that single copy.
+`@ericchernuka/usher-core` is a peer dependency of the plugin and React packages so your app shares one copy.
 
 Add the plugin to Vite:
 
@@ -53,7 +51,7 @@ import { usher } from '@ericchernuka/usher-plugin/vite'
 export default defineConfig({ plugins: [react(), usher()] })
 ```
 
-Create one `appUpdates` instance at module scope. Creating it has no side effects: `appUpdates.state` checks for a new build only while it has at least one subscriber and stops after the last subscriber leaves.
+Create one `appUpdates` instance at module scope. Creating it has no side effects: `appUpdates.state` runs version checks only while it has at least one subscriber.
 
 ```ts
 // updates.ts
@@ -97,22 +95,22 @@ function JobForm() {
 }
 ```
 
-Each hook subscribes only to the piece you pass it (`appUpdates.state` or `appUpdates.refresh`):
+Each hook reads one behaviour:
 
-- `useUpdateState` returns the full update state and defers updates so state changes render at low priority and never interrupt typing.
-- `useRefreshing` returns `true` while a refresh is in flight (useful when reloads go through a router) and does not start version checks on its own.
-- `useRefreshBlocker` accepts a boolean or a callback; an inline function is safe because the hook registers once and always calls the latest callback.
+- `useUpdateState(appUpdates.state)` returns the update state and defers updates so state changes never interrupt typing.
+- `useRefreshing(appUpdates.refresh)` returns `true` while a reload is in flight and does not start version checks on its own.
+- `useRefreshBlocker(appUpdates.refresh, isDirty)` accepts a boolean or callback; an inline function is safe because the hook registers once and calls the latest one.
 
 ### Required cache headers
 
-Serve `version.json` uncached. The client also adds a `t` query parameter to each check. On Cloudflare Pages and Workers static assets, add this to `public/_headers`:
+Serve `version.json` uncached (the client also appends a `t` query parameter). On Cloudflare Pages and Workers Static Assets, add this to `public/_headers`:
 
 ```
 /version.json
   Cache-Control: no-store
 ```
 
-Do not cache `index.html` at the edge either. A refresh must load the latest build's HTML document, so serve it with `Cache-Control: no-cache` or your host's default.
+Keep `index.html` uncached at the edge (`Cache-Control: no-cache` or your host's default) so a refresh loads the latest build's HTML document.
 
 ## Update state
 
@@ -143,25 +141,23 @@ Rollback or forced-update cutoff observed ────────────�
 | An older commit was deployed                    | `urgent`  | `rollback`  |
 | Running build predates the forced-update cutoff | `urgent`  | `forced`    |
 
-Every state except `unknown` includes `latest`, the build metadata (called `BuildFacts` in Usher) reported by the server.
+Every state except `unknown` includes `latest`, the build facts reported by the server.
 
-A running app counts as outdated from the build time of the first newer build it sees, not from the age of its own build. An app loaded a minute ago on last week's build is one minute outdated when the next deploy lands, so it starts `passive`. Later deploys do not restart the clock, so a team that deploys a hundred times a day and a team that deploys once a week both prompt after 12 hours outdated and turn urgent after 24. If the running app catches up (for example, after a rollback back to its build), the clock resets.
-
-Rollback and forced-update urgency persists until the app reloads, even if a later response reports the running version again. A forced-update cutoff applies even when the version matches. Urgent attention cannot be dismissed.
-
-A prompt dismissal records its server timestamp in `localStorage`. It quiets every open window or tab on the same origin whose prompt threshold had already started, until each reaches urgent attention. A running build that reaches its prompt threshold later can still prompt. `promptSnooze` sets a shorter or longer quiet period, though it never quiets urgent attention. With `urgentAfter: false` and no `promptSnooze`, a dismissed prompt stays dismissed.
+- **Time outdated:** Measured from the build time of the first newer build seen (`outdated since`), not the running build's own age. Later deploys do not restart the clock, so deploy frequency does not change when prompts appear; catching up resets it.
+- **Sticky urgency:** Rollback and forced-update urgency persists until reload, even if a later check reports the running version again. A forced-update cutoff applies even when the version matches, and urgent attention cannot be dismissed.
+- **Prompt dismissal:** Stores its server timestamp in `localStorage`, quieting every eligible running app on the same origin until urgent attention (or for `promptSnooze`, never past urgent). With `urgentAfter: false` and no `promptSnooze`, a dismissed prompt stays dismissed.
 
 ## Showing update UI
 
-Choose the integration that fits your UI stack:
+Pick the integration that matches your UI stack:
 
-- **Already use an imperative toast or banner library (such as Sonner or your design system's toaster)?** Use `connectUpdateSurface` from `@ericchernuka/usher-core`.
-- **Building a custom banner or toast in React?** Use the headless `UpdateNotice` components (or `useUpdateNotice`) from `@ericchernuka/react-usher`.
-- **Want raw state for a nav indicator or custom logic?** Use `useUpdateState` and `useRefreshing`, as shown in [Quick start](#quick-start).
+- **Imperative toast or banner library (such as Sonner):** `connectUpdateSurface` from `@ericchernuka/usher-core`.
+- **Custom banner or toast in React:** `UpdateNotice` components or `useUpdateNotice` from `@ericchernuka/react-usher`.
+- **Nav indicator or custom logic:** `useUpdateState` and `useRefreshing`, shown in [Quick start](#quick-start).
 
 ### Connecting a toast or banner library
 
-`connectUpdateSurface` drives an imperative toast or banner library from your `appUpdates` instance:
+`connectUpdateSurface` drives an imperative toast or banner library from `appUpdates`:
 
 ```ts
 import {
@@ -193,7 +189,6 @@ function copyFor({ attention, reason }: UpdateNotice) {
       action: 'Refresh now',
     }
   }
-
   if (attention === 'urgent') {
     return {
       title: 'Please refresh',
@@ -201,7 +196,6 @@ function copyFor({ attention, reason }: UpdateNotice) {
       action: 'Refresh now',
     }
   }
-
   return {
     title: 'A new version is available',
     description: "Refresh when you're ready.",
@@ -210,24 +204,17 @@ function copyFor({ attention, reason }: UpdateNotice) {
 }
 ```
 
-`show` runs once per change of attention or reason, receiving a new notice each time. Your surface owns its toast ID and copy. The default minimum attention is `prompt`; pass `minAttention: 'passive'` for a persistent update banner.
+`show` runs once per change of `attention` or `reason` with a new notice. The default `minAttention` is `'prompt'`; pass `'passive'` for a persistent banner.
 
-`notice.close()` signals that the user closed the surface:
-
-- **At `prompt`:** dismisses the prompt across all open tabs on that origin and calls `hide()`.
-- **At `passive`:** calls `hide()` and stays hidden until attention or reason changes. A notice created via `createUpdateNotice` or the React components stays hidden while subscribed; if its last subscriber leaves and later returns (such as inside a hidden React 19.2 `<Activity>` boundary), it stays hidden only if the update state did not change in between.
-- **At `urgent`:** calls `show()` again with a new notice, because urgent attention cannot be dismissed and some toast libraries remove a toast on close anyway. Outside `connectUpdateSurface`, closing an urgent notice is a no-op.
-
-Important lifecycle details:
-
-- **Safe programmatic close:** A notice that is no longer active ignores `close()`, so toast libraries that fire `onClose` during `hide()` are safe.
-- **No auto-dismiss timers on urgent notices:** A toast library that auto-dismisses urgent notices on a timer causes `connectUpdateSurface` to re-show it; after five re-shows in one pass, it stops and logs an error.
-- **Error handling and cleanup:** `disconnect()` hides the surface and removes its subscription. If `show` throws, Usher logs the error, drops the notice, and retries on the next state change. If `hide` throws, Usher logs it once and does not retry.
-- **Notice metadata:** Each notice carries `latest` (the latest build metadata when the notice was created; read `appUpdates.state` for the current build), `closable` (`false` at `urgent`), and `announce` (`'off'` at `passive`, `'polite'` at `prompt`, `'assertive'` at `urgent`), which you can forward to a toast library's live region.
+- **`notice.close()` at `prompt`:** Dismisses across eligible running apps on that origin and calls `hide()`.
+- **`notice.close()` at `passive`:** Calls `hide()` until `attention` or `reason` changes. When unsubscribed and re-subscribed (such as inside a hidden React 19.2 `<Activity>`), it stays hidden only if the update state did not change.
+- **`notice.close()` at `urgent`:** Calls `show()` again with a new notice. Outside `connectUpdateSurface`, closing an urgent notice is a no-op.
+- **Timers and errors:** Inactive notices ignore `close()`, so `onClose` callbacks fired during `hide()` are safe. Never set an auto-dismiss timer on urgent notices (Usher stops and logs after five re-shows in one pass). `disconnect()` hides and unsubscribes; `show` errors are logged and retried on the next state change, and `hide` errors are logged once.
+- **Notice fields:** Each notice carries `latest` (build facts at creation; read `appUpdates.state` for the current value), `closable` (`false` at `urgent`), and `announce` (`'off'`, `'polite'`, or `'assertive'`).
 
 ### Headless React components
 
-Components that render their own markup can read the same notice, with the same close rules, from `useUpdateNotice(appUpdates, { minAttention })`. For the common case, `@ericchernuka/react-usher` provides headless compound components:
+Components that render their own markup can read the same notice via `useUpdateNotice(appUpdates, { minAttention })`, or compose the headless `UpdateNotice` parts:
 
 ```tsx
 import { UpdateNotice } from '@ericchernuka/react-usher'
@@ -252,12 +239,12 @@ function UpdateBanner() {
 }
 ```
 
-- `UpdateNotice.Root` renders only while a notice is active and exposes `data-attention` and `data-reason` attributes for styling.
+- `UpdateNotice.Root` renders only while a notice is active and exposes `data-attention` and `data-reason` for styling.
 - `UpdateNotice.Refresh` sets `disabled` and `data-refreshing` while a refresh is in flight.
 - `UpdateNotice.Close` renders nothing at `urgent`.
-- Each part runs your own `onClick` handler before acting. The components ship no copy or styles, never steal focus, and never close on a timer.
+- Each part runs your `onClick` before acting, ships no copy or styles, never moves focus, and never closes on a timer.
 
-To customize what happens when a user clicks `Refresh` (for example, prompting to confirm discarding unsaved changes), pass an `action` prop. It receives the `refresh` function and runs inside a React transition, keeping the button disabled until the action settles:
+Pass an `action` prop to `UpdateNotice.Refresh` to customize clicks (for example, confirming before discarding unsaved work). It runs inside a React transition and keeps the button disabled until it settles:
 
 ```tsx
 <UpdateNotice.Refresh
@@ -272,28 +259,27 @@ To customize what happens when a user clicks `Refresh` (for example, prompting t
 </UpdateNotice.Refresh>
 ```
 
-Because `useRefreshBlocker` reads the value from the last render, use `flushSync` from `react-dom` before retrying when your dirty state lives in React state. Otherwise, the second `refresh()` sees the old value and is blocked again. Ensure your `action` always settles: React holds overlapping transitions in the same root pending until all Actions resolve. A press without an `action` prop does not start a transition.
+Because `useRefreshBlocker` reads the value from the last render, use `flushSync` from `react-dom` before retrying when dirty state lives in React state. Ensure `action` always settles so it does not hold overlapping React transitions pending. A press without `action` starts no transition.
 
-`UpdateNotice.Root` announces updates to screen readers using the string returned by its required `announcement` prop (return `''` to suppress announcements).
+`UpdateNotice.Root` announces updates to screen readers using its required `announcement` prop (return `''` to stay silent).
 
 <details>
 <summary>Accessibility, live-region, CSP, and SSR details</summary>
 
-Each `Root` mounts visually hidden `status` and `alert` live regions beside the notice before there is anything to say. It writes the announcement copy into the region that matches `notice.announce`, so screen readers announce prompts politely and urgent notices assertively when the notice appears and whenever the copy changes.
+Each `Root` mounts visually hidden `status` and `alert` live regions beside the notice and writes `announcement` copy into the region matching `notice.announce` (`polite` for prompts, `assertive` for urgent) when the notice appears or copy changes.
 
-- **Portals and dialogs:** Because the live regions render beside `Root`, a notice inside a modal dialog, portal, or another document is announced in that context. A notice behind an open modal dialog is silent while the page is inert and is not re-announced when the dialog closes.
-- **Hidden subtrees:** A `Root` with `hidden`, `inert`, or `aria-hidden` stays silent. If you hide a `Root` via CSS classes instead, return an empty string from `announcement` while hidden.
-- **Multiple notices:** Two `Root` instances that both return copy for the same notice will both announce it. Provide copy on one and return `''` from the other.
-- **Strict CSP and SSR:** The live regions apply visually hidden styles from script (no inline `style` attribute required for strict Content Security Policies) and carry `hidden` in server-rendered markup so they take no space before hydration.
-- **Explicit copy:** `announcement` is required because only your app knows which text is the message rather than decorative labels or controls.
+- **Portals and dialogs:** Because live regions render beside `Root`, notices inside a modal, portal, or other document are announced there. A notice behind an open modal is silent while the page is inert and is not re-announced when the modal closes.
+- **Hidden subtrees:** A `Root` with `hidden`, `inert`, or `aria-hidden` stays silent. If hidden by a CSS class instead, return `''` from `announcement` while hidden.
+- **Multiple notices:** Two `Root` instances returning copy for the same notice both announce it; return `''` from the secondary one.
+- **Strict CSP and SSR:** Visually hidden styles are set from script (no inline `style` attribute needed) and carry `hidden` in server-rendered markup so they take no space before hydration.
 
 </details>
 
 ## Refresh and unsaved work
 
-Refresh blockers decide whether a refresh can proceed. They run synchronously in registration order, and any blocker that returns `true` or throws stops the refresh. In React, `useRefreshBlocker(appUpdates.refresh, isDirty)` registers a blocker while the component's effects are active. Because React tears down effects inside a hidden React 19.2 `<Activity>` boundary, register blockers for hidden drafts outside `<Activity>` or directly with `appUpdates.refresh.addBlocker`.
+Refresh blockers run synchronously in registration order; any blocker that returns `true` or throws stops the refresh. `useRefreshBlocker(appUpdates.refresh, isDirty)` registers while the component's effects are active. Because React tears down effects inside a hidden React 19.2 `<Activity>`, register blockers for hidden drafts outside `<Activity>` or with `appUpdates.refresh.addBlocker`.
 
-`refresh.run()` resolves with the outcome:
+`refresh.run()` resolves with the refresh outcome:
 
 | Outcome     | Meaning                                                  |
 | ----------- | -------------------------------------------------------- |
@@ -301,19 +287,7 @@ Refresh blockers decide whether a refresh can proceed. They run synchronously in
 | `blocked`   | A refresh blocker stopped it. `reload` was never called. |
 | `declined`  | `reload` returned `false` or threw. The error is logged. |
 
-Nothing is stored between calls, so any outcome can be retried, and concurrent calls share one attempt. `refresh.get()` is `true` from the moment `reload` is called until it settles, and `false` again after every outcome; a blocked refresh never sets it to `true`.
-
-To let users override a blocker, confirm on `blocked`, clear the dirty state, and call `refresh.run()` again:
-
-```ts
-if (
-  (await appUpdates.refresh.run()) === 'blocked' &&
-  confirm('Discard changes?')
-) {
-  discardChanges() // the blocker now returns false
-  await appUpdates.refresh.run()
-}
-```
+Nothing is stored between calls, so any outcome can be retried, and concurrent calls share one attempt. `refresh.get()` is `true` from when `reload` is called until it settles, and `false` otherwise (never `true` on `blocked`). To let a user override a blocker outside `UpdateNotice.Refresh`, confirm on `'blocked'`, clear the dirty state, and call `appUpdates.refresh.run()` again.
 
 To route reloads through a client-side router, override `reload`:
 
@@ -330,11 +304,11 @@ export const appUpdates = createAppUpdates({
 })
 ```
 
-This recipe is tested against TanStack Router, whose own navigation blockers then apply to the reload. Because the router does not report a blocked navigation, `refresh.run()` resolves `reloading` either way; use a refresh blocker when your app needs to know. During a refresh the current and next paths match, so a router blocker must check dirty state rather than a pathname change.
+Tested against TanStack Router, whose navigation blockers then apply to the reload. Because the router does not report a blocked navigation, `refresh.run()` resolves `'reloading'` either way; use a refresh blocker when your app needs to know, and check dirty state rather than pathname change (both paths match during a reload).
 
 ## Trying the flows in development
 
-You do not need real deployments to test update prompts, rollbacks, or forced updates. Enable `usher({ devtools: true })` to simulate deploys from the browser console while `vite` runs:
+Enable `usher({ devtools: true })` to simulate deploys from the browser console while `vite` runs:
 
 ```js
 await __USHER_DEVTOOLS__.deploy() // same as { mode: 'advance' }
@@ -343,20 +317,16 @@ await __USHER_DEVTOOLS__.deploy({ mode: 'rollback' })
 await __USHER_DEVTOOLS__.deploy({ mode: 'reset' })
 ```
 
-Importing `@ericchernuka/usher-plugin/client` declares the `__USHER_DEVTOOLS__` global (typed as possibly `undefined`) so app code can guard calls safely. The example apps under `examples/react/` wire these four modes to buttons alongside live update state, an update notice, and a dirty draft blocker. Run `pnpm build` once, then start an example with `pnpm --filter usher-example-react-cloudflare-pages dev`.
+- `advance` serves a new version built now from the same commit (escalates via your thresholds).
+- `force` does the same with a forced-update cutoff covering the running build (`urgent` / `forced`).
+- `rollback` serves a version with an earlier commit time (`urgent` / `rollback`).
+- `reset` restores the real build facts.
 
-The dev server serves simulated build metadata from the version URL while your app continues running the real build:
-
-- `advance` serves a new version built now from the same commit. Your running app becomes outdated, and attention follows your thresholds counted from now.
-- `force` does the same with a forced-update cutoff that covers the real build. Attention becomes `urgent` with reason `forced`.
-- `rollback` serves a new version whose commit time is earlier than the real one. Attention becomes `urgent` with reason `rollback`.
-- `reset` serves the real build metadata again.
-
-The promise resolves with the served build metadata once the server updates. Your running app notices on its next check or when the page regains focus. Forced-update and rollback urgency stay active until reload, matching production. A freshly reloaded page still runs the real build, so it stays outdated until you call `reset` or restart Vite. Devtools only change `version.json` and do not exercise asset fallback. Production builds contain neither the global nor the endpoint.
+Importing `@ericchernuka/usher-plugin/client` declares the typed `__USHER_DEVTOOLS__` global (possibly `undefined`). Your running app picks up simulated deploys on its next check or window focus; a reloaded page still runs the real build until you call `reset` or restart Vite. Devtools only affect `version.json` (not asset fallback) and are omitted from production builds. The apps under `examples/react/` wire these four modes to buttons: run `pnpm build` once, then `pnpm --filter usher-example-react-cloudflare-pages dev`.
 
 ## Testing update UI
 
-`createTestTab()` simulates a browser tab with virtual time. Pass it as the second argument to `createAppUpdates`:
+`createTestTab()` simulates a browser environment with virtual time. Pass it as the second argument to `createAppUpdates`:
 
 ```tsx
 import { createAppUpdates } from '@ericchernuka/usher-core'
@@ -373,16 +343,13 @@ const appUpdates = createAppUpdates(
 render(<App appUpdates={appUpdates} />)
 
 tab.deploy({ ...running, version: 'two' })
-await tab.advance(5 * 60_000) // five minutes: the next check sees the deploy
-await tab.advance(12 * 60 * 60_000) // twelve hours
-// the app now shows its prompt
+await tab.advance(5 * 60_000) // five minutes: next check sees the deploy
+await tab.advance(12 * 60 * 60_000) // twelve hours: app shows its prompt
 ```
 
-`deploy` sets the build metadata returned by every version check, and `advance` moves virtual time forward, running due checks and timers. Before the first `deploy`, the test tab behaves as offline. Its clock starts at real time and moves only when advanced. Leave `setTimeout` unfaked while advancing, because the test tab uses real timers to settle async checks.
+Before the first `deploy`, the test tab behaves as offline. Its clock starts at real time and moves only via `advance`; leave `setTimeout` unfaked while advancing so async checks can settle. Set `buildTime` to `new Date(tab.now()).toISOString()` on deployed builds to start the outdated clock there, and keep `commitTime` so the deploy is not treated as a rollback.
 
-Because an app counts as outdated from the build time of the newer build, set `buildTime` to `new Date(tab.now()).toISOString()` on deployed builds to start the clock there, and keep the running build's `commitTime` so the deploy is not treated as a rollback.
-
-The recipe above uses `@ericchernuka/usher-core` directly, so it works in any test runner. To test through `@ericchernuka/usher-plugin/client`, your test runner must run through Vite with `usher()` configured (so the virtual build metadata module is available). Vitest's browser mode needs nothing else; in Vitest's Node environments, also inline the plugin package through Vite:
+This recipe uses `@ericchernuka/usher-core` and works in any test runner. To test through `@ericchernuka/usher-plugin/client`, run tests through Vite with `usher()` configured (and inline the plugin in Vitest Node environments):
 
 ```ts
 // vitest.config.ts
@@ -395,46 +362,28 @@ export default defineConfig({
 })
 ```
 
-```tsx
-import { createTestTab } from '@ericchernuka/usher-core/testing'
-import {
-  createAppUpdates,
-  runningBuild,
-} from '@ericchernuka/usher-plugin/client'
-
-const tab = createTestTab()
-const appUpdates = createAppUpdates({}, tab)
-render(<App appUpdates={appUpdates} />)
-
-tab.deploy({
-  ...runningBuild,
-  version: 'next',
-  buildTime: new Date(tab.now()).toISOString(),
-})
-await tab.advance(5 * 60_000)
-await tab.advance(12 * 60 * 60_000)
-```
+Then pass `tab` to `createAppUpdates({}, tab)` and deploy `{ ...runningBuild, version: 'next', buildTime: new Date(tab.now()).toISOString() }`.
 
 ## Skew protection
 
-Skew protection keeps old content-hashed chunks reachable after a deployment so running apps on older builds do not fail when lazy-loading code.
+Skew protection keeps old content-hashed chunks reachable after a deploy so older running apps can still lazy-load code.
 
 ### How skew protection works across hosts
 
-Skew protection is optional in Usher because many hosts already provide it or let you configure it without an edge adapter:
+Skew protection is optional because many hosts already support it without an Usher adapter:
 
 | Hosting setup                                       | How old chunks stay reachable                                                                            | What you need from Usher                                                                                      |
 | --------------------------------------------------- | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
 | **Vercel (Skew Protection enabled)**                | Vercel pins older clients to their deployment assets using a deployment ID cookie or header.             | Client packages only (`@ericchernuka/usher-core`, `@ericchernuka/usher-plugin`, `@ericchernuka/react-usher`). |
 | **S3 + CloudFront, GCS, or object-storage CDNs**    | CI uploads hashed assets without `--delete`, and a bucket lifecycle rule expires old files after N days. | Client packages only. Keep `index.html` and `version.json` uncached.                                          |
-| **Cloudflare Pages and Workers Static Assets**      | Each deploy replaces the full static directory, and SPA fallback returns `index.html` on missing assets. | Client packages plus `@ericchernuka/usher-cloudflare` (with an append-only R2 chunk archive).                 |
+| **Cloudflare Pages and Workers Static Assets**      | Each deploy replaces the full static directory, and SPA fallback returns `index.html` on missing assets. | Client packages plus `@ericchernuka/usher-cloudflare` with an append-only R2 chunk archive.                   |
 | **Other hosts that replace static files on deploy** | Old asset URLs miss once a new build goes live.                                                          | Client packages plus a custom `SkewProtectionAdapter` or your own edge fallback for `/assets/`.               |
 
-Asset skew protection keeps older frontend builds loading their JS and CSS chunks. Usher's `promptAfter` and `urgentAfter` thresholds (12 hours and 24 hours by default) plus `forceUpdateBuiltBefore` keep the age of active clients bounded, so your backend API only needs a predictable compatibility window.
+Paired with `promptAfter`, `urgentAfter`, and `forceUpdateBuiltBefore`, skew protection bounds the age of active clients so your backend API only needs a predictable compatibility window.
 
 ### Cloudflare Pages and Workers
 
-Pass an adapter from `@ericchernuka/usher-cloudflare`, and the Vite plugin writes the edge files Cloudflare needs:
+Pass an adapter from `@ericchernuka/usher-cloudflare` so the Vite plugin writes the edge files Cloudflare needs:
 
 ```ts
 import {
@@ -451,12 +400,9 @@ usher({ adapter: cloudflareWorkers() }) // { r2Binding?, workerFile? }
 | `cloudflarePages()`   | `dist/_worker.js` (Pages advanced mode) and `dist/_routes.json` limited to `<base>assets/*` | An R2 binding on the Pages project. Pages ignores `functions/` once `_worker.js` exists |
 | `cloudflareWorkers()` | `dist-worker/index.js` (`.js` or `.mjs`), outside `dist` so it is never served publicly     | `wrangler.jsonc`: `main`, `assets.run_worker_first: ["/assets/*"]`, the R2 binding      |
 
-How the generated worker behaves:
-
-- **Fallback order:** Serves the current deployment's static file first, falls back to R2 on a `404` or an SPA-fallback HTML response, and returns a real `404` with `Cache-Control: no-store` when neither has the chunk (so browsers do not cache a transient miss). Requests outside the assets prefix go straight to static assets.
-- **Cloudflare Cache Rules:** Exclude your assets prefix (`/assets/*` by default) from any Cloudflare Cache Rule that overrides browser TTL, or it can replace the `no-store` header on `404` responses.
-- **R2 layout and binding:** Keys are paths relative to `base` (matching `aws s3 sync dist/assets s3://<bucket>/assets` in CI). The R2 binding defaults to `CHUNK_ARCHIVE`.
-- **Vite `base` requirement:** An adapter requires an absolute `base` or a CDN URL; builds with a relative `base` fail because chunks have no fixed path to route.
+- **Fallback order:** Serves the current deployment's file first, falls back to R2 on `404` or SPA-fallback HTML, and returns `404` with `Cache-Control: no-store` if neither has the chunk. Requests outside the assets prefix go straight to static assets.
+- **Cloudflare Cache Rules:** Exclude `/assets/*` (your assets prefix) from Cache Rules that override browser TTL, or they can strip `no-store` from `404` responses.
+- **R2 layout and `base`:** Keys are relative to `base` (matching `aws s3 sync dist/assets s3://<bucket>/assets`), and the R2 binding defaults to `CHUNK_ARCHIVE`. Adapters require an absolute `base` or CDN URL; builds with a relative `base` fail.
 
 For Workers, point Wrangler at the generated entry:
 
@@ -478,7 +424,7 @@ For Workers, point Wrangler at the generated entry:
 
 #### Apps that already have a Worker
 
-If your app owns its Worker or Pages Functions, omit the `adapter` option and call `createAssetFallback()` for requests your app does not handle itself:
+If your app owns its Worker or Pages Functions, omit `adapter` and call `createAssetFallback()` for requests your app does not handle:
 
 ```ts
 import {
@@ -499,11 +445,11 @@ export default {
 }
 ```
 
-Your app then owns its routing: `_routes.json` on Pages, or `assets.run_worker_first` on Workers, must route the assets prefix to the worker. Keep `base` and `assetsDir` aligned with your Vite config. The handler requires the static assets binding named `ASSETS`.
+Route the assets prefix to the worker (`_routes.json` on Pages or `assets.run_worker_first` on Workers), keep `base` and `assetsDir` aligned with Vite, and name the static assets binding `ASSETS`.
 
 ### Deploying with an R2 chunk archive
 
-Upload chunks before the deployment that references them goes live, and never delete from the archive during a deploy:
+Upload chunks before deploying, and never delete from the archive during deploy:
 
 ```sh
 aws s3 sync dist/assets "s3://$BUCKET/assets" \
@@ -511,25 +457,19 @@ aws s3 sync dist/assets "s3://$BUCKET/assets" \
 wrangler pages deploy dist   # or: wrangler deploy
 ```
 
-Because the `aws` CLI defaults to AWS S3, pass R2's endpoint as shown above (or in your AWS profile). `$ACCOUNT_ID` is your Cloudflare account ID, and credentials come from an R2 API token.
-
-Uploading first ensures a client that loads the new `index.html` right as the deploy switches over can already fall back to R2. Omitting `--delete` is what keeps older running builds working; expire old chunks with an R2 lifecycle rule (for example, 30 days) instead.
-
-Deploy one Workers version at a time. Alternating `version.json` responses during a gradual deployment can look like a rollback. R2 continues serving chunks for clients on a bad build until their users refresh.
+Pass your R2 endpoint and R2 API token credentials (the `aws` CLI defaults to AWS S3). Uploading first prevents misses during rollout, and omitting `--delete` keeps older running builds working; expire old chunks with an R2 lifecycle rule (such as 30 days). Deploy one Workers version at a time so alternating `version.json` responses during a gradual deploy do not look like a rollback.
 
 ## Rollbacks and forced updates
 
-These behaviors work on every hosting provider, with or without an Usher adapter.
+These behaviours work on every host, with or without an Usher adapter.
 
-Dashboard rollbacks and old-commit redeploys are detected automatically through `commitTime`. Your build needs `.git` or `APP_COMMIT_TIME`; the plugin logs a warning when neither is present.
+Dashboard rollbacks and old-commit redeploys are detected automatically through `commitTime` (requires `.git` or `APP_COMMIT_TIME`; the plugin warns if neither exists).
 
-For a forward revert deployed as a new commit, set `APP_FORCE_UPDATE_BUILT_BEFORE` to the build time of the fix (`date -u +%Y-%m-%dT%H:%M:%SZ` in the deploy job). Every client running a build created before that timestamp becomes urgent immediately. This value is a build time, not a deadline: a timestamp later than the build itself fails the build because no refresh could ever satisfy it. Clearing `APP_FORCE_UPDATE_BUILT_BEFORE` in a later deploy does not lower urgency in clients that already observed it.
+For a forward revert deployed as a new commit, set `APP_FORCE_UPDATE_BUILT_BEFORE` to the fix's build time (`date -u +%Y-%m-%dT%H:%M:%SZ` in CI). Running builds created before that timestamp become urgent immediately. This value is a build time, not a deadline: a timestamp later than the build itself fails the build. Clearing it in a later deploy does not lower urgency in clients that already saw it.
 
 ## Monitoring in production
 
-### Identifying the running build
-
-To tag error reports or RUM events with the build currently running in the browser, import `runningBuild`:
+Tag error reports or RUM events with the running build:
 
 ```ts
 import { runningBuild } from '@ericchernuka/usher-plugin/client'
@@ -537,9 +477,7 @@ import { runningBuild } from '@ericchernuka/usher-plugin/client'
 reportError(error, { version: runningBuild.version })
 ```
 
-### Handling version file problems
-
-A version check can fail to get valid build metadata because of a deployment issue: a `404`, an HTML fallback response, malformed JSON, or a Content Security Policy `connect-src` rule blocking the request. Until fixed, running apps on that deployment cannot detect updates, and nothing in `UpdateState` exposes the error. Usher logs one console warning per outage; pass `onCheckProblem` to report it to your monitoring tool as well:
+If a deployment breaks `version.json` (a `404`, HTML fallback, bad JSON, or a CSP `connect-src` block), running apps cannot detect updates and `UpdateState` does not expose the failure. Usher logs one console warning per outage; pass `onCheckProblem` to report it:
 
 ```ts
 export const appUpdates = createAppUpdates({
@@ -548,22 +486,20 @@ export const appUpdates = createAppUpdates({
 })
 ```
 
-| Kind              | Meaning                                                                                                  | Also carries                          |
-| ----------------- | -------------------------------------------------------------------------------------------------------- | ------------------------------------- |
-| `request-failed`  | The browser was online, but the request failed before any response, as when CSP `connect-src` blocks it. | Nothing more                          |
-| `http-error`      | The response was not OK.                                                                                 | `status`                              |
-| `not-json`        | The body was not JSON, as when a host answers with its HTML fallback.                                    | `contentType`, `null` if absent       |
-| `not-build-facts` | The JSON was the wrong shape.                                                                            | `issues` (human-readable description) |
+| Kind              | Meaning                                                                    | Also carries                          |
+| ----------------- | -------------------------------------------------------------------------- | ------------------------------------- |
+| `request-failed`  | Online request failed before any response (for example, CSP `connect-src`) | Nothing more                          |
+| `http-error`      | Response was not OK                                                        | `status`                              |
+| `not-json`        | Body was not JSON (for example, an HTML fallback)                          | `contentType`, `null` if absent       |
+| `not-build-facts` | JSON was the wrong shape                                                   | `issues` (human-readable description) |
 
-How `onCheckProblem` behaves:
-
-- **Deduplicated per outage:** Fires once when a problem starts, and again only if `version.json` recovers and breaks later. Every problem object also includes `versionUrl`.
-- **Ignores normal client noise:** Offline clients, hidden tabs, timeouts, and mid-response dropped connections do not call `onCheckProblem`. A flaky connection that the browser still considers online can emit `request-failed`, so filter on `problem.kind` if you only want configuration errors.
-- **Safe async handlers:** `onCheckProblem` may be async; thrown errors or rejected promises are logged and do not interrupt future checks.
+- Fires once per outage (and again only after recovery), always including `versionUrl`.
+- Ignores offline clients, hidden pages, timeouts, and dropped mid-response connections; filter on `problem.kind` if you want to exclude flaky-network `request-failed` events.
+- May be async; throws and rejections are logged without stopping later checks.
 
 ## Using Usher without Vite
 
-With another bundler, pass the running build metadata and version URL directly to `@ericchernuka/usher-core`:
+With another bundler, pass the running build facts and version URL directly to `@ericchernuka/usher-core`:
 
 ```ts
 import { createAppUpdates } from '@ericchernuka/usher-core'
@@ -582,16 +518,16 @@ export const appUpdates = createAppUpdates({
 
 ### Packages
 
-| Import                                  | What it gives you                                                                                     | Needs      |
-| --------------------------------------- | ----------------------------------------------------------------------------------------------------- | ---------- |
-| `@ericchernuka/usher-plugin/vite`       | `usher()`: writes `version.json`, embeds build metadata, runs a skew-protection adapter               | Vite 5+    |
-| `@ericchernuka/usher-plugin/adapter`    | `SkewProtectionAdapter` and its types, for writing an adapter for another host                        | Nothing    |
-| `@ericchernuka/usher-plugin/client`     | `createAppUpdates()` with build metadata filled in, and `runningBuild`                                | The plugin |
-| `@ericchernuka/react-usher`             | `useUpdateState`, `useRefreshing`, `useRefreshBlocker`, `useUpdateNotice`, `UpdateNotice`             | React 19.2 |
-| `@ericchernuka/usher-cloudflare`        | `cloudflarePages()`, `cloudflareWorkers()`: adapters that serve old chunks from R2                    | Cloudflare |
-| `@ericchernuka/usher-cloudflare/worker` | `createAssetFallback()`: the same handler, for apps that own their Worker                             | Cloudflare |
-| `@ericchernuka/usher-core`              | `createAppUpdates(options)`, `connectUpdateSurface()`, and `createUpdateNotice()`, with no build tool | Nothing    |
-| `@ericchernuka/usher-core/testing`      | `createTestTab()`: a fake browser tab with virtual time, for testing update UI                        | Nothing    |
+| Import                                  | What it gives you                                                                              | Needs      |
+| --------------------------------------- | ---------------------------------------------------------------------------------------------- | ---------- |
+| `@ericchernuka/usher-plugin/vite`       | `usher()`: writes `version.json`, embeds build facts, runs a skew-protection adapter           | Vite 5+    |
+| `@ericchernuka/usher-plugin/adapter`    | `SkewProtectionAdapter` and its types, for writing an adapter for another host                 | Nothing    |
+| `@ericchernuka/usher-plugin/client`     | `createAppUpdates()` with build facts filled in, and `runningBuild`                            | The plugin |
+| `@ericchernuka/react-usher`             | `useUpdateState`, `useRefreshing`, `useRefreshBlocker`, `useUpdateNotice`, `UpdateNotice`      | React 19.2 |
+| `@ericchernuka/usher-cloudflare`        | `cloudflarePages()`, `cloudflareWorkers()`: adapters that serve old chunks from R2             | Cloudflare |
+| `@ericchernuka/usher-cloudflare/worker` | `createAssetFallback()`: the same handler, for apps that own their Worker                      | Cloudflare |
+| `@ericchernuka/usher-core`              | `createAppUpdates(options)`, `connectUpdateSurface()`, `createUpdateNotice()`, with no bundler | Nothing    |
+| `@ericchernuka/usher-core/testing`      | `createTestTab()`: a stand-in browser environment with virtual time, for testing update UI     | Nothing    |
 
 ### Plugin options
 
@@ -620,81 +556,33 @@ interface AppUpdates {
     addBlocker(blocker: () => boolean): () => void
   }
 }
-
-type UpdateState =
-  | { attention: 'none'; reason: 'unknown'; latest?: undefined }
-  | { attention: 'none'; reason: 'caught-up'; latest: BuildFacts }
-  | {
-      attention: 'passive'
-      reason: 'outdated' | 'dismissed'
-      latest: BuildFacts
-    }
-  | { attention: 'prompt'; reason: 'outdated'; latest: BuildFacts }
-  | {
-      attention: 'urgent'
-      reason: 'outdated' | 'rollback' | 'forced'
-      latest: BuildFacts
-    }
-
-interface BuildFacts {
-  version: string
-  commitTime: string
-  buildTime: string
-  forceUpdateBuiltBefore?: string
-}
 ```
 
-Create one instance per `storageKey` in a document. Two instances sharing a key in the same document do not hear each other's dismissals because browsers fire `storage` events only in other documents.
-
-`state.get()` returns the same object reference until attention, reason, or any field in `latest` changes. `state.dismiss()` returns `true` only when it lowers a prompt; otherwise it returns `false` and writes nothing. `state` and `refresh` have independent subscriptions, so a listener on `state` hears update state changes and a listener on `refresh` hears when a refresh starts and ends.
+Create one instance per `storageKey` in a document (browsers fire `storage` events only in other documents). `state.get()` keeps the same object reference until `attention`, `reason`, or `latest` changes. `state.dismiss()` returns `true` only when it lowers a prompt; otherwise it returns `false` and writes nothing. `state` and `refresh` have independent subscriptions.
 
 ### createAppUpdates options
 
-Durations are in milliseconds so they can be computed directly:
+Durations are in milliseconds (for example, `4 * 60 * 60_000` for 4 hours). Invalid options throw at creation with a message naming the option.
 
-```ts
-import { createAppUpdates } from '@ericchernuka/usher-plugin/client'
+| Option           | Default                            | Meaning                                                                                                                  |
+| ---------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `running`        | Required by core; set by `/client` | Build facts of the running build (`version`, `commitTime`, `buildTime`, optional `forceUpdateBuiltBefore`).              |
+| `versionUrl`     | Required by core; set by `/client` | The serving deployment's `version.json` URL.                                                                             |
+| `promptAfter`    | 12 hours                           | Time outdated at which a running app reaches prompt attention. `false` disables this level.                              |
+| `urgentAfter`    | 24 hours                           | Time outdated at which it reaches urgent attention. `false` disables this level. Must exceed `promptAfter`.              |
+| `promptSnooze`   | Until urgent attention starts      | Duration for which a prompt dismissal quiets prompt attention.                                                           |
+| `pollInterval`   | 5 minutes                          | How often a visible page checks (at least 10 seconds). Focus and visibility changes also check, at most once per minute. |
+| `reload`         | `location.reload()`                | Document load performed by a refresh. Return or resolve `false` when you know it did not happen.                         |
+| `onCheckProblem` | None                               | Called on a deployment-fixable check problem. See [Monitoring in production](#monitoring-in-production).                 |
+| `storageKey`     | `usher`                            | Prefix for `localStorage` keys (such as `usher:prompt-dismissal`). Set one per app when apps share an origin.            |
 
-const HOUR = 60 * 60 * 1000
-
-export const appUpdates = createAppUpdates({
-  promptAfter: 4 * HOUR,
-  urgentAfter: 12 * HOUR,
-})
-```
-
-| Option           | Default                            | Meaning                                                                                                                                                           |
-| ---------------- | ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `running`        | Required by core; set by `/client` | Build metadata of the running build.                                                                                                                              |
-| `versionUrl`     | Required by core; set by `/client` | The serving deployment's `version.json` URL.                                                                                                                      |
-| `promptAfter`    | 12 hours                           | Time outdated at which a running app reaches prompt attention. `false` turns the level off.                                                                       |
-| `urgentAfter`    | 24 hours                           | Time outdated at which it reaches urgent attention. `false` turns the level off. Must be later than `promptAfter`.                                                |
-| `promptSnooze`   | Until urgent attention starts      | How long a prompt dismissal quiets prompt attention.                                                                                                              |
-| `pollInterval`   | 5 minutes                          | How often a visible page checks, at least 10 seconds. Focus and visibility changes also trigger a check, at most once a minute.                                   |
-| `reload`         | `location.reload()`                | Document load performed by a refresh. Return or resolve `false` when you know it did not happen.                                                                  |
-| `onCheckProblem` | None                               | Called when a version check cannot get build metadata for a reason the deployment can fix. See [Handling version file problems](#handling-version-file-problems). |
-| `storageKey`     | `usher`                            | Prefix for keys Usher writes to `localStorage`, such as `usher:prompt-dismissal`. Set one per app when apps share an origin.                                      |
-
-Invalid options throw at creation, with a message naming the option.
-
-Time outdated and dismissals are measured against the server's clock, read from the `Date` header of each `version.json` response. If `version.json` is served from another origin, include `Access-Control-Expose-Headers: Date`; without it, the client falls back to the user's local clock.
+Time outdated and dismissals use the server's clock from each `version.json` response's `Date` header. When serving `version.json` cross-origin, expose it with `Access-Control-Expose-Headers: Date`; otherwise Usher falls back to the local clock.
 
 ## Further reading
 
-- [Glossary](GLOSSARY.md): definitions of Usher's domain terms.
+- [Glossary](GLOSSARY.md): domain terms used across Usher.
 - [Architecture](docs/Skew%20protection%20architecture.md): package ownership, internal modules, request handling, and deployment.
-
-## Contributing
-
-Usher is a pnpm workspace managed by Turbo. To work on it locally:
-
-```sh
-pnpm install
-pnpm build
-pnpm check
-```
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the full list of scripts, Playwright browser setup, and the Changesets release process.
+- [Contributing](CONTRIBUTING.md): local setup (`pnpm install && pnpm build && pnpm check`), workspace scripts, Playwright setup, and Changesets releases.
 
 ## License
 
