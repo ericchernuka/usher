@@ -1,5 +1,12 @@
 # @ericchernuka/usher-cloudflare
 
+## 0.2.2
+
+### Patch Changes
+
+- Updated dependencies [b59e07d]
+  - @ericchernuka/usher-plugin@0.2.2
+
 ## 0.2.1
 
 ### Patch Changes

@@ -1,5 +1,13 @@
 # @ericchernuka/usher-plugin
 
+## 0.2.2
+
+### Patch Changes
+
+- b59e07d: Describe what Usher tracks as a running app rather than a tab. This changes the core package description, the API doc comments, and the plugin's error for a forced-update cutoff later than the build.
+- Updated dependencies [b59e07d]
+  - @ericchernuka/usher-core@0.2.2
+
 ## 0.2.1
 
 ### Patch Changes
