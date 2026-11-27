@@ -115,7 +115,7 @@ export function resolveBuildFacts(
     if (forceUpdateBuiltBefore > facts.buildTime) {
       throw new Error(
         `[usher] forceUpdateBuiltBefore (${forceUpdateBuiltBefore}) is later than this build (${facts.buildTime}). ` +
-          'It is a build time, not a deadline: tabs on this build could never satisfy it. ' +
+          'It is a build time, not a deadline: clients running this build could never satisfy it. ' +
           'Use the time of this build, or of the last bad one.',
       )
     }

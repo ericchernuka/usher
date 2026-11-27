@@ -21,7 +21,7 @@ export type UpdateNotice = Exclude<UpdateState, { attention: 'none' }> & {
   /** Refresh requested by the user */
   refresh: () => Promise<RefreshOutcome>
   /**
-   * Close by the user, which dismisses a prompt for every tab, hides a
+   * Close by the user, which dismisses a prompt for every open window or tab on the same origin, hides a
    * passive notice until attention or reason changes, and does nothing on
    * a notice that is no longer shown or an urgent one, which
    * `connectUpdateSurface` shows again when a library reports it closed

@@ -62,13 +62,13 @@ export interface VersionCheckOptions {
   /** URL of the serving deployment's version.json */
   versionUrl: string
   /**
-   * Milliseconds between version checks in a visible tab, at least
+   * Milliseconds between version checks in a visible page, at least
    * 10 seconds and 5 minutes by default
    */
   pollInterval?: number
   /**
    * Handler for a version check that cannot get build facts, called once
-   * per outage so the app can report a deployment whose tabs cannot detect
+   * per outage so the app can report a deployment whose running apps cannot detect
    * updates, and never while the browser is offline or for timeouts
    */
   onCheckProblem?: (problem: CheckProblem) => void | Promise<void>
@@ -100,12 +100,12 @@ export const resolveVersionCheck = (options: VersionCheckOptions) =>
 
 export interface EscalationOptions {
   /**
-   * Milliseconds a tab may stay outdated before prompt attention, 12 hours
+   * Milliseconds a running app may stay outdated before prompt attention, 12 hours
    * by default, or `false` for no prompt level
    */
   promptAfter?: number | false
   /**
-   * Milliseconds a tab may stay outdated before urgent attention, later
+   * Milliseconds a running app may stay outdated before urgent attention, later
    * than `promptAfter` and 24 hours by default, or `false` for no urgent
    * level from escalation
    */

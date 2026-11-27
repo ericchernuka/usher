@@ -7,7 +7,7 @@ const isRelative = (base: string) =>
   !base.startsWith('/') && !URL.canParse(base)
 
 export interface BuildLayout {
-  /** The URL a tab fetches the version file from. Relative when the base is. */
+  /** The URL a running app fetches the version file from. Relative when the base is. */
   readonly versionUrl: string
   /** Fixed URL paths, each ending in "/". Undefined when the base is relative. */
   readonly paths:

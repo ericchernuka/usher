@@ -7,7 +7,7 @@
     "url": "git+https://github.com/ericchernuka/usher.git",
     "directory": "packages/usher-core"
   },
-  "description": "Keep open tabs on the current build with version polling, update state, and update surfaces.",
+  "description": "Keep running apps on the current build with version polling, update state, and update surfaces.",
   "type": "module",
   "sideEffects": false,
   "exports": {
