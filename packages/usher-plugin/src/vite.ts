@@ -19,7 +19,7 @@ export interface UsherPluginOptions {
   /** Override the commit time (ISO). Default: APP_COMMIT_TIME, then `git log -1 --format=%cI`. */
   commitTime?: string
   /**
-   * Force tabs built before this time (ISO) to update. It is a build time, not a
+   * Force clients running a build made before this time (ISO) to update. It is a build time, not a
    * deadline, so a value later than this build fails the build.
    * Default: APP_FORCE_UPDATE_BUILT_BEFORE.
    */

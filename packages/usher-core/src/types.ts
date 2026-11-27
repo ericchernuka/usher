@@ -27,10 +27,10 @@ export const attentionRank = {
  * once a check has landed, so `state.latest?.version` reads it without narrowing.
  *
  * - `unknown`: no check has landed yet.
- * - `caught-up`: the tab runs the latest build.
+ * - `caught-up`: the running app is on the latest build.
  * - `outdated`: a newer build is being served; attention says how loudly to ask.
  * - `dismissed`: the user dismissed the prompt.
- * - `rollback` / `forced`: sticky urgency, kept until the tab reloads.
+ * - `rollback` / `forced`: sticky urgency, kept until the app reloads.
  */
 export type UpdateState =
   | { attention: 'none'; reason: 'unknown'; latest?: undefined }
@@ -47,7 +47,7 @@ export type UpdateState =
       latest: BuildFacts
     }
 
-/** Why the tab has the attention it has. */
+/** Why the running app has the attention it has. */
 export type UpdateReason = UpdateState['reason']
 
 /**
@@ -80,10 +80,10 @@ export interface AppUpdatesOptions
   running: BuildFacts
 }
 
-/** Update state of the tab, checked for a new build while subscribed */
+/** Update state of the running app, checked for a new build while subscribed */
 export interface Updates extends Readable<UpdateState> {
   /**
-   * Prompt dismissal for every tab, `true` only when it lowered a prompt
+   * Prompt dismissal for every open window or tab on the same origin, `true` only when it lowered a prompt
    * and `false` with nothing written otherwise
    */
   dismiss: () => boolean

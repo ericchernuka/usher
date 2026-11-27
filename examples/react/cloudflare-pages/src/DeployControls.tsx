@@ -29,8 +29,8 @@ export function DeployControls() {
       </div>
       <p>
         {served
-          ? `The dev server now serves ${served}. This tab notices on its next check, within 10 seconds.`
-          : 'The dev server serves the build this tab runs.'}
+          ? `The dev server now serves ${served}. This app notices on its next check, within 10 seconds.`
+          : 'The dev server serves the build this app is running.'}
       </p>
     </section>
   )
